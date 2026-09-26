@@ -1,0 +1,99 @@
+# Builds both downloads on GitHub's machines whenever you push (or press "Run workflow"):
+#   CobraLauncher-linux   -> CobraLauncher-x86_64.AppImage (+ cobra-launcher.jar used for updates)
+#   CobraLauncher-windows -> installer "Cobra Launcher-1.0.0.exe" + portable zip
+# Get them from the repo's Actions tab → the latest run → Artifacts.
+#
+# Run it with publish = true (the launcher's "Publish update" button does that) and it also makes a
+# GitHub Release. Every launcher checks the latest release and updates itself on its next start.
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Release this build to everyone (auto-update)
+        type: boolean
+        default: false
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build number and repo for the updater
+        run: printf 'repo=%s\nbuild=%s\n' "$GITHUB_REPOSITORY" "$GITHUB_RUN_NUMBER" > launcher/src/main/resources/update.properties
+      - name: Tools for the AppImage
+        run: sudo apt-get update && sudo apt-get install -y libfuse2 zsync
+      - name: Build AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          KEEP_UPDATE_PROPERTIES: '1'
+        run: |
+          chmod +x build-appimage.sh gradlew client/gradlew
+          ./build-appimage.sh
+          cp launcher/build/libs/cobra-launcher.jar .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CobraLauncher-linux
+          path: |
+            CobraLauncher-x86_64.AppImage
+            cobra-launcher.jar
+            build/client-errors.txt
+          if-no-files-found: warn
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build number and repo for the updater
+        shell: bash
+        run: printf 'repo=%s\nbuild=%s\n' "$GITHUB_REPOSITORY" "$GITHUB_RUN_NUMBER" > launcher/src/main/resources/update.properties
+      - name: WiX Toolset (for the one-file installer .exe)
+        shell: pwsh
+        run: choco install wixtoolset --version 3.14.1 -y --no-progress; echo "C:\Program Files (x86)\WiX Toolset v3.14\bin" >> $env:GITHUB_PATH
+      - name: Build Windows app
+        shell: cmd
+        run: call build-windows.bat
+      - name: Zip the portable app too
+        shell: pwsh
+        run: Compress-Archive -Path "dist/Cobra Launcher" -DestinationPath "dist/Cobra-Launcher-portable.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CobraLauncher-windows
+          path: |
+            dist/*.exe
+            dist/Cobra-Launcher-portable.zip
+
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Publish the release (launchers update from this)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          # never ship a launcher without Cobra Client inside
+          if ! unzip -l out/CobraLauncher-linux/cobra-launcher.jar | grep -q "bundled/cobra-client-1.21.11.jar"; then
+            echo "::error::Cobra Client didn't build, so nothing was published. See build/client-errors.txt in the linux artifact."
+            exit 1
+          fi
+          files=(out/CobraLauncher-linux/CobraLauncher-x86_64.AppImage out/CobraLauncher-linux/cobra-launcher.jar out/CobraLauncher-windows/*.exe out/CobraLauncher-windows/*.zip)
+          gh release create "b${GITHUB_RUN_NUMBER}" "${files[@]}" --repo "$GITHUB_REPOSITORY" \
+            --title "Cobra Launcher build ${GITHUB_RUN_NUMBER}" \
+            --notes "Everyone's launcher updates to this the next time it's opened."

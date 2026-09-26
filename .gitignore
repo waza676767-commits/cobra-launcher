@@ -1,0 +1,10 @@
+.gradle/
+build/
+*/build/
+out/
+run/
+.idea/
+*.iml
+client/.gradle/
+client/run/
+*.AppImage

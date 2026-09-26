@@ -1,0 +1,104 @@
+package dev.cobra.client.fabric;
+
+import dev.cobra.client.core.ui.CobraMenu;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.text.Text;
+import org.lwjgl.glfw.GLFW;
+
+public final class CobraMenuScreen extends Screen {
+    private final Screen parent;
+    // in a world Right Shift opens the HUD editor first (MODS button in the middle goes to the modules)
+    private final CobraMenu menu = new CobraMenu(dev.cobra.client.core.Cobra.platform != null && dev.cobra.client.core.Cobra.platform.inWorld());
+
+    public CobraMenuScreen(Screen parent) {
+        super(Text.literal("Cobra"));
+        this.parent = parent;
+    }
+
+    @Override
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        FabricRender r = CobraFabric.RENDER.with(context);
+        if (client.world == null) {
+            if (!r.wallpaper(width, height)) renderPanoramaBackground(context, delta);
+        } else if (!menu.editingHud() && dev.cobra.client.core.Cobra.get(dev.cobra.client.core.module.Features.Client.class).blur.on()) {
+            super.renderBackground(context, mouseX, mouseY, delta);   // vanilla blur of the world + HUD behind the menu
+        }
+        menu.setRender(r);
+        menu.render(r, mouseX, mouseY);
+    }
+
+    @Override
+    public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
+        // keep the HUD visible behind the menu (no blur)
+    }
+
+    @Override
+    public boolean mouseClicked(net.minecraft.client.gui.Click click, boolean doubled) {
+        double mouseX = mouseX(), mouseY = mouseY();   // (Click's x/y have no yarn names; read the mouse directly)
+        int button = click.button();
+        menu.mouseClicked(mouseX, mouseY, button);
+        if (menu.closeRequested) close();
+        return true;
+    }
+
+    @Override
+    public boolean mouseReleased(net.minecraft.client.gui.Click click) {
+        menu.mouseReleased();
+        return true;
+    }
+
+    @Override
+    public boolean mouseDragged(net.minecraft.client.gui.Click click, double deltaX, double deltaY) {
+        double mouseX = mouseX(), mouseY = mouseY();   // (Click's x/y have no yarn names; read the mouse directly)
+        menu.mouseDragged(mouseX, mouseY);
+        return true;
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        menu.mouseScrolled(mouseX, mouseY, verticalAmount);
+        return true;
+    }
+
+    @Override
+    public boolean keyPressed(net.minecraft.client.input.KeyInput input) {
+        int keyCode = input.getKeycode();
+        int k = switch (keyCode) {
+            case GLFW.GLFW_KEY_ESCAPE -> CobraMenu.KEY_ESCAPE;
+            case GLFW.GLFW_KEY_BACKSPACE -> CobraMenu.KEY_BACKSPACE;
+            case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> CobraMenu.KEY_ENTER;
+            default -> CobraMenu.KEY_OTHER;
+        };
+        if (k == CobraMenu.KEY_OTHER && !menu.typing() && CobraFabric.MENU.matchesKey(input)) {
+            close();
+            return true;
+        }
+        if (menu.keyPressed(k, keyCode)) close();
+        return true;
+    }
+
+    @Override
+    public boolean charTyped(net.minecraft.client.input.CharInput input) {
+        if (!input.isValidChar()) return true;
+        for (char chr : input.asString().toCharArray()) menu.charTyped(chr);
+        return true;
+    }
+
+    @Override public boolean shouldCloseOnEsc() { return false; }
+    @Override public boolean shouldPause() { return false; }
+
+    @Override
+    public void close() {
+        dev.cobra.client.core.Cobra.save();
+        client.setScreen(parent);
+    }
+
+    private double mouseX() {
+        return client.mouse.getScaledX(client.getWindow());
+    }
+
+    private double mouseY() {
+        return client.mouse.getScaledY(client.getWindow());
+    }
+}

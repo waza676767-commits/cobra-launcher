@@ -1,0 +1,885 @@
+package dev.cobra.launcher.ui;
+
+import dev.cobra.launcher.auth.Account;
+import dev.cobra.launcher.auth.MicrosoftAuth;
+import dev.cobra.launcher.core.BuildInfo;
+import dev.cobra.launcher.core.Http;
+import dev.cobra.launcher.core.Paths;
+import dev.cobra.launcher.core.Profiles;
+import dev.cobra.launcher.core.Settings;
+import dev.cobra.launcher.game.GameLauncher;
+import dev.cobra.launcher.game.GameVersion;
+import dev.cobra.launcher.game.Installer;
+import dev.cobra.launcher.game.Playtime;
+import dev.cobra.launcher.ui.pages.AnalyticsPage;
+import dev.cobra.launcher.ui.pages.ContentPage;
+import dev.cobra.launcher.ui.pages.HomePage;
+import dev.cobra.launcher.ui.pages.SettingsPage;
+import dev.cobra.launcher.content.Modrinth;
+
+import javax.imageio.ImageIO;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.awt.geom.RoundRectangle2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+public final class MainWindow {
+    public static final int W = 1120, H = 700;
+    private static MainWindow instance;
+
+    public final JFrame frame = new JFrame(BuildInfo.NAME);
+    private final Settings settings = Settings.get();
+    private final boolean translucent;
+    private final Root root = new Root();
+    private final TitleBar titleBar = new TitleBar();
+    private final List<Page> pages = new ArrayList<>();
+    private final Sidebar sidebar;
+    private final PageHost host = new PageHost();
+    private final Overlays.Launch launchOverlay = new Overlays.Launch();
+    private final Overlays.Login login = new Overlays.Login();
+    private final Overlays.Choice choice = new Overlays.Choice();
+    private final Overlays.Toast toast = new Overlays.Toast();
+    private final Overlays.ProfileEditor profileEditor = new Overlays.ProfileEditor();
+    private final ClickFx clickFx = new ClickFx(frame);
+    private Intro intro;
+    private final List<Runnable> stateListeners = new ArrayList<>();
+
+    private Account account = Account.load();
+    private BufferedImage face;
+    private GameVersion version;
+    private volatile Process running;
+    private JComponent popup, catcher;
+
+    public static MainWindow get() { return instance; }
+
+    public MainWindow() {
+        instance = this;
+        Anim.enabled = settings.animations;
+        Theme.setLight(settings.lightMode);
+        version = Profiles.current().gameVersion();
+
+        pages.add(new HomePage());
+        pages.add(new ContentPage(Modrinth.Kind.MODS));
+        pages.add(new ContentPage(Modrinth.Kind.PACKS));
+        pages.add(new AnalyticsPage());
+        pages.add(new SettingsPage());
+        pages.add(new dev.cobra.launcher.ui.pages.AccessoriesPage());
+        pages.add(new dev.cobra.launcher.ui.pages.RecordingsPage());
+        pages.add(new dev.cobra.launcher.ui.pages.LogsPage());
+        sidebar = new Sidebar(pages, settings.sidebarExpanded, this::showPage, () -> { root.doLayout(); root.repaint(); });
+
+        translucent = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice()
+                .isWindowTranslucencySupported(GraphicsDevice.WindowTranslucency.PERPIXEL_TRANSPARENT);
+        frame.setUndecorated(true);
+        frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+        frame.addWindowListener(new WindowAdapter() {
+            @Override public void windowClosing(WindowEvent e) { quit(); }
+        });
+        frame.setIconImages(dev.cobra.launcher.core.AppIcon.windowIcons());
+
+        root.add(titleBar);
+        root.add(sidebar);
+        root.add(host);
+        for (Page p : pages) {
+            p.setVisible(false);
+            host.add(p);
+        }
+        frame.setContentPane(root);
+        JLayeredPane lp = frame.getLayeredPane();
+        lp.add(launchOverlay, JLayeredPane.MODAL_LAYER);
+        lp.add(login, Integer.valueOf(JLayeredPane.MODAL_LAYER + 1));
+        lp.add(choice, Integer.valueOf(JLayeredPane.MODAL_LAYER + 2));
+        lp.add(profileEditor, Integer.valueOf(JLayeredPane.MODAL_LAYER + 1));
+        Glass.attach(root);
+        Wallpaper.attach(root);
+        lp.add(toast, JLayeredPane.POPUP_LAYER);
+        lp.add(clickFx, JLayeredPane.DRAG_LAYER);
+        if (settings.animations) {
+            intro = new Intro();
+            lp.add(intro, Integer.valueOf(JLayeredPane.DRAG_LAYER - 1));
+        }
+        frame.setMinimumSize(new Dimension(900, 700));
+        frame.setSize(W, H);
+        frame.setLocationRelativeTo(null);
+        frame.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                layoutOverlays();
+                applyShape();
+            }
+        });
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(e -> {
+            if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                if (popup != null) { closePopup(); return true; }
+                if (login.isVisible()) { login.close(); return true; }
+                if (profileEditor.isVisible()) { profileEditor.close(); return true; }
+            }
+            return false;
+        });
+
+        showPage(0);
+        loadFace();
+        layoutOverlays();
+    }
+
+    public void show() {
+        Theme.setLight(settings.lightMode);
+        frame.setVisible(true);
+        applyShape();
+    }
+
+    /** Rounded corners without a translucent window: a window shape keeps the content pane opaque,
+     *  so Swing never repaints a child over an uncleared background (that was the flicker). */
+    private void applyShape() {
+        if (!translucent) return;
+        if ("linux".equals(dev.cobra.launcher.core.Paths.OS_NAME)) {
+            frame.setShape(null);
+            return;
+        }
+        try {
+            frame.setShape(new RoundRectangle2D.Double(0, 0, frame.getWidth(), frame.getHeight(), 28, 28));
+        } catch (Throwable ignored) {}
+    }
+
+    public void setLight(boolean on) {
+        settings.lightMode = on;
+        settings.save();
+        Theme.setLight(on);
+        Glass.invalidate();
+        root.setBackground(Theme.BLACK);
+        frame.getLayeredPane().repaint();
+        frame.repaint();
+    }
+
+    private void layoutOverlays() {
+        Dimension d = frame.getSize();
+        launchOverlay.setBounds(0, 0, d.width, d.height);
+        clickFx.setBounds(0, 0, d.width, d.height);
+        if (intro != null && intro.getParent() != null) intro.setBounds(0, 0, d.width, d.height);
+        login.setBounds(0, 0, d.width, d.height);
+        choice.setBounds(0, 0, d.width, d.height);
+        profileEditor.setBounds(0, 0, d.width, d.height);
+        profileEditor.doLayout();
+        Dimension t = toast.wanted();
+        toast.setBounds((d.width - t.width) / 2, d.height - t.height - 28, t.width, t.height);
+        login.doLayout();
+    }
+
+    // ------------------------------------------------------------ navigation
+
+    public void showPage(int i) {
+        sidebar.setSelected(i);
+        root.repaint();   // the glass sheet behind pages shows/hides with Home
+        Page from = null;
+        for (Page p : pages) if (p.isVisible()) from = p;
+        Page to = pages.get(i);
+        if (from == to) {
+            to.onShow();
+            return;
+        }
+        if (from != null && Anim.enabled && host.isShowing()) {
+            host.transition(from, to);
+        } else {
+            for (Page p : pages) p.setVisible(p == to);
+            to.onShow();
+            to.reveal();
+            host.doLayout();
+        }
+    }
+
+    public void openSettings() { showPage(4); }
+
+    // ------------------------------------------------------------ state
+
+    public GameVersion version() { return version; }
+
+    public void setVersion(GameVersion v) {
+        version = v;
+        Profiles.Profile p = Profiles.current();
+        p.version = v.id;
+        Profiles.save();
+        settings.lastVersion = v.id;
+        settings.save();
+        fireState();
+    }
+
+    // ------------------------------------------------------------ profiles
+
+    public Profiles.Profile profile() { return Profiles.current(); }
+
+    public void selectProfile(Profiles.Profile p) {
+        Profiles.select(p);
+        version = p.gameVersion();
+        fireState();
+        sidebar.repaint();
+        host.fadeIn();
+        for (Page pg : pages) if (pg.isVisible()) pg.onShow();
+    }
+
+    public void editProfile(Profiles.Profile p) {
+        profileEditor.open(p, saved -> {
+            if (saved != null) selectProfile(saved);
+            else {
+                version = Profiles.current().gameVersion();
+                fireState();
+                sidebar.repaint();
+            }
+        });
+    }
+
+    public void setStyle(String style) {
+        settings.style = style;
+        settings.save();
+        Glass.invalidate();
+        root.doLayout();   // pages sit a little further in on the glass sheet
+        frame.repaint();
+    }
+
+    /** Picks a picture as your own launcher icon and logo. */
+    public void chooseAppIcon(Runnable after) {
+        Path src = FilePicker.one("Launcher icon", "Pictures", "png", "jpg", "jpeg", "gif", "bmp");
+        if (src == null) return;
+        try {
+            dev.cobra.launcher.core.AppIcon.set(src);
+            applyAppIcon();
+            toast("Launcher icon set: " + src.getFileName());
+            if (after != null) after.run();
+        } catch (Exception e) {
+            toast(e.getMessage());
+        }
+    }
+
+    public void resetAppIcon(Runnable after) {
+        try {
+            dev.cobra.launcher.core.AppIcon.reset();
+            applyAppIcon();
+            toast("Back to the Cobra icon.");
+            if (after != null) after.run();
+        } catch (Exception e) {
+            toast(e.getMessage());
+        }
+    }
+
+    private void applyAppIcon() {
+        frame.setIconImages(dev.cobra.launcher.core.AppIcon.windowIcons());
+        frame.repaint();
+    }
+
+    /** Opens a file picker and imports an image / GIF / video as the wallpaper. */
+    public void chooseWallpaper(Runnable after) {
+        Path src = FilePicker.one("Wallpaper: picture, GIF or video", "Pictures and videos",
+                "png", "jpg", "jpeg", "gif", "bmp", "webp", "mp4", "webm", "mkv", "mov", "avi");
+        if (src == null) return;
+        toast(Wallpaper.isVideo(src) ? "Converting " + src.getFileName() + " to an animated wallpaper" : "Setting wallpaper");
+        Thread t = new Thread(() -> {
+            try {
+                Wallpaper.importFile(src, msg -> {});
+                SwingUtilities.invokeLater(() -> {
+                    Glass.invalidate();
+                    frame.repaint();
+                    toast("Wallpaper set: " + src.getFileName());
+                    if (after != null) after.run();
+                });
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> toast(e.getMessage()));
+            }
+        }, "cobra-wallpaper-import");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    public void clearWallpaper() {
+        Wallpaper.clear();
+        Glass.invalidate();
+        frame.repaint();
+    }
+
+    public void setWallpaperDim(int dim) {
+        settings.wallpaperDim = dim;
+        settings.save();
+        Wallpaper.touch();
+        frame.repaint();
+    }
+
+    /** Dragging the slider fires many changes: save each, rebuild the glass at most every 120 ms. */
+    private final Timer frostTimer = new Timer(120, e -> {
+        Glass.invalidate();
+        frame.repaint();
+    });
+
+    public void setFrost(int frost) {
+        settings.frost = frost;
+        settings.save();
+        frostTimer.setRepeats(false);
+        frostTimer.restart();
+    }
+
+    public Account account() { return account; }
+
+    public BufferedImage face() { return face; }
+
+    public boolean running() { return running != null; }
+
+    public void onStateChange(Runnable r) { stateListeners.add(r); }
+
+    private void fireState() {
+        for (Runnable r : stateListeners) r.run();
+        titleBar.doLayout();
+        titleBar.repaint();
+    }
+
+    /**
+     * Super optimization: VulkanMod at launch (see Installer) and a lighter launcher while it's on
+     * (Solid style, no animations, still wallpaper). Turning it off restores what you had.
+     */
+    public void setSuperOptimization(boolean on) {
+        if (on && !settings.superOptimization) {
+            settings.savedStyle = settings.style;
+            settings.savedGlassLook = settings.glassLook;
+            settings.savedAnimations = settings.animations;
+            settings.style = "solid";
+            settings.glassLook = "frosted";
+            settings.animations = false;
+        } else if (!on && settings.superOptimization) {
+            if (settings.savedStyle != null) settings.style = settings.savedStyle;
+            if (settings.savedGlassLook != null) settings.glassLook = settings.savedGlassLook;
+            if (settings.savedAnimations != null) settings.animations = settings.savedAnimations;
+            settings.savedStyle = settings.savedGlassLook = null;
+            settings.savedAnimations = null;
+        }
+        settings.superOptimization = on;
+        settings.save();
+        Anim.enabled = settings.animations;
+        Wallpaper.touch();
+        Glass.invalidate();
+        root.doLayout();
+        frame.repaint();
+        toast(on ? "Super optimization on: VulkanMod is added at launch, and the launcher is lighter."
+                : "Super optimization off: VulkanMod is removed at launch and your look is back.");
+    }
+
+    /** Asks a question with one button per option; {@code onPick} gets the option's index. */
+    public void ask(String title, String body, java.util.List<String> options, int primary, java.util.function.IntConsumer onPick) {
+        choice.ask(title, body, options, primary, onPick);
+    }
+
+    public void openLogin(Runnable after) {
+        login.open(acc -> {
+            account = acc;
+            loadFace();
+            fireState();
+            toast("Signed in as " + acc.name);
+            if (after != null) after.run();
+        });
+    }
+
+    public void signOut() {
+        Account.delete();
+        account = null;
+        face = null;
+        fireState();
+        toast("Signed out");
+    }
+
+    public void setAnimations(boolean on) {
+        Anim.enabled = on;
+        settings.animations = on;
+        settings.save();
+    }
+
+    public void saveSidebar() {
+        settings.sidebarExpanded = sidebar.expanded();
+        settings.save();
+    }
+
+    private void loadFace() {
+        Account a = account;
+        if (a == null || a.skinUrl == null) return;
+        Thread t = new Thread(() -> {
+            try {
+                Path cache = Paths.CACHE.resolve("skin-" + a.uuid + ".png");
+                byte[] bytes;
+                if (Files.exists(cache) && System.currentTimeMillis() - Files.getLastModifiedTime(cache).toMillis() < 86_400_000L) {
+                    bytes = Files.readAllBytes(cache);
+                } else {
+                    bytes = Http.bytes(a.skinUrl);
+                    Files.write(cache, bytes);
+                }
+                BufferedImage skin = ImageIO.read(new ByteArrayInputStream(bytes));
+                BufferedImage f = new BufferedImage(8, 8, BufferedImage.TYPE_INT_ARGB);
+                Graphics2D g = f.createGraphics();
+                g.drawImage(skin.getSubimage(8, 8, 8, 8), 0, 0, null);
+                g.drawImage(skin.getSubimage(40, 8, 8, 8), 0, 0, null);
+                g.dispose();
+                SwingUtilities.invokeLater(() -> { face = f; fireState(); });
+            } catch (Exception ignored) {}
+        }, "cobra-face");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    public static void drawFace(Graphics2D g, BufferedImage face, int x, int y, int size) {
+        if (face == null) {
+            Theme.fill(g, x, y, size, size, size * 0.28, Theme.RAISED);
+            Icons.paint(g, "user", x + size * 0.18, y + size * 0.18, size * 0.64, Theme.SOFT);
+            return;
+        }
+        Graphics2D g2 = (Graphics2D) g.create();
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        g2.setClip(new RoundRectangle2D.Double(x, y, size, size, size * 0.56, size * 0.56));
+        g2.drawImage(face, x, y, size, size, null);
+        g2.dispose();
+    }
+
+    // ------------------------------------------------------------ popups & toasts
+
+    public void toast(String msg) { toast(msg, null, null); }
+
+    public void toast(String msg, String action, Runnable act) {
+        toast.show(msg, action, act);
+        layoutOverlays();
+    }
+
+    public void showPopup(JComponent c, Rectangle bounds) {
+        closePopup();
+        JLayeredPane lp = frame.getLayeredPane();
+        catcher = new JComponent() {};
+        catcher.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) { closePopup(); }
+        });
+        catcher.setBounds(0, 0, frame.getWidth(), frame.getHeight());
+        FadeBox box = new FadeBox(c);
+        box.setBounds(bounds);
+        lp.add(catcher, Integer.valueOf(JLayeredPane.POPUP_LAYER - 1));
+        lp.add(box, JLayeredPane.POPUP_LAYER);
+        popup = box;
+        box.fade.over(1, 160, null);
+        lp.revalidate();
+        lp.repaint();
+    }
+
+    public void closePopup() {
+        JLayeredPane lp = frame.getLayeredPane();
+        if (popup != null) lp.remove(popup);
+        if (catcher != null) lp.remove(catcher);
+        popup = catcher = null;
+        lp.repaint();
+    }
+
+    public static void openUri(String uri) {
+        if (uri.startsWith("file:")) {             // local things: file manager / default app, never the browser
+            try {
+                openPath(Path.of(java.net.URI.create(uri)));
+                return;
+            } catch (Exception ignored) {}
+        }
+        new Thread(() -> {
+            try {
+                if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                    Desktop.getDesktop().browse(java.net.URI.create(uri));
+                    return;
+                }
+            } catch (Exception ignored) {}
+            try {
+                new ProcessBuilder(Paths.OS_NAME.equals("osx") ? "open" : "xdg-open", uri).start();
+            } catch (Exception ignored) {}
+        }, "cobra-open").start();
+    }
+
+    /**
+     * Opens a folder in the normal file manager (Explorer on Windows) or a file in its default app.
+     * Browsing a file: URI made some Windows PCs open a browser or an odd file window instead.
+     */
+    public static void openPath(Path p) {
+        try {
+            Files.createDirectories(Files.isDirectory(p) || !Files.exists(p) && !p.toString().contains(".") ? p : p.getParent());
+        } catch (Exception ignored) {}
+        new Thread(() -> {
+            String path = p.toAbsolutePath().toString();
+            try {
+                if ("windows".equals(Paths.OS_NAME)) {
+                    if (Files.isDirectory(p)) new ProcessBuilder("explorer.exe", path).start();
+                    else Desktop.getDesktop().open(p.toFile());
+                    return;
+                }
+                if (Paths.OS_NAME.equals("osx")) {
+                    new ProcessBuilder("open", path).start();
+                    return;
+                }
+                new ProcessBuilder("xdg-open", path).start();
+            } catch (Exception e) {
+                try {
+                    Desktop.getDesktop().open(p.toFile());
+                } catch (Exception ignored) {}
+            }
+        }, "cobra-open").start();
+    }
+
+    // ------------------------------------------------------------ launch
+
+    public void launch() {
+        if (running != null) {
+            toast("Minecraft is already running.");
+            return;
+        }
+        boolean offline = settings.offline;
+        if (!offline && account == null) {
+            openLogin(this::launch);
+            return;
+        }
+        GameVersion gv = version;
+        Account acc = offline
+                ? Account.offline(!settings.offlineName.isBlank() ? settings.offlineName : account != null ? account.name : "Player")
+                : account;
+        launchOverlay.show(null);
+        Thread t = new Thread(() -> {
+            try {
+                SwingUtilities.invokeLater(() -> launchOverlay.status("Signing in", -1));
+                Account fresh = MicrosoftAuth.ensureFresh(settings.effectiveClientId(), acc);
+                if (!fresh.offline()) SwingUtilities.invokeLater(() -> account = fresh);
+                Installer.Prepared prep = Installer.prepare(gv, (s, f) -> SwingUtilities.invokeLater(() -> launchOverlay.status(s, f)));
+                Wallpaper.exportForGame(prep.gameDir);
+                dev.cobra.launcher.core.Accessories.exportForGame(prep.gameDir);   // skin + cape for Cobra Client
+                SwingUtilities.invokeLater(() -> launchOverlay.status("Starting Minecraft " + gv.id, -1));
+                Process p = GameLauncher.start(gv, prep, fresh, settings);
+                running = p;
+                dev.cobra.launcher.core.DiscordPresence.playing(prep.gameDir);
+                long start = System.currentTimeMillis();
+                ScheduledExecutorService cp = Executors.newSingleThreadScheduledExecutor(r -> {
+                    Thread th = new Thread(r, "cobra-playtime");
+                    th.setDaemon(true);
+                    return th;
+                });
+                cp.scheduleAtFixedRate(() -> Playtime.checkpoint(start, gv.id), 1, 1, TimeUnit.MINUTES);
+                SwingUtilities.invokeLater(() -> {
+                    fireState();
+                    Timer hold = new Timer(700, e -> launchOverlay.hide(() -> {
+                        if (!prep.cobraBundled && !gv.vanilla()) toast("Cobra Client isn't available for " + gv.id + " yet. Launched Fabric with your mods.");
+                        if (!settings.keepOpen) frame.setState(Frame.ICONIFIED);
+                    }));
+                    hold.setRepeats(false);
+                    hold.start();
+                });
+                p.onExit().thenAccept(proc -> {
+                    cp.shutdownNow();
+                    Playtime.finish(start, gv.id);
+                    running = null;
+                    dev.cobra.launcher.core.DiscordPresence.idle();
+                    int code = proc.exitValue();
+                    long secs = (System.currentTimeMillis() - start) / 1000;
+                    SwingUtilities.invokeLater(() -> {
+                        frame.setState(Frame.NORMAL);
+                        frame.toFront();
+                        fireState();
+                        if (code != 0 && code != 130 && code != 143) {
+                            toast("Minecraft closed with error " + code + (secs < 60 ? " right after starting." : "."),
+                                    "Open log", () -> openPath(GameLauncher.logFile(gv)));
+                        }
+                    });
+                });
+            } catch (MicrosoftAuth.AuthException e) {
+                SwingUtilities.invokeLater(() -> launchOverlay.hide(() -> {
+                    if (e.getMessage().contains("Sign in again") || e.getMessage().contains("session expired")) {
+                        // a borrowed Lunar / Prism / … session ran out: switch to Cobra's own Microsoft sign-in
+                        Account.delete();
+                        account = null;
+                        fireState();
+                        toast(e.getMessage(), "Sign in", () -> openLogin(this::launch));
+                    } else toast(e.getMessage());
+                }));
+            } catch (Exception e) {
+                e.printStackTrace();
+                String msg = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                SwingUtilities.invokeLater(() -> launchOverlay.hide(() -> toast("Launch failed: " + msg)));
+            }
+        }, "cobra-launch");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void quit() {
+        if (running != null) {
+            // keep the game running; the launcher can close safely
+            Playtime.checkpoint(System.currentTimeMillis(), version.id);
+        }
+        settings.save();
+        frame.dispose();
+        System.exit(0);
+    }
+
+    // ================================================================ parts
+
+    private final class Root extends JPanel {
+        private BufferedImage bg, scrim;
+        private boolean bgLight, scrimLight;
+        private String bgKey = "";
+
+        /**
+         * Readability over wallpapers: darker along the top (title bar, page headings) and at the
+         * edges, clear in the middle. White instead of black in Light mode. Cached per size/theme.
+         */
+        private BufferedImage scrim(int w, int h) {
+            boolean light = Theme.isLight();
+            if (scrim != null && scrim.getWidth() == w && scrim.getHeight() == h && scrimLight == light) return scrim;
+            scrim = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+            scrimLight = light;
+            Graphics2D b = scrim.createGraphics();
+            Color c0 = light ? new Color(250, 248, 246, 0) : new Color(0, 0, 0, 0);
+            Color top = light ? new Color(250, 248, 246, 150) : new Color(0, 0, 0, 150);
+            Color edge = light ? new Color(250, 248, 246, 110) : new Color(0, 0, 0, 120);
+            b.setPaint(new GradientPaint(0, 0, top, 0, 170, c0));
+            b.fillRect(0, 0, w, 170);
+            b.setPaint(new RadialGradientPaint(new Point.Double(w * 0.55, h * 0.48), (float) (Math.hypot(w, h) * 0.62),
+                    new float[]{0.55f, 1f}, new Color[]{c0, edge}));
+            b.fillRect(0, 0, w, h);
+            b.dispose();
+            return scrim;
+        }
+
+        Root() {
+            super(null);
+            setOpaque(true);
+            setBackground(Theme.BLACK);
+        }
+
+        @Override
+        public void doLayout() {
+            int w = getWidth(), h = getHeight();
+            titleBar.setBounds(0, 0, w, 58);
+            int sw = sidebar.currentWidth();
+            sidebar.setBounds(16, 62, sw, h - 78);
+            int x = 16 + sw + 28;
+            if (Glass.on()) host.setBounds(x, 76, w - x - 34, h - 76 - 30);   // inside the glass sheet
+            else host.setBounds(x, 62, w - x - 28, h - 62 - 20);
+            host.doLayout();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            int w = getWidth(), h = getHeight();
+            Rectangle shape = new Rectangle(0, 0, w, h);
+            if (Wallpaper.active() && !Glass.on()) {
+                Wallpaper.paint(g, w, h);
+                g.drawImage(scrim(w, h), 0, 0, null);
+                Theme.stroke(g, 0, 0, w, h, translucent ? 14 : 0, Theme.alpha(Theme.TEXT, 0.12), 1f);
+                g.dispose();
+                return;
+            }
+            if (Glass.on()) {
+                Glass.paintBackground(g, w, h);
+                if (Wallpaper.active()) g.drawImage(scrim(w, h), 0, 0, null);
+                // one big glass sheet behind every page except Home, so text never sits on a busy wallpaper
+                if (!pages.get(0).isVisible() && host.getWidth() > 0) {
+                    int sx = sidebar.getX() + sidebar.getWidth() + 10;
+                    Glass.surface(g, this, sx, 62, w - 16 - sx, h - 16 - 62, 26, 0);
+                }
+                Theme.stroke(g, 0, 0, w, h, translucent ? 14 : 0, Theme.alpha(Theme.TEXT, 0.12), 1f);
+                g.dispose();
+                return;
+            }
+            // solid background: the radial gradient is slow to rasterise, so draw it once per size/theme
+            String key = Theme.isLight() + "|" + Theme.gradientKey();
+            if (bg == null || bg.getWidth() != w || bg.getHeight() != h || !key.equals(bgKey)) {
+                bg = getGraphicsConfiguration().createCompatibleImage(w, h, Transparency.OPAQUE);
+                bgKey = key;
+                Graphics2D b = Theme.aa(bg.createGraphics());
+                if (Theme.paintGradient(b, w, h)) {     // your own gradient (Settings → Appearance)
+                    b.dispose();
+                    g.drawImage(bg, 0, 0, null);
+                    Theme.stroke(g, 0, 0, w, h, translucent ? 14 : 0, Theme.LINE, 1f);
+                    g.dispose();
+                    return;
+                }
+                b.setColor(Theme.BLACK);
+                b.fill(shape);
+                float[] fr = {0f, 0.55f, 1f};
+                Color[] c = {Theme.GLOW, Theme.EDGE, Theme.BLACK};
+                b.setPaint(new RadialGradientPaint(new Point.Double(w * 0.6, h * 0.34), (float) (h * 0.95), fr, c));
+                b.fill(shape);
+                b.setPaint(new GradientPaint(0, h * 0.6f, Theme.alpha(Theme.BLACK, 0), 0, h, Theme.alpha(Theme.PANEL, 0.35)));
+                b.fill(shape);
+                b.dispose();
+            }
+            g.drawImage(bg, 0, 0, null);
+            Theme.stroke(g, 0, 0, w, h, translucent ? 14 : 0, Theme.LINE, 1f);
+            g.dispose();
+        }
+    }
+
+    private final class TitleBar extends JComponent {
+        private Point drag;
+        private final Components.IconButton min = new Components.IconButton("minimize", 18, () -> frame.setState(Frame.ICONIFIED));
+        private final Components.IconButton close = new Components.IconButton("close", 18, MainWindow.this::quit);
+        private final AccountChip chip = new AccountChip();
+        private final Clock clock = new Clock();
+
+        TitleBar() {
+            setLayout(null);
+            add(min);
+            add(close);
+            add(chip);
+            add(clock);
+            close.hoverColor(Theme.DANGER);
+            MouseAdapter m = new MouseAdapter() {
+                @Override public void mousePressed(MouseEvent e) { drag = e.getPoint(); }
+                @Override public void mouseDragged(MouseEvent e) {
+                    if (drag == null) return;
+                    Point p = frame.getLocation();
+                    frame.setLocation(p.x + e.getX() - drag.x, p.y + e.getY() - drag.y);
+                }
+                @Override public void mouseReleased(MouseEvent e) { drag = null; }
+            };
+            addMouseListener(m);
+            addMouseMotionListener(m);
+        }
+
+        @Override
+        public void doLayout() {
+            int w = getWidth();
+            close.setBounds(w - 50, 14, 34, 34);
+            min.setBounds(w - 88, 14, 34, 34);
+            int cw = chip.getPreferredSize().width;
+            chip.setBounds(w - 104 - cw, 13, cw, 36);
+            clock.setBounds(w - 104 - cw - 18 - 150, 11, 150, 40);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            Theme.left(g, "Cobra Launcher", Theme.font(Theme.MEDIUM, 13f), Theme.MUTED, 28, 14, 34);
+            g.dispose();
+        }
+    }
+
+    private final class AccountChip extends Components.Interactive {
+        AccountChip() {
+            onClick(() -> {
+                if (account == null) {
+                    openLogin(null);
+                    return;
+                }
+                JComponent menu = new JComponent() {};
+                menu.setLayout(null);
+                Components.Button out = new Components.Button("Sign out", "logout", Components.Variant.GHOST, () -> { closePopup(); signOut(); });
+                Components.Button set = new Components.Button("Account settings", "settings", Components.Variant.GHOST, () -> { closePopup(); openSettings(); });
+                JComponent card = new Components.Card(null, 16).solid();
+                card.add(set);
+                card.add(out);
+                set.setBounds(10, 10, 200, 38);
+                out.setBounds(10, 54, 200, 38);
+                menu.add(card);
+                card.setBounds(0, 0, 220, 102);
+                Point p = SwingUtilities.convertPoint(this, 0, getHeight() + 8, frame.getLayeredPane());
+                showPopup(menu, new Rectangle(p.x + getWidth() - 220, p.y, 220, 102));
+            });
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            String name = account == null ? "Sign in" : account.name;
+            return new Dimension(getFontMetrics(Theme.font(Theme.MEDIUM, 13.5f)).stringWidth(name) + 56, 36);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            int w = getWidth(), h = getHeight();
+            Theme.surface(g, this, 0, 0, w, h, h / 2.0, hover.get(), 0.3);
+            drawFace(g, account == null ? null : face, 6, 6, 24);
+            Theme.left(g, account == null ? "Sign in" : account.name, Theme.font(Theme.MEDIUM, 13.5f), Theme.TEXT, 40, 0, h);
+            g.dispose();
+        }
+    }
+
+    /**
+     * Holds the pages. Switching pages shows the new page right away and fades/lifts it in as one
+     * piece through Swing's normal painting: no snapshots, no manual child painting, so nothing
+     * can leave ghost copies behind and it costs nothing extra.
+     */
+    private static final class PageHost extends JPanel {
+        private final Anim.Tween fade = new Anim.Tween(this, 1);
+
+        PageHost() {
+            super(null);
+            setOpaque(false);
+        }
+
+        void fadeIn() {
+            fade.set(0);
+            fade.over(1, 260, null);
+        }
+
+        void transition(Page from, Page to) {
+            from.setVisible(false);
+            to.setVisible(true);
+            to.setBounds(0, 0, getWidth(), getHeight());
+            to.doLayout();
+            to.validate();
+            to.onShow();
+            fade.set(0);
+            fade.over(1, 260, this::repaint);
+        }
+
+        @Override
+        public void doLayout() {
+            for (Component c : getComponents()) {
+                c.setBounds(0, 0, getWidth(), getHeight());
+                c.doLayout();
+            }
+        }
+
+        @Override
+        protected void paintChildren(Graphics g0) {
+            double a = fade.get();
+            if (a >= 0.999) {
+                super.paintChildren(g0);
+                return;
+            }
+            double e = 1 - Math.pow(1 - a, 3);
+            Graphics2D g = (Graphics2D) g0.create();
+            g.translate(0, (int) Math.round(12 * (1 - e)));
+            g.setComposite(AlphaComposite.SrcOver.derive((float) Math.max(0.01, e)));
+            super.paintChildren(g);
+            g.dispose();
+        }
+    }
+
+    /** Wraps a popup so it fades in as one piece (children included). */
+    private static final class FadeBox extends JPanel {
+        final Anim.Tween fade = new Anim.Tween(this, 0);
+
+        FadeBox(JComponent content) {
+            super(null);
+            setOpaque(false);
+            add(content);
+        }
+
+        @Override
+        public void doLayout() {
+            for (Component c : getComponents()) c.setBounds(0, 0, getWidth(), getHeight());
+        }
+
+        @Override
+        public void paint(Graphics g0) {
+            Graphics2D g = (Graphics2D) g0.create();
+            g.setComposite(AlphaComposite.SrcOver.derive((float) Math.max(0.01, fade.get())));
+            super.paint(g);
+            g.dispose();
+        }
+    }
+
+    public static File defaultDir() {
+        return Paths.ROOT.toFile();
+    }
+}

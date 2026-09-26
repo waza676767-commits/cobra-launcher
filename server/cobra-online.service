@@ -1,0 +1,13 @@
+# sudo cp cobra-online.py /opt/ && sudo cp cobra-online.service /etc/systemd/system/
+# sudo systemctl enable --now cobra-online
+[Unit]
+Description=Cobra Client online list
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/cobra-online.py
+Restart=always
+DynamicUser=yes
+
+[Install]
+WantedBy=multi-user.target

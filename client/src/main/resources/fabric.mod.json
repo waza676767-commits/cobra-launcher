@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "cobra",
+  "version": "${version}",
+  "name": "Cobra Client",
+  "description": "Cobra Client: custom menu, HUD editor (Right Shift) and PvP quality-of-life modules.",
+  "authors": ["ItzLucaPK"],
+  "license": "All-Rights-Reserved",
+  "icon": "assets/cobra/textures/gui/logo.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.cobra.client.fabric.CobraFabric"]
+  },
+  "mixins": ["cobra.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.11",
+    "java": ">=21"
+  }
+}

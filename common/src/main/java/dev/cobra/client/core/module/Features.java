@@ -1,0 +1,855 @@
+package dev.cobra.client.core.module;
+
+import dev.cobra.client.core.Cobra;
+import dev.cobra.client.core.Platform;
+import dev.cobra.client.core.Render;
+
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Properties;
+
+public final class Features {
+    private Features() {}
+
+    private static Platform p() { return Cobra.platform; }
+
+    // ------------------------------------------------------------------ client
+
+    /** Global client options (the SETTINGS tab of the Right Shift menu). Always on. */
+    public static final class Client extends Module {
+        public final Setting.Mode theme = add(new Setting.Mode("theme", "Theme", "Dark", "Dark", "Light"));
+        public final Setting.Bool animations = add(new Setting.Bool("animations", "Animations", true));
+        public final Setting.Bool particles = add(new Setting.Bool("particles", "Click particles", true));
+        public final Setting.Bool blur = add(new Setting.Bool("blur", "Blur behind the Cobra menu", true));
+        public final Setting.Mode screenBlur = add(new Setting.Mode("screenblur", "Blur other screens", "Menus", "Off", "Menus", "Menus + inventory"));
+        public final Setting.Bind menuKey = add(new Setting.Bind("menukey", "Open menu", -1, "menu"));
+        /** Everyone's "Update to the newest" button: fetches the latest Cobra release for the launcher. */
+        public final Setting.Action update = add(new Setting.Action("update", "Update to the newest", new Runnable() {
+            public void run() { dev.cobra.client.core.SelfUpdate.checkAndDownload(); }
+        }));
+        /** Cobra icon next to other Cobra players in the Tab list (and let them see yours). */
+        public final Setting.Bool tabIcon = add(new Setting.Bool("tabicon", "Cobra icon in Tab", true));
+        /** Turns every particle off (explosions, crits, rain splashes, …): cleaner screen and more FPS. */
+        public final Setting.Bool noParticles = add(new Setting.Bool("noparticles", "Disable all particles", false));
+        /** Colour of highlights in the Cobra menus (selected tab, switches, bars). */
+        public final Setting.Mode accentPreset = add(new Setting.Mode("accentpreset", "Accent", "Classic",
+                "Classic", "Cobra green", "Ocean", "Violet", "Rose", "Sunset", "Gold", "Custom"));
+        public final Setting.Color accent = add(new Setting.Color("accent", "Custom accent", 0xFF7C5CFF),
+                new Setting.Cond() { public boolean ok() { return accentPreset.is("Custom"); } });
+
+        private static final String[] PRESETS = {"Cobra green", "Ocean", "Violet", "Rose", "Sunset", "Gold"};
+        private static final int[] PRESET_COLORS = {0xFF3DDC84, 0xFF3EA6FF, 0xFF8B6CFF, 0xFFFF5C8A, 0xFFFF8A3D, 0xFFF5C542};
+
+        /** Accent colour, or 0 for the classic black/white look. */
+        public int accentArgb() {
+            String p = accentPreset.get();
+            if (p.equals("Custom")) return accent.argb() | 0xFF000000;
+            for (int i = 0; i < PRESETS.length; i++) if (PRESETS[i].equals(p)) return PRESET_COLORS[i];
+            return 0;
+        }
+
+        public Client() {
+            super("client", "Client", "Cobra Client options", Category.UTILITY, true);
+            hidden = true;
+        }
+
+        @Override
+        public void setEnabled(boolean on) {
+            // always on
+        }
+    }
+
+    // ------------------------------------------------------------------ visual
+
+    /**
+     * Screen recorder: records the game to an MP4 (ffmpeg), 1080p or native size at 30/60/120 fps.
+     * Start, pause/resume and stop keys; recordings show up in the launcher's Recordings page.
+     */
+    public static final class Recorder extends Module {
+        public final Setting.Bind start = add(new Setting.Bind("start", "Start recording", 298, null));     // F9
+        public final Setting.Bind pause = add(new Setting.Bind("pause", "Pause / resume", 299, null));      // F10
+        public final Setting.Bind stop = add(new Setting.Bind("stop", "Stop recording", 301, null));        // F12
+        public final Setting.Mode fps = add(new Setting.Mode("fps", "Frame rate", "60", "30", "60", "120"));
+        public final Setting.Mode resolution = add(new Setting.Mode("resolution", "Resolution", "1080p", "1080p", "Window size"));
+        public final Setting.Mode quality = add(new Setting.Mode("quality", "Quality", "High", "High", "Balanced", "Small file"));
+        public final Setting.Bool indicator = add(new Setting.Bool("indicator", "Show REC in the corner", true));
+
+        public final dev.cobra.client.core.ScreenRecorder rec = new dev.cobra.client.core.ScreenRecorder();
+        private boolean sDown, pDown, xDown;
+
+        public Recorder() { super("recorder", "Screen Recorder", "Record 1080p at 30/60/120 fps with your own keys", Category.UTILITY, false); }
+
+        @Override
+        public void onTick() {
+            boolean menus = Cobra.platform.screenOpen();
+            boolean s = !menus && start.code() >= 0 && Cobra.platform.rawKeyDown(start.code());
+            boolean p = !menus && pause.code() >= 0 && Cobra.platform.rawKeyDown(pause.code());
+            boolean x = !menus && stop.code() >= 0 && Cobra.platform.rawKeyDown(stop.code());
+            if (s && !sDown && rec.state() == dev.cobra.client.core.ScreenRecorder.State.IDLE) {
+                problem = null;
+                rec.start(Integer.parseInt(fps.get()));
+                Cobra.platform.chat("\u00a7c\u25cf\u00a7r Recording (" + fps.get() + " fps, " + resolution.get() + ")");
+            }
+            if (p && !pDown && rec.state() != dev.cobra.client.core.ScreenRecorder.State.IDLE) {
+                rec.togglePause();
+                Cobra.platform.chat(rec.state() == dev.cobra.client.core.ScreenRecorder.State.PAUSED ? "Recording paused" : "Recording resumed");
+            }
+            if (x && !xDown && rec.state() != dev.cobra.client.core.ScreenRecorder.State.IDLE) {
+                java.io.File f = rec.stop();
+                Cobra.platform.chat("Recording saved" + (f != null ? ": " + f.getName() : "") + " (open the launcher's Recordings)");
+            }
+            String err = rec.takeError();
+            if (err != null) {
+                Cobra.platform.chat("\u00a7c" + err);
+                rec.stop();
+                problem = err;
+            }
+            sDown = s;
+            pDown = p;
+            xDown = x;
+        }
+
+        @Override
+        public void onDisable() {
+            rec.stop();
+        }
+
+        /** Where recordings go (the launcher passes its folder; fallback: the game folder). */
+        public java.io.File folder() {
+            String d = System.getProperty("cobra.recordings");
+            return d != null && !d.isEmpty() ? new java.io.File(d) : new java.io.File(Cobra.platform.gameDir(), "recordings");
+        }
+
+        public String ffmpeg() {
+            String f = System.getProperty("cobra.ffmpeg");
+            return f != null && !f.isEmpty() ? f : "ffmpeg";
+        }
+
+        /** Little REC badge while recording (drawn by the HUD pass). */
+        public void renderBadge(dev.cobra.client.core.Render r) {
+            if (!indicator.on() || rec.state() == dev.cobra.client.core.ScreenRecorder.State.IDLE) return;
+            long t = rec.seconds();
+            boolean paused = rec.state() == dev.cobra.client.core.ScreenRecorder.State.PAUSED;
+            String label = (paused ? "PAUSED " : "REC ") + String.format(java.util.Locale.ROOT, "%d:%02d", t / 60, t % 60);
+            int w = r.textWidth(label) + 16;
+            r.rect(4, 4, w, 14, 0x99000000);
+            boolean blink = paused || (System.currentTimeMillis() / 500) % 2 == 0;
+            if (blink) r.rect(8, 9, 4, 4, paused ? 0xFFFFC04D : 0xFFFF4444);
+            r.text(label, 14, 7, 0xFFFFFFFF, false);
+        }
+    }
+
+    /** A fading trail behind the mouse pointer in menus. */
+    public static final class MouseTrail extends Module {
+        public final Setting.Color color = add(new Setting.Color("color", "Color", 0xFFF8F5F2));
+        public final Setting.Bool chroma = add(new Setting.Bool("chroma", "Rainbow", false));
+        public final Setting.Number length = add(new Setting.Number("length", "Length", 14, 4, 40, 1, ""));
+        public final Setting.Number size = add(new Setting.Number("size", "Size", 3, 1, 8, 1, "px"));
+
+        private final float[] xs = new float[64], ys = new float[64];
+        private final long[] ts = new long[64];
+        private int head, count;
+
+        public MouseTrail() { super("mousetrail", "Mouse Trail", "A fading trail behind your pointer in menus", Category.VISUAL, false); }
+
+        /** Call every frame a menu is drawn, with the mouse position (GUI pixels). */
+        public void render(dev.cobra.client.core.Render r, int mx, int my) {
+            if (!isEnabled()) return;
+            long now = System.currentTimeMillis();
+            int last = (head + 63) % 64;
+            if (count == 0 || Math.abs(xs[last] - mx) + Math.abs(ys[last] - my) >= 1) {
+                xs[head] = mx;
+                ys[head] = my;
+                ts[head] = now;
+                head = (head + 1) % 64;
+                count = Math.min(64, count + 1);
+            }
+            int n = Math.min(count, length.i());
+            long life = 40L * length.i();
+            int base = color.argb();
+            float sz = size.f();
+            for (int k = n - 1; k >= 1; k--) {
+                int i = (head - 1 - k + 128) % 64, j = (head - k + 128) % 64;
+                float age = (now - ts[i]) / (float) life;
+                if (age >= 1) continue;
+                float t = 1 - k / (float) n;                 // 0 = tail end, 1 = at the pointer
+                float a = t * (1 - age) * ((base >>> 24) / 255f);
+                int c = chroma.on() ? dev.cobra.client.core.ui.Draw.hsv((now / 1500f + k * 0.03f) % 1f, 0.7f, 1f, 255) : base;
+                int col = ((int) (a * 255) & 0xFF) << 24 | (c & 0xFFFFFF);
+                float s = Math.max(1, sz * (0.35f + 0.65f * t));
+                // fill the gap between two samples so fast moves still give a line
+                float dx = xs[j] - xs[i], dy = ys[j] - ys[i];
+                int steps = Math.max(1, (int) (Math.max(Math.abs(dx), Math.abs(dy)) / Math.max(1, s * 0.6f)));
+                for (int q = 0; q < steps; q++) {
+                    float px = xs[i] + dx * q / steps, py = ys[i] + dy * q / steps;
+                    r.rect(Math.round(px - s / 2), Math.round(py - s / 2), Math.max(1, Math.round(s)), Math.max(1, Math.round(s)), col);
+                }
+            }
+        }
+    }
+
+    /**
+     * Velocity motion blur: every pixel is smeared along how far the view moved this frame, so
+     * quick turns blur and standing still is sharp (no ghost trails). Optional zoom blur when
+     * running forward.
+     */
+    public static final class MotionBlur extends Module {
+        public final Setting.Number strength = add(new Setting.Number("strength", "Strength", 5, 1, 10, 1, ""));
+        public final Setting.Bool movement = add(new Setting.Bool("movement", "Blur when running", true));
+        public final Setting.Number smoothing = add(new Setting.Number("smoothing", "Smoothing", 5, 0, 10, 1, ""));
+
+        private float vx, vy, radial;
+        private double lastYaw = Double.NaN, lastPitch;
+        private long lastFrameNs;
+
+        public MotionBlur() { super("motionblur", "Motion Blur", "Blurs by how fast you turn and move", Category.VISUAL, false); }
+
+        /**
+         * Called once per rendered frame with the camera. Returns the blur as ARGB for the 1x1
+         * motion texture: r/g = screen motion (128 = none), b = radial, a = strength.
+         */
+        public int frame(double yaw, double pitch, double fovVertical, double aspect, double speed) {
+            return frameAt(yaw, pitch, fovVertical, aspect, speed, System.nanoTime());
+        }
+
+        /** Explicit monotonic timestamp keeps the blur stable at different frame rates. */
+        public int frameAt(double yaw, double pitch, double fovVertical, double aspect, double speed, long now) {
+            double dt = (now - lastFrameNs) / 1_000_000_000.0;
+            if (Double.isNaN(lastYaw) || dt <= 0 || dt > 0.25) {
+                lastYaw = yaw;
+                lastPitch = pitch;
+                lastFrameNs = now;
+                vx = vy = radial = 0;
+                return 0x00808000;
+            }
+            lastFrameNs = now;
+            double dyaw = yaw - lastYaw;
+            dyaw = ((dyaw % 360) + 540) % 360 - 180;           // shortest way round
+            double dpitch = pitch - lastPitch;
+            lastYaw = yaw;
+            lastPitch = pitch;
+            double fovV = Math.max(1, fovVertical);
+            double fovH = Math.toDegrees(2 * Math.atan(Math.tan(Math.toRadians(fovV) / 2) * aspect));
+            float tx = (float) Math.max(-0.25, Math.min(0.25, dyaw / fovH / (60 * dt)));
+            float ty = (float) Math.max(-0.25, Math.min(0.25, dpitch / fovV / (60 * dt)));
+            float tr = movement.on() ? (float) Math.max(0, Math.min(1, (speed - 0.13) * 2.2)) : 0;
+            float k = (float) (1 - Math.pow(smoothing.f() * 0.08, dt * 60));
+            vx += (tx - vx) * k;
+            vy += (ty - vy) * k;
+            radial += (tr - radial) * k;
+            int r = clamp255(128 + vx / 0.5f * 255);
+            int g = clamp255(128 + vy / 0.5f * 255);
+            int b = clamp255(radial * 255);
+            int a = clamp255(strength.f() / 10f * 255);
+            return a << 24 | r << 16 | g << 8 | b;
+        }
+
+        private static int clamp255(float v) {
+            return Math.max(0, Math.min(255, Math.round(v)));
+        }
+
+        /** Forget the last camera angle (after a teleport or reopening a world). */
+        public void reset() {
+            lastYaw = Double.NaN;
+            lastFrameNs = 0;
+            vx = vy = radial = 0;
+        }
+    }
+
+    /**
+     * View Model (BactroMod-style): move, rotate and resize what you hold in first person. "All items"
+     * applies to everything; each item type (swords, tools, blocks, bows, food, shield, other items,
+     * empty hand) adds its own tweak on top. Also moves the fire overlay.
+     */
+    public static final class ViewModel extends Module {
+        public static final String[] TYPES = {"All items", "Swords", "Tools", "Blocks", "Bows", "Food", "Shield", "Other items", "Empty hand"};
+        private static final String[] KEYS = {"all", "sword", "tool", "block", "bow", "food", "shield", "item", "hand"};
+
+        public final Setting.Mode editing = add(new Setting.Mode("editing", "Editing", TYPES[0], TYPES));
+        private final Setting.Number[][] values = new Setting.Number[KEYS.length][];
+        public final Setting.Number fire = add(new Setting.Number("fire", "Fire height", -30, -60, 20, 1, ""));
+        public final Setting.Bool mirror = add(new Setting.Bool("mirror", "Mirror for the off hand", true));
+        public final Setting.Action reset = add(new Setting.Action("reset", "Reset this type", new Runnable() {
+            public void run() {
+                int t = indexOf(editing.get());
+                for (Setting.Number n : values[t]) n.reset();
+            }
+        }));
+
+        public ViewModel() {
+            super("viewmodel", "View Model", "Position, rotate and size every item type, plus fire height", Category.VISUAL, false);
+            // insert the per-type rows right after "Editing" so they read as its page
+            List<Setting<?>> rows = new java.util.ArrayList<Setting<?>>();
+            for (int t = 0; t < KEYS.length; t++) {
+                final int type = t;
+                String p = t == 0 ? "" : KEYS[t] + "_";          // "All items" keeps the old ids (x, y, z, size)
+                Setting.Cond when = new Setting.Cond() {
+                    public boolean ok() { return indexOf(editing.get()) == type; }
+                };
+                double scaleDef = 1;
+                values[t] = new Setting.Number[]{
+                        n(p + "x", "Position X", 0, -1.5, 1.5, 0.02, "", when),
+                        n(p + "y", "Position Y", 0, -1.5, 1.5, 0.02, "", when),
+                        n(p + "z", "Position Z", 0, -1.5, 1.5, 0.02, "", when),
+                        n(p + "rx", "Rotation X", 0, -180, 180, 1, "\u00b0", when),
+                        n(p + "ry", "Rotation Y", 0, -180, 180, 1, "\u00b0", when),
+                        n(p + "rz", "Rotation Z", 0, -180, 180, 1, "\u00b0", when),
+                        n(p + "size", "Size", scaleDef, 0.2, 2, 0.02, "x", when)};
+                for (Setting.Number n : values[t]) rows.add(n);
+            }
+            settings.removeAll(rows);
+            settings.addAll(1, rows);
+        }
+
+        private Setting.Number n(String id, String name, double def, double min, double max, double step, String suffix, Setting.Cond when) {
+            return add(new Setting.Number(id, name, def, min, max, step, suffix), when);
+        }
+
+        private static int indexOf(String type) {
+            for (int i = 0; i < TYPES.length; i++) if (TYPES[i].equals(type)) return i;
+            return 0;
+        }
+
+        /**
+         * Type of a held item from its registry id (e.g. "minecraft:diamond_sword"); the platform
+         * says whether it's a block item or edible/drinkable.
+         */
+        public static String typeOf(String itemId, boolean empty, boolean block, boolean food) {
+            if (empty) return "hand";
+            String path = itemId == null ? "" : itemId.substring(itemId.indexOf(':') + 1);
+            if (path.equals("shield")) return "shield";
+            if (path.endsWith("_sword")) return "sword";
+            if (path.endsWith("_axe") || path.endsWith("_pickaxe") || path.endsWith("_shovel") || path.endsWith("_hoe")
+                    || path.equals("mace") || path.equals("trident") || path.endsWith("_spear")) return "tool";
+            if (path.equals("bow") || path.equals("crossbow")) return "bow";
+            if (food) return "food";
+            if (block) return "block";
+            return "item";
+        }
+
+        /**
+         * Transform for an item type: {x, y, z, rotX, rotY, rotZ, size}. "All items" plus the type's
+         * own tweak. Null when the module is off.
+         */
+        public float[] transform(String type) {
+            if (!isEnabled()) return null;
+            int t = 0;
+            for (int i = 1; i < KEYS.length; i++) if (KEYS[i].equals(type)) t = i;
+            float[] out = new float[7];
+            for (int k = 0; k < 6; k++) out[k] = values[0][k].f() + (t == 0 ? 0 : values[t][k].f());
+            out[6] = values[0][6].f() * (t == 0 ? 1 : values[t][6].f());
+            return out;
+        }
+
+        /** Vertical shift of the fire overlay (negative = lower). */
+        public float fireOffset() { return isEnabled() ? fire.f() / 100f : 0; }
+    }
+
+    public static final class Fullbright extends Module {
+        private boolean applied;
+
+        public Fullbright() { super("fullbright", "Fullbright", "See clearly in the dark", Category.VISUAL, false); }
+
+        /** Applied from the tick loop so it never runs before the game options exist. */
+        @Override
+        public void onTick() {
+            if (!applied && p().inWorld()) {
+                p().setFullbright(true);
+                applied = true;
+            }
+        }
+
+        @Override
+        public void onDisable() {
+            if (applied) p().setFullbright(false);
+            applied = false;
+        }
+    }
+
+    public static final class Crosshair extends Module {
+        public final Setting.Mode style = add(new Setting.Mode("style", "Style", "Cross", "Cross", "T-Shape", "Dot", "Square", "Plus"));
+        public final Setting.Number size = add(new Setting.Number("size", "Length", 4, 1, 12, 1, "px"));
+        public final Setting.Number gap = add(new Setting.Number("gap", "Gap", 2, 0, 8, 1, "px"));
+        public final Setting.Number thickness = add(new Setting.Number("thickness", "Thickness", 1, 1, 4, 1, "px"));
+        public final Setting.Color color = add(new Setting.Color("color", "Color", 0xFFFFFFFF));
+        public final Setting.Bool outline = add(new Setting.Bool("outline", "Outline", true));
+        public final Setting.Bool dot = add(new Setting.Bool("dot", "Center dot", false));
+        /** Vanilla-style: the crosshair inverts the colours behind it (always visible on any background). */
+        public final Setting.Bool inverted = add(new Setting.Bool("inverted", "Inverted color (like vanilla)", false));
+
+        public Crosshair() { super("crosshair", "Custom Crosshair", "Your own crosshair shape and color", Category.VISUAL, false); }
+
+        public void draw(Render r) {
+            int cx = r.width() / 2, cy = r.height() / 2;
+            int t = thickness.i(), l = size.i(), g = gap.i(), c = color.argb();
+            int ht = t / 2;
+            String s = style.get();
+            if (s.equals("Dot")) {
+                bar(r, cx - ht - 1, cy - ht - 1, t + 2, t + 2, c);
+                return;
+            }
+            if (s.equals("Square")) {
+                int e = g + l;
+                bar(r, cx - e, cy - e, e * 2 + 1, t, c);
+                bar(r, cx - e, cy + e - t + 1, e * 2 + 1, t, c);
+                bar(r, cx - e, cy - e + t, t, e * 2 + 1 - 2 * t, c);
+                bar(r, cx + e - t + 1, cy - e + t, t, e * 2 + 1 - 2 * t, c);
+                return;
+            }
+            if (s.equals("Plus")) g = 0;
+            bar(r, cx - g - l, cy - ht, l, t, c);            // left
+            bar(r, cx + g + 1, cy - ht, l, t, c);            // right
+            bar(r, cx - ht, cy + g + 1, t, l, c);            // bottom
+            if (!s.equals("T-Shape")) bar(r, cx - ht, cy - g - l, t, l, c); // top
+            if (dot.on() || s.equals("Plus")) bar(r, cx - ht, cy - ht, t, t, c);
+        }
+
+        private void bar(Render r, int x, int y, int w, int h, int c) {
+            if (w <= 0 || h <= 0) return;
+            if (inverted.on()) {        // no outline / colour: the inversion itself keeps it visible
+                r.rectInverted(x, y, w, h);
+                return;
+            }
+            if (outline.on()) r.rect(x - 1, y - 1, w + 2, h + 2, 0xB0000000);
+            r.rect(x, y, w, h, c);
+        }
+    }
+
+    public static final class HitColor extends Module {
+        public final Setting.Color color = add(new Setting.Color("color", "Color", 0xFFFF4D4D));
+        public final Setting.Number opacity = add(new Setting.Number("opacity", "Opacity", 30, 5, 80, 5, "%"));
+
+        public HitColor() { super("hitcolor", "Hit Color", "Change the red flash on hit entities", Category.VISUAL, false); }
+
+        public int argb() {
+            int a = (int) (opacity.get() / 100 * 255);
+            return (a << 24) | (color.argb() & 0xFFFFFF);
+        }
+    }
+
+    public static final class HurtCam extends Module {
+        public HurtCam() { super("hurtcam", "No Hurt Camera", "Removes the screen shake when you take damage", Category.VISUAL, false); }
+    }
+
+    public static final class ItemPhysics extends Module {
+        public final Setting.Number speed = add(new Setting.Number("speed", "Turn speed", 0, 0, 3, 0.1, "x"));
+
+        public ItemPhysics() { super("itemphysics", "Item Physics", "Dropped items lie flat on the ground, no bobbing", Category.VISUAL, false); }
+    }
+
+    public static final class Zoom extends Module {
+        public final Setting.Number level = add(new Setting.Number("level", "Zoom", 4, 2, 12, 0.5, "x"));
+        public final Setting.Bool smooth = add(new Setting.Bool("smooth", "Smooth", true));
+        public final Setting.Bool scroll = add(new Setting.Bool("scroll", "Scroll to adjust", true));
+        public final Setting.Bool cinematic = add(new Setting.Bool("cinematic", "Smooth camera", false));
+        public final Setting.Bool slowMouse = add(new Setting.Bool("slowmouse", "Lower mouse sensitivity", true));
+        public final Setting.Bool hideHand = add(new Setting.Bool("hidehand", "Keep hand unzoomed", true));
+        public final Setting.Bind key = add(new Setting.Bind("key", "Zoom key", -1, "zoom"));
+        public boolean held;
+        private double current = 1, extra = 1;
+        private long last = System.nanoTime();
+
+        public Zoom() { super("zoom", "Zoom", "Hold C to zoom (change in Controls)", Category.VISUAL, true); }
+
+        /** FOV divisor for this frame. */
+        public double divisor() {
+            long now = System.nanoTime();
+            double dt = Math.min(0.1, (now - last) / 1e9);
+            last = now;
+            double target = isEnabled() && held ? level.get() * extra : 1;
+            if (!held) extra = 1;
+            if (!smooth.on() || !Cobra.animations) current = target;
+            else current += (target - current) * (1 - Math.exp(-dt * 14));
+            if (Math.abs(current - target) < 0.002) current = target;
+            return current;
+        }
+
+        public boolean active() { return isEnabled() && held; }
+
+        /** Last FOV divisor handed out (for mouse scaling without advancing the animation). */
+        public double lastDivisor() { return current; }
+
+        /** Mouse sensitivity multiplier while zoomed: aiming feels the same at any zoom. */
+        public double sensitivity() {
+            if (!slowMouse.on() || current <= 1.01) return 1;
+            return 1 / current;
+        }
+
+        /** Returns true if the scroll was consumed. */
+        public boolean onScroll(double amount) {
+            if (!active() || !scroll.on()) return false;
+            extra = Math.max(0.5, Math.min(4, extra * (amount > 0 ? 1.15 : 1 / 1.15)));
+            return true;
+        }
+    }
+
+    public static final class Freelook extends Module {
+        public final Setting.Mode mode = add(new Setting.Mode("mode", "Mode", "Hold", "Hold", "Toggle"));
+        public final Setting.Bool invert = add(new Setting.Bool("invert", "Invert vertical", false));
+        public final Setting.Bind key = add(new Setting.Bind("key", "Freelook key", -1, "freelook"));
+        public boolean active;
+        public float yaw, pitch;
+
+        public Freelook() { super("freelook", "Freelook", "Hold Left Alt to look around without turning", Category.VISUAL, true); }
+
+        /** Called with the key state each tick; returns whether freelook just started. */
+        public boolean update(boolean keyDown, boolean keyPressedEdge, float playerYaw, float playerPitch) {
+            boolean was = active;
+            if (!isEnabled()) active = false;
+            else if (mode.is("Hold")) active = keyDown;
+            else if (keyPressedEdge) active = !active;
+            if (active && !was) {
+                yaw = playerYaw;
+                pitch = playerPitch;
+            }
+            return active && !was;
+        }
+
+        public void turn(double dx, double dy) {
+            yaw += (float) dx * 0.15f;
+            pitch += (float) (invert.on() ? -dy : dy) * 0.15f;
+            pitch = Math.max(-90, Math.min(90, pitch));
+        }
+    }
+
+    public static final class TimeChanger extends Module {
+        public final Setting.Mode preset = add(new Setting.Mode("preset", "Time", "Noon", "Morning", "Noon", "Sunset", "Night", "Midnight", "Custom"));
+        public final Setting.Number custom = add(new Setting.Number("custom", "Custom time", 6000, 0, 24000, 250, ""));
+
+        public TimeChanger() { super("timechanger", "Time Changer", "Client-side time of day", Category.VISUAL, false); }
+
+        public long time() {
+            String p = preset.get();
+            if (p.equals("Morning")) return 1000;
+            if (p.equals("Noon")) return 6000;
+            if (p.equals("Sunset")) return 12500;
+            if (p.equals("Night")) return 14000;
+            if (p.equals("Midnight")) return 18000;
+            return custom.i();
+        }
+    }
+
+    public static final class FovModifier extends Module {
+        public final Setting.Number fov = add(new Setting.Number("fov", "Field of view", 90, 30, 140, 1, ""));
+        public final Setting.Bool dynamic = add(new Setting.Bool("dynamic", "Sprint & speed FOV", false));
+
+        public FovModifier() { super("fov", "FOV Modifier", "FOV beyond vanilla limits, optional static FOV", Category.VISUAL, false); }
+    }
+
+    public static final class Particles extends Module {
+        public final Setting.Number crits = add(new Setting.Number("crits", "Crit particles", 1, 0, 5, 1, "x"));
+        public final Setting.Bool alwaysSharp = add(new Setting.Bool("sharp", "Always sharpness", true));
+        public final Setting.Number sharp = add(new Setting.Number("sharpmult", "Sharpness particles", 1, 0, 5, 1, "x"));
+
+        public Particles() { super("particles", "Particle Changer", "More hit particles on every hit", Category.VISUAL, false); }
+
+        public void onHit(Object target) {
+            p().spawnHitParticles(target, crits.i(), alwaysSharp.on() ? sharp.i() : 0);
+        }
+    }
+
+    /** Switch off individual kinds of fog and the pumpkin blur. (Fire/shield height: View Model.) */
+    public static final class Tweaks extends Module {
+        public final Setting.Bool pumpkin = add(new Setting.Bool("pumpkin", "Disable pumpkin blur", true));
+        public final Setting.Bool lavaFog = add(new Setting.Bool("lavafog", "Disable lava fog", true));
+        public final Setting.Bool waterFog = add(new Setting.Bool("waterfog", "Disable water fog", false));
+        public final Setting.Bool snowFog = add(new Setting.Bool("snowfog", "Disable powder snow fog", true));
+        public final Setting.Bool blindFog = add(new Setting.Bool("blindfog", "Disable blindness fog", false));
+        public final Setting.Bool darkFog = add(new Setting.Bool("darkfog", "Disable darkness fog", true));
+        public final Setting.Bool terrainFog = add(new Setting.Bool("terrainfog", "Disable terrain fog", false));
+        public final Setting.Bool thickFog = add(new Setting.Bool("thickfog", "Disable thick fog (Nether)", false));
+        public final Setting.Bool skyFog = add(new Setting.Bool("skyfog", "Disable sky fog", false));
+
+        public Tweaks() {
+            super("tweaks", "Visual Tweaks", "Turn off fog types and the pumpkin blur", Category.VISUAL, false);
+        }
+
+        public boolean noPumpkin() { return isEnabled() && pumpkin.on(); }
+
+        /**
+         * Whether a kind of fog should be removed: "lava", "water", "snow", "blind", "dark",
+         * "terrain", "thick", "sky".
+         */
+        public boolean noFog(String kind) {
+            if (!isEnabled()) return false;
+            if (kind.equals("lava")) return lavaFog.on();
+            if (kind.equals("water")) return waterFog.on();
+            if (kind.equals("snow")) return snowFog.on();
+            if (kind.equals("blind")) return blindFog.on();
+            if (kind.equals("dark")) return darkFog.on();
+            if (kind.equals("terrain")) return terrainFog.on();
+            if (kind.equals("thick")) return thickFog.on();
+            if (kind.equals("sky")) return skyFog.on();
+            return false;
+        }
+    }
+
+    /** Recolours the outline around the block you're looking at, with an optional fill. */
+    public static final class BlockOverlay extends Module {
+        public final Setting.Bool outline = add(new Setting.Bool("outline", "Outline", true));
+        public final Setting.Color outlineColor = add(new Setting.Color("outlinecolor", "Outline color", 0xCCFFFFFF));
+        public final Setting.Bool fill = add(new Setting.Bool("fill", "Fill", true));
+        public final Setting.Color fillColor = add(new Setting.Color("fillcolor", "Fill color", 0x33FFFFFF));
+        public final Setting.Bool chroma = add(new Setting.Bool("chroma", "Chroma (rainbow)", false));
+        public final Setting.Number chromaSpeed = add(new Setting.Number("chromaspeed", "Chroma speed", 1, 0.2, 4, 0.1, "x"));
+
+        public BlockOverlay() {
+            super("blockoverlay", "Block Overlay", "Custom outline and fill on the block you look at", Category.VISUAL, false);
+        }
+
+        private int chromaRgb() {
+            float h = (System.currentTimeMillis() % 100000L) / 1000f * chromaSpeed.f() * 0.25f;
+            return dev.cobra.client.core.ui.Draw.hsv(h - (float) Math.floor(h), 0.75f, 1f, 255) & 0xFFFFFF;
+        }
+
+        public int outlineArgb() {
+            int c = outlineColor.argb();
+            return chroma.on() ? (c & 0xFF000000) | chromaRgb() : c;
+        }
+
+        public int fillArgb() {
+            int c = fillColor.argb();
+            return chroma.on() ? (c & 0xFF000000) | chromaRgb() : c;
+        }
+    }
+
+    // ---------------------------------------------------------------- utility
+
+    public static final class Waypoints extends Module {
+        public static final class Point {
+            public final String name, server, dim;
+            public final int x, y, z, color;
+
+            Point(String name, int x, int y, int z, int color, String server, String dim) {
+                this.name = name;
+                this.x = x;
+                this.y = y;
+                this.z = z;
+                this.color = color;
+                this.server = server;
+                this.dim = dim;
+            }
+        }
+
+        private static final int[] COLORS = {0xFF4CD964, 0xFF3DDCFF, 0xFFFF9F43, 0xFFB86BFF, 0xFFFF6BCB, 0xFFFFD93D};
+        public final List<Point> points = new ArrayList<Point>();
+        public final Setting.Bool distance = add(new Setting.Bool("distance", "Show distance", true));
+        public final Setting.Bind key = add(new Setting.Bind("key", "Add waypoint key", -1, "waypoint"));
+
+        public void remove(Point pt) {
+            points.remove(pt);
+            Cobra.save();
+        }
+
+        public Waypoints() {
+            super("waypoints", "Waypoints", "Press B to mark your position", Category.UTILITY, true);
+            add(new Setting.Action("add", "Add waypoint here", new Runnable() {
+                @Override public void run() { addHere(); }
+            }));
+            add(new Setting.Action("clear", "Remove waypoints on this server", new Runnable() {
+                @Override public void run() { clearHere(); }
+            }));
+        }
+
+        public void addHere() {
+            if (!p().inWorld()) return;
+            int n = here().size() + 1;
+            Point pt = new Point("Waypoint " + n, (int) Math.floor(p().x()), (int) Math.floor(p().y()), (int) Math.floor(p().z()),
+                    COLORS[points.size() % COLORS.length], p().server(), p().dimension());
+            points.add(pt);
+            p().chat("\u00a77[\u00a7fCobra\u00a77] Added \u00a7f" + pt.name + "\u00a77 at " + pt.x + ", " + pt.y + ", " + pt.z);
+            Cobra.save();
+        }
+
+        public void clearHere() {
+            List<Point> keep = new ArrayList<Point>();
+            for (Point pt : points) if (!pt.server.equals(p().server())) keep.add(pt);
+            points.clear();
+            points.addAll(keep);
+            Cobra.save();
+        }
+
+        /** Waypoints for the current server and dimension. */
+        public List<Point> here() {
+            List<Point> out = new ArrayList<Point>();
+            if (p() == null || !p().inWorld()) return out;
+            String s = p().server(), d = p().dimension();
+            for (Point pt : points) if (pt.server.equals(s) && pt.dim.equals(d)) out.add(pt);
+            return out;
+        }
+
+        /** Projects each waypoint onto the screen and draws a label (visible through walls). */
+        public void render(Render r) {
+            double[] cam = p().camera();
+            if (cam == null) return;
+            double yaw = Math.toRadians(cam[3]), pitch = Math.toRadians(cam[4]);
+            double fx = -Math.sin(yaw) * Math.cos(pitch), fy = -Math.sin(pitch), fz = Math.cos(yaw) * Math.cos(pitch);
+            double rx = -Math.cos(yaw), rz = -Math.sin(yaw);
+            double ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy; // up = right x forward
+            double focal = (r.height() / 2.0) / Math.tan(Math.toRadians(cam[5]) / 2);
+            for (Point pt : here()) {
+                double dx = pt.x + 0.5 - cam[0], dy = pt.y + 1.2 - cam[1], dz = pt.z + 0.5 - cam[2];
+                double zc = dx * fx + dy * fy + dz * fz;
+                if (zc < 0.1) continue;
+                double xc = dx * rx + dz * rz, yc = dx * ux + dy * uy + dz * uz;
+                float sx = (float) (r.width() / 2.0 + xc / zc * focal), sy = (float) (r.height() / 2.0 - yc / zc * focal);
+                double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                String label = pt.name + (distance.on() ? "  " + Math.round(dist) + "m" : "");
+                int tw = r.textWidth(label);
+                r.rect(Math.round(sx) - 2, Math.round(sy) - 14, 4, 4, pt.color);
+                r.rect(Math.round(sx - tw / 2f) - 3, Math.round(sy) - 8, tw + 6, 11, 0x80000000);
+                r.text(label, sx - tw / 2f, sy - 6, 0xFFFFFFFF, false);
+            }
+        }
+
+        public void load(Properties props) {
+            points.clear();
+            for (int i = 0; ; i++) {
+                String v = props.getProperty("waypoint." + i);
+                if (v == null) break;
+                String[] f = v.split("\\|", -1);
+                if (f.length < 7) continue;
+                try {
+                    points.add(new Point(f[0], Integer.parseInt(f[1]), Integer.parseInt(f[2]), Integer.parseInt(f[3]),
+                            (int) Long.parseLong(f[4], 16), f[5], f[6]));
+                } catch (Exception ignored) {}
+            }
+        }
+
+        public void save(Properties props) {
+            for (int i = 0; i < points.size(); i++) {
+                Point pt = points.get(i);
+                props.setProperty("waypoint." + i, pt.name.replace("|", "") + "|" + pt.x + "|" + pt.y + "|" + pt.z + "|"
+                        + Integer.toHexString(pt.color) + "|" + pt.server + "|" + pt.dim);
+            }
+        }
+    }
+
+    public static final class ChatMod extends Module {
+        public final Setting.Bool timestamps = add(new Setting.Bool("timestamps", "Timestamps", true));
+        public final Setting.Bool seconds = add(new Setting.Bool("seconds", "Include seconds", false));
+        public final Setting.Bool history = add(new Setting.Bool("history", "Longer chat history", true));
+
+        public ChatMod() { super("chat", "Chat Mod", "Timestamps and a 1000-line chat history", Category.UTILITY, false); }
+
+        public String stamp() {
+            return "\u00a78[\u00a77" + new SimpleDateFormat(seconds.on() ? "HH:mm:ss" : "HH:mm").format(new Date()) + "\u00a78]\u00a7r ";
+        }
+
+        public int historySize() { return isEnabled() && history.on() ? 1000 : 100; }
+    }
+
+    public static final class NickHider extends Module {
+        public final Setting.Text nick = add(new Setting.Text("nick", "Shown name", "You", 16));
+
+        public NickHider() { super("nickhider", "Nick Hider", "Replaces your name on your screen (for recording)", Category.UTILITY, false); }
+
+        public String apply(String s) {
+            if (s == null || !isEnabled() || p() == null) return s;
+            String me = p().playerName();
+            if (me == null || me.isEmpty() || s.indexOf(me) < 0) return s;
+            return s.replace(me, nick.get());
+        }
+    }
+
+    /** Watches the screenshots folder and uploads new shots to catbox.moe, copying the link. */
+    public static final class ScreenshotUploader extends Module {
+        public final Setting.Bool copy = add(new Setting.Bool("copy", "Copy link", true));
+        private static final Map<String, Long> SEEN = new HashMap<String, Long>();
+
+        public ScreenshotUploader() {
+            super("screenshots", "Screenshot Uploader", "Uploads new F2 screenshots to catbox.moe and copies the link", Category.UTILITY, false);
+        }
+
+        public static void startWatcher(final File dir) {
+            final long started = System.currentTimeMillis();
+            Thread t = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    Map<String, Long> sizes = new HashMap<String, Long>();
+                    while (true) {
+                        try {
+                            Thread.sleep(1000);
+                            File[] files = dir.listFiles();
+                            if (files == null) continue;
+                            for (File f : files) {
+                                if (!f.getName().endsWith(".png") || f.lastModified() < started || SEEN.containsKey(f.getName())) continue;
+                                Long prev = sizes.get(f.getName());
+                                long len = f.length();
+                                sizes.put(f.getName(), len);
+                                if (prev == null || prev != len || len == 0) continue; // still being written
+                                SEEN.put(f.getName(), len);
+                                ScreenshotUploader m = Cobra.get(ScreenshotUploader.class);
+                                if (m.isEnabled()) m.upload(f);
+                            }
+                        } catch (InterruptedException e) {
+                            return;
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            }, "cobra-screenshots");
+            t.setDaemon(true);
+            t.start();
+        }
+
+        private void upload(final File f) {
+            try {
+                String boundary = "----cobra" + System.nanoTime();
+                HttpURLConnection c = (HttpURLConnection) new URL("https://catbox.moe/user/api.php").openConnection();
+                c.setDoOutput(true);
+                c.setConnectTimeout(15000);
+                c.setReadTimeout(60000);
+                c.setRequestMethod("POST");
+                c.setRequestProperty("User-Agent", "CobraClient/" + Cobra.VERSION);
+                c.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+                DataOutputStream out = new DataOutputStream(c.getOutputStream());
+                out.writeBytes("--" + boundary + "\r\nContent-Disposition: form-data; name=\"reqtype\"\r\n\r\nfileupload\r\n");
+                out.writeBytes("--" + boundary + "\r\nContent-Disposition: form-data; name=\"fileToUpload\"; filename=\"" + f.getName()
+                        + "\"\r\nContent-Type: image/png\r\n\r\n");
+                InputStream in = new FileInputStream(f);
+                byte[] buf = new byte[65536];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                in.close();
+                out.writeBytes("\r\n--" + boundary + "--\r\n");
+                out.flush();
+                out.close();
+                ByteArrayOutputStream body = new ByteArrayOutputStream();
+                InputStream rin = c.getResponseCode() < 400 ? c.getInputStream() : c.getErrorStream();
+                while ((n = rin.read(buf)) > 0) body.write(buf, 0, n);
+                rin.close();
+                final String url = body.toString("UTF-8").trim();
+                final boolean ok = url.startsWith("https://");
+                p().runOnMain(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!ok) {
+                            p().chat("\u00a77[\u00a7fCobra\u00a77] \u00a7cScreenshot upload failed.");
+                            return;
+                        }
+                        if (copy.on()) p().clipboard(url);
+                        p().chat("\u00a77[\u00a7fCobra\u00a77] Screenshot uploaded: \u00a7f" + url + (copy.on() ? " \u00a78(copied)" : ""));
+                    }
+                });
+            } catch (final Exception e) {
+                p().runOnMain(new Runnable() {
+                    @Override public void run() { p().chat("\u00a77[\u00a7fCobra\u00a77] \u00a7cScreenshot upload failed: " + e.getMessage()); }
+                });
+            }
+        }
+    }
+
+    static String lower(String s) { return s.toLowerCase(Locale.ROOT); }
+}
