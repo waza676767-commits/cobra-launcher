@@ -20,8 +20,8 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -49,17 +49,20 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
       - name: Build number and repo for the updater
         shell: bash
         run: printf 'repo=%s\nbuild=%s\n' "$GITHUB_REPOSITORY" "$GITHUB_RUN_NUMBER" > launcher/src/main/resources/update.properties
-      - name: WiX Toolset (for the one-file installer .exe)
+      - name: Inno Setup (for the one-file installer .exe)
         shell: pwsh
-        run: choco install wixtoolset --version 3.14.1 -y --no-progress; echo "C:\Program Files (x86)\WiX Toolset v3.14\bin" >> $env:GITHUB_PATH
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") -and -not (Test-Path "$env:ProgramFiles\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
       - name: Build Windows app
         shell: cmd
         run: call build-windows.bat
