@@ -92,8 +92,25 @@ public final class Updater {
      * Background: is there a newer release? Downloads it for the next start.
      * @param done called on success with the new build number (not on the UI thread)
      */
+    /** "Update to the newest": checks now (blocking, off the UI thread) and says what happened. */
+    public static String checkNow() {
+        if (REPO.isEmpty()) return "This launcher wasn't built on GitHub, so it can't update itself.";
+        final int[] got = {0};
+        Thread t = check(b -> got[0] = b);
+        try {
+            t.join(120_000);
+        } catch (InterruptedException ignored) {}
+        if (got[0] > 0) return "Build " + got[0] + " downloaded. Close and reopen the launcher to use it.";
+        int have = Math.max(BUILD, downloadedBuild());
+        return have > BUILD ? "Build " + have + " is ready: close and reopen the launcher." : "You're on the newest Cobra (build " + BUILD + ").";
+    }
+
     public static void checkInBackground(java.util.function.IntConsumer done) {
         if (REPO.isEmpty()) return;
+        check(done);
+    }
+
+    private static Thread check(java.util.function.IntConsumer done) {
         Thread t = new Thread(() -> {
             try {
                 Http.Response r = Http.get("https://api.github.com/repos/" + REPO + "/releases/latest");
@@ -122,6 +139,7 @@ public final class Updater {
         t.setDaemon(true);
         t.setPriority(Thread.MIN_PRIORITY);
         t.start();
+        return t;
     }
 
     /**

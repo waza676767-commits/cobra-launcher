@@ -53,6 +53,7 @@ public final class LogsPage extends Page {
             collect(all, game.resolve("crash-reports"), "Crash report · " + p.name, ".txt");
         }
         collect(all, Paths.LOGS, "Launcher", ".log");
+        collect(all, Paths.LOGS.resolve("recorder"), "Screen Recorder", ".log");
         all.sort((a, b) -> Long.compare(b.file().toFile().lastModified(), a.file().toFile().lastModified()));
         if (all.isEmpty()) list.add(new Empty());
         int n = 0;

@@ -28,7 +28,7 @@ import java.util.UUID;
  */
 public final class DiscordPresence {
     /** The Discord application behind the presence (its name is what shows after "Playing"). */
-    public static final String DEFAULT_APP_ID = "";
+    public static final String DEFAULT_APP_ID = "1553693351633621163";   // the "Cobra Client" Discord application
 
     private static final Object LOCK = new Object();
     private static SocketChannel channel;
@@ -36,6 +36,9 @@ public final class DiscordPresence {
     private static java.io.RandomAccessFile pipe;
     private static final boolean WINDOWS = System.getProperty("os.name", "").toLowerCase().contains("win");
     private static String details = "In the launcher", state = "Minecraft 1.21.11";
+    /** What the small round icon shows: launcher, menu, singleplayer or server (art assets of the same names). */
+    private static String kind = "launcher";
+    private static String serverAddress = "";
     private static long startMs = System.currentTimeMillis();
     private static boolean dirty = true;
     private static Thread worker;
@@ -65,7 +68,8 @@ public final class DiscordPresence {
     /** In the launcher, nothing running. */
     public static void idle() {
         gameDir = null;
-        set("In the launcher", "Minecraft 1.21.11", System.currentTimeMillis());
+        kind = "launcher";
+        set("In the launcher", "Getting ready to play", System.currentTimeMillis());
     }
 
     /** Minecraft just started from {@code dir}. */
@@ -75,6 +79,7 @@ public final class DiscordPresence {
         } catch (IOException ignored) {}
         gameDir = dir;
         lastPresenceLine = "";
+        kind = "menu";
         set("Playing Minecraft 1.21.11", "In the menus", System.currentTimeMillis());
     }
 
@@ -169,15 +174,23 @@ public final class DiscordPresence {
         }
         if (line.equals(lastPresenceLine)) return;
         lastPresenceLine = line;
-        String st;
+        String st, k;
         if (line.startsWith("server:")) {
             String addr = line.substring(7).trim();
-            st = Settings.get().discordShowServer && !addr.isEmpty() ? "On " + addr : "Multiplayer";
-        } else if (line.equals("singleplayer")) st = "Singleplayer";
-        else st = "In the menus";
+            serverAddress = addr;
+            st = Settings.get().discordShowServer && !addr.isEmpty() ? "On " + addr : "Playing multiplayer";
+            k = "server";
+        } else if (line.equals("singleplayer")) {
+            st = "Playing singleplayer";
+            k = "singleplayer";
+        } else {
+            st = "In the menus";
+            k = "menu";
+        }
         synchronized (LOCK) {
-            if (!st.equals(state)) {
+            if (!st.equals(state) || !k.equals(kind)) {
                 state = st;
+                kind = k;
                 dirty = true;
             }
         }
@@ -275,9 +288,23 @@ public final class DiscordPresence {
             buttons.add(b);
             activity.add("buttons", buttons);
         }
+        if (!cfg.discordShowActivity) activity.remove("state");
         JsonObject assets = new JsonObject();
-        assets.addProperty("large_image", "logo");          // art asset uploaded to the Discord app
-        assets.addProperty("large_text", "Cobra Client");
+        assets.addProperty("large_image", "logo");          // art assets uploaded to the Discord app (see README)
+        assets.addProperty("large_text", "Cobra Client " + BuildInfo.VERSION);
+        if (cfg.discordSmallIcon) {
+            String k;
+            synchronized (LOCK) {
+                k = kind;
+            }
+            assets.addProperty("small_image", k);
+            assets.addProperty("small_text", switch (k) {
+                case "server" -> cfg.discordShowServer && !serverAddress.isEmpty() ? "On " + serverAddress : "Multiplayer";
+                case "singleplayer" -> "Singleplayer";
+                case "menu" -> "In the menus";
+                default -> "Cobra Launcher";
+            });
+        }
         activity.add("assets", assets);
         command(activity);
     }

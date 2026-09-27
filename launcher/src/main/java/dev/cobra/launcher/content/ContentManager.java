@@ -36,6 +36,7 @@ public final class ContentManager {
                 for (Path p : s.sorted().toList()) {
                     String fn = p.getFileName().toString();
                     if (!fn.endsWith(".jar")) continue;
+                    if (!fn.startsWith("cobra-client") && !fn.startsWith("fabric-api")) continue;   // Sky helpers stay hidden
                     boolean cobra = fn.startsWith("cobra-client");
                     out.add(new Entry(p, cobra ? "Cobra Client" : fn.replaceAll("\\.jar$", ""), true, size(p), cobra ? "Built in" : "Required"));
                 }

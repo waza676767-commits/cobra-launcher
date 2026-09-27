@@ -27,6 +27,32 @@ public final class Draw {
         }
     }
 
+    /**
+     * Your own theme: a background colour and a text colour; everything else (cards, lines, muted
+     * text, buttons) is mixed from those two so it always stays readable.
+     */
+    public static void setCustom(int bg, int fg) {
+        bg |= 0xFF000000;
+        fg |= 0xFF000000;
+        int lum = ((bg >> 16 & 255) * 299 + (bg >> 8 & 255) * 587 + (bg & 255) * 114) / 1000;
+        light = lum > 140;
+        FG = fg;
+        BG = bg;
+        PANEL = (0xF0 << 24) | (bg & 0xFFFFFF);
+        CARD = mix(bg, fg, 0.08f);
+        CARD_HOVER = mix(bg, fg, 0.14f);
+        LINE = mix(bg, fg, 0.14f);
+        LINE_2 = mix(bg, fg, 0.22f);
+        MUTED = mix(bg, fg, 0.45f);
+        SOFT = mix(bg, fg, 0.68f);
+        INPUT = mix(bg, 0xFF000000, light ? 0f : 0.25f);
+        BTN = mix(bg, fg, 0.10f);
+        BTN_HOVER = mix(bg, fg, 0.18f);
+        BTN_LINE = mix(bg, fg, 0.38f);
+        DIM = (0x66 << 24) | (bg & 0xFFFFFF);
+        HOVER = (0x14 << 24) | (fg & 0xFFFFFF);
+    }
+
     private Draw() {}
 
     public static void round(Render r, int x, int y, int w, int h, int rad, int c) {

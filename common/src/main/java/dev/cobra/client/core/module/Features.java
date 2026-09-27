@@ -29,7 +29,11 @@ public final class Features {
 
     /** Global client options (the SETTINGS tab of the Right Shift menu). Always on. */
     public static final class Client extends Module {
-        public final Setting.Mode theme = add(new Setting.Mode("theme", "Theme", "Dark", "Dark", "Light"));
+        public final Setting.Mode theme = add(new Setting.Mode("theme", "Theme", "Dark", "Dark", "Light", "Custom"));
+        public final Setting.Color themeBg = add(new Setting.Color("themebg", "Theme background", 0xFF15131F),
+                new Setting.Cond() { public boolean ok() { return theme.is("Custom"); } });
+        public final Setting.Color themeText = add(new Setting.Color("themetext", "Theme text", 0xFFF2EEFF),
+                new Setting.Cond() { public boolean ok() { return theme.is("Custom"); } });
         public final Setting.Bool animations = add(new Setting.Bool("animations", "Animations", true));
         public final Setting.Bool particles = add(new Setting.Bool("particles", "Click particles", true));
         public final Setting.Bool blur = add(new Setting.Bool("blur", "Blur behind the Cobra menu", true));
@@ -151,6 +155,77 @@ public final class Features {
         }
     }
 
+    /**
+     * Sky: pick one of the sky packs Cobra ships (applies right away), plus your own time of day
+     * and weather. All client-side: only you see it.
+     */
+    public static final class Sky extends Module {
+        public final Setting.Mode sky = add(new Setting.Mode("sky", "Sky", "Vanilla", skyOptions()));
+        public final Setting.Mode time = add(new Setting.Mode("time", "Time", "Real", "Real", "Sunrise", "Day", "Noon", "Sunset", "Night", "Midnight"));
+        public final Setting.Mode weather = add(new Setting.Mode("weather", "Weather", "Real", "Real", "Clear", "Rain", "Thunder"));
+
+        public Sky() { super("sky", "Sky", "Custom skies, your own time of day and weather", Category.VISUAL, false); }
+
+        /** "Vanilla" plus every cobra-sky-*.zip in the resource packs folder, named nicely. */
+        private static String[] skyOptions() {
+            java.util.List<String> out = new java.util.ArrayList<String>();
+            out.add("Vanilla");
+            try {
+                java.io.File dir = new java.io.File(Cobra.platform.gameDir(), "resourcepacks");
+                String[] files = dir.list();
+                if (files != null) {
+                    java.util.Arrays.sort(files);
+                    for (String f : files) if (f.startsWith("cobra-sky-") && f.endsWith(".zip")) out.add(prettyName(f));
+                }
+            } catch (Exception ignored) {}
+            return out.toArray(new String[0]);
+        }
+
+        static String prettyName(String file) {
+            return file.substring("cobra-sky-".length(), file.length() - 4).replace('_', ' ').trim();
+        }
+
+        /** Resource pack id (file/cobra-sky-….zip) of the chosen sky, or null for vanilla. */
+        private String[] listed;
+        private long listedAt;
+
+        public String packFile() {
+            if (!isEnabled() || sky.is("Vanilla")) return null;
+            long now = System.currentTimeMillis();
+            if (listed == null || now - listedAt > 5000) {      // folder listing at most every 5 s, not every tick
+                listed = new java.io.File(Cobra.platform.gameDir(), "resourcepacks").list();
+                listedAt = now;
+            }
+            String[] files = listed;
+            if (files != null) for (String f : files) if (f.startsWith("cobra-sky-") && prettyName(f).equals(sky.get())) return f;
+            return null;
+        }
+
+        /** Time of day in ticks, or -1 for the real time. */
+        public long timeTicks() {
+            if (!isEnabled()) return -1;
+            String t = time.get();
+            if (t.equals("Sunrise")) return 23500;
+            if (t.equals("Day")) return 1000;
+            if (t.equals("Noon")) return 6000;
+            if (t.equals("Sunset")) return 12500;
+            if (t.equals("Night")) return 14500;
+            if (t.equals("Midnight")) return 18000;
+            return -1;
+        }
+
+        /** Rain strength override (0/1), or -1 for the real weather. */
+        public float rain() {
+            if (!isEnabled() || weather.is("Real")) return -1;
+            return weather.is("Clear") ? 0 : 1;
+        }
+
+        public float thunder() {
+            if (!isEnabled() || weather.is("Real")) return -1;
+            return weather.is("Thunder") ? 1 : 0;
+        }
+    }
+
     /** A fading trail behind the mouse pointer in menus. */
     public static final class MouseTrail extends Module {
         public final Setting.Color color = add(new Setting.Color("color", "Color", 0xFFF8F5F2));
@@ -206,8 +281,8 @@ public final class Features {
      * running forward.
      */
     public static final class MotionBlur extends Module {
-        public final Setting.Number strength = add(new Setting.Number("strength", "Strength", 5, 1, 10, 1, ""));
-        public final Setting.Bool movement = add(new Setting.Bool("movement", "Blur when running", true));
+        public final Setting.Number strength = add(new Setting.Number("strength", "Strength", 3, 1, 10, 1, ""));
+        public final Setting.Bool movement = add(new Setting.Bool("movement", "Blur when running", false));
         public final Setting.Number smoothing = add(new Setting.Number("smoothing", "Smoothing", 5, 0, 10, 1, ""));
 
         private float vx, vy, radial;
@@ -281,6 +356,9 @@ public final class Features {
         private final Setting.Number[][] values = new Setting.Number[KEYS.length][];
         public final Setting.Number fire = add(new Setting.Number("fire", "Fire height", -30, -60, 20, 1, ""));
         public final Setting.Bool mirror = add(new Setting.Bool("mirror", "Mirror for the off hand", true));
+        public final Setting.Bool noEquip = add(new Setting.Bool("noequip", "No item switch animation", false));
+        public final Setting.Number swingSpeed = add(new Setting.Number("swingspeed", "Swing speed", 1, 0.3, 3, 0.1, "x"));
+        public final Setting.Bool noBob = add(new Setting.Bool("nobob", "No view bobbing (hand and camera)", false));
         public final Setting.Action reset = add(new Setting.Action("reset", "Reset this type", new Runnable() {
             public void run() {
                 int t = indexOf(editing.get());
@@ -604,6 +682,17 @@ public final class Features {
         public final Setting.Color fillColor = add(new Setting.Color("fillcolor", "Fill color", 0x33FFFFFF));
         public final Setting.Bool chroma = add(new Setting.Bool("chroma", "Chroma (rainbow)", false));
         public final Setting.Number chromaSpeed = add(new Setting.Number("chromaspeed", "Chroma speed", 1, 0.2, 4, 0.1, "x"));
+        public final Setting.Number width = add(new Setting.Number("width", "Outline width", 2, 1, 8, 0.5, "px"));
+        public final Setting.Bool pulse = add(new Setting.Bool("pulse", "Pulse (breathing outline)", false));
+        public final Setting.Number pulseSpeed = add(new Setting.Number("pulsespeed", "Pulse speed", 1, 0.2, 4, 0.1, "x"),
+                new Setting.Cond() { public boolean ok() { return pulse.on(); } });
+
+        /** Outline alpha multiplier for the pulse (0.35..1). */
+        private float pulseK() {
+            if (!pulse.on()) return 1;
+            double t = System.currentTimeMillis() / 1000.0 * pulseSpeed.f() * Math.PI;
+            return (float) (0.675 + 0.325 * Math.sin(t));
+        }
 
         public BlockOverlay() {
             super("blockoverlay", "Block Overlay", "Custom outline and fill on the block you look at", Category.VISUAL, false);
@@ -616,7 +705,9 @@ public final class Features {
 
         public int outlineArgb() {
             int c = outlineColor.argb();
-            return chroma.on() ? (c & 0xFF000000) | chromaRgb() : c;
+            c = chroma.on() ? (c & 0xFF000000) | chromaRgb() : c;
+            int a = Math.round((c >>> 24) * pulseK());
+            return a << 24 | (c & 0xFFFFFF);
         }
 
         public int fillArgb() {

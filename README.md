@@ -254,6 +254,16 @@ and loads them with Fabric's `-Dfabric.addMods`. So they're always loaded, can't
 of the mods folder, and an old copy can't block the new one. They still show in the Mods page as
 **Built in** / **Required**.
 
+## Discord Rich Presence (setup once)
+
+1. <https://discord.com/developers/applications> → **New Application** → name it **Cobra Client**
+   (that's the "Playing Cobra Client" text).
+2. **Rich Presence → Art Assets → Add Image(s)**: upload the five pictures in `packaging/discord/`
+   and keep their names exactly: `logo`, `launcher`, `menu`, `singleplayer`, `server`. Save.
+3. **General Information** → copy the **Application ID** into Settings → Discord → Application ID
+   (or build it in as `DiscordPresence.DEFAULT_APP_ID` so everyone has it).
+4. In Discord: User Settings → Activity Privacy → "Share your detected activities" on.
+
 ## Discord Rich Presence
 
 Settings → **Discord** shows "Playing Cobra Client" on your Discord profile: "In the launcher"

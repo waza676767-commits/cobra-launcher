@@ -45,4 +45,27 @@ public abstract class ScreenMixin {
         dev.cobra.client.core.module.Features.MouseTrail t = Cobra.get(dev.cobra.client.core.module.Features.MouseTrail.class);
         if (t.isEnabled()) t.render(dev.cobra.client.fabric.CobraFabric.RENDER.with(context), mouseX, mouseY);
     }
+
+    @org.spongepowered.asm.mixin.Shadow
+    @org.spongepowered.asm.mixin.Final
+    private java.util.List<net.minecraft.client.gui.Drawable> drawables;
+
+    /**
+     * Joining a server / loading a world: only Cobra's star animation over the wallpaper, instead
+     * of Minecraft's loading screens (the Cancel button stays while connecting).
+     */
+    @Inject(method = "render", at = @At("HEAD"), cancellable = true, require = 0)
+    private void cobra$loading(net.minecraft.client.gui.DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        if (Cobra.platform == null) return;
+        Object self = this;
+        boolean connect = self instanceof net.minecraft.client.gui.screen.multiplayer.ConnectScreen;
+        if (!connect && !(self instanceof net.minecraft.client.gui.screen.world.LevelLoadingScreen)
+                && !(self instanceof net.minecraft.client.gui.screen.ProgressScreen)) return;
+        Screen sc = (Screen) self;
+        dev.cobra.client.fabric.FabricRender r = dev.cobra.client.fabric.CobraFabric.RENDER.with(context);
+        if (!dev.cobra.client.core.ui.TitleMenu.backdrop(r, sc.width, sc.height)) context.fill(0, 0, sc.width, sc.height, 0xFF0B0B0D);
+        dev.cobra.client.core.ui.TitleMenu.loading(r, sc.width, sc.height);
+        if (connect) for (net.minecraft.client.gui.Drawable d : drawables) d.render(context, mouseX, mouseY, delta);   // Cancel
+        ci.cancel();
+    }
 }

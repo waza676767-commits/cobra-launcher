@@ -74,6 +74,7 @@ public final class MainWindow {
         pages.add(new AnalyticsPage());
         pages.add(new SettingsPage());
         pages.add(new dev.cobra.launcher.ui.pages.AccessoriesPage());
+        pages.add(new dev.cobra.launcher.ui.pages.ProfilesPage());
         pages.add(new dev.cobra.launcher.ui.pages.RecordingsPage());
         pages.add(new dev.cobra.launcher.ui.pages.LogsPage());
         sidebar = new Sidebar(pages, settings.sidebarExpanded, this::showPage, () -> { root.doLayout(); root.repaint(); });
@@ -366,6 +367,27 @@ public final class MainWindow {
         frame.repaint();
         toast(on ? "Super optimization on: VulkanMod is added at launch, and the launcher is lighter."
                 : "Super optimization off: VulkanMod is removed at launch and your look is back.");
+    }
+
+    /**
+     * More optimization: no blur, no glass, no animations, a plain single-colour background instead
+     * of the wallpaper. Turning it off restores your animations setting.
+     */
+    public void setMoreOptimization(boolean on) {
+        if (on && !settings.moreOptimization) {
+            settings.savedAnimationsLite = settings.animations;
+            settings.animations = false;
+        } else if (!on && settings.moreOptimization) {
+            if (settings.savedAnimationsLite != null) settings.animations = settings.savedAnimationsLite;
+            settings.savedAnimationsLite = null;
+        }
+        settings.moreOptimization = on;
+        settings.save();
+        Anim.enabled = settings.animations;
+        Glass.invalidate();
+        root.doLayout();
+        frame.repaint();
+        toast(on ? "More optimization on: plain colours, no blur, no animations." : "More optimization off: your look is back.");
     }
 
     /** Asks a question with one button per option; {@code onPick} gets the option's index. */
@@ -678,7 +700,7 @@ public final class MainWindow {
             }
             if (Glass.on()) {
                 Glass.paintBackground(g, w, h);
-                if (Wallpaper.active()) g.drawImage(scrim(w, h), 0, 0, null);
+                if (Wallpaper.active() && !Glass.lite()) g.drawImage(scrim(w, h), 0, 0, null);
                 // one big glass sheet behind every page except Home, so text never sits on a busy wallpaper
                 if (!pages.get(0).isVisible() && host.getWidth() > 0) {
                     int sx = sidebar.getX() + sidebar.getWidth() + 10;

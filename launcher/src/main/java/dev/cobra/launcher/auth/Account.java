@@ -41,16 +41,42 @@ public final class Account {
         return mcToken != null && System.currentTimeMillis() < mcTokenExpiry - 10 * 60_000L;
     }
 
+    /** Marker written into account.json instead of a token: the real one is in the SecureStore. */
+    private static final String SECURE = "secure-store";
+
     public static Account load() {
         try {
-            if (Files.exists(FILE)) return Http.GSON.fromJson(Files.readString(FILE), Account.class);
+            if (!Files.exists(FILE)) return null;
+            Account a = Http.GSON.fromJson(Files.readString(FILE), Account.class);
+            if (a == null) return null;
+            boolean plain = a.mcToken != null && !SECURE.equals(a.mcToken) && !a.offline()
+                    || a.msRefreshToken != null && !SECURE.equals(a.msRefreshToken);
+            if (SECURE.equals(a.mcToken)) a.mcToken = dev.cobra.launcher.core.SecureStore.get("mc-token");
+            if (SECURE.equals(a.msRefreshToken)) a.msRefreshToken = dev.cobra.launcher.core.SecureStore.get("ms-refresh");
+            if (plain) a.save();          // older launcher saved tokens as plain text: move them now
+            return a;
         } catch (Exception ignored) {}
         return null;
     }
 
+    /** Saves the account; the Minecraft and Microsoft tokens go to the SecureStore, not the file. */
     public void save() {
         try {
-            Files.writeString(FILE, Http.GSON.toJson(this));
+            String mc = mcToken, ms = msRefreshToken;
+            if (!offline()) {
+                dev.cobra.launcher.core.SecureStore.put("mc-token", mc);
+                dev.cobra.launcher.core.SecureStore.put("ms-refresh", ms);
+                mcToken = mc == null ? null : SECURE;
+                msRefreshToken = ms == null ? null : SECURE;
+            }
+            String json;
+            try {
+                json = Http.GSON.toJson(this);
+            } finally {
+                mcToken = mc;
+                msRefreshToken = ms;
+            }
+            Files.writeString(FILE, json);
             try {
                 Files.setPosixFilePermissions(FILE, PosixFilePermissions.fromString("rw-------"));
             } catch (UnsupportedOperationException ignored) {}
@@ -63,5 +89,7 @@ public final class Account {
         try {
             Files.deleteIfExists(FILE);
         } catch (IOException ignored) {}
+        dev.cobra.launcher.core.SecureStore.remove("mc-token");
+        dev.cobra.launcher.core.SecureStore.remove("ms-refresh");
     }
 }

@@ -137,9 +137,25 @@ public final class CobraMenu {
 
     // ================================================================= render
 
+    /** Scale of the modules panel: 1 when it fits, smaller in small windows (never squeezed). */
+    private float fit = 1;
+
     public void render(Render r, int mx, int my) {
-        lastW = r.width();
-        lastH = r.height();
+        fit = editing ? 1 : Math.max(0.45f, Math.min(1f, Math.min((r.width() - 16) / 520f, (r.height() - 16) / 300f)));
+        if (fit >= 0.999f) {
+            fit = 1;
+            renderScaled(r, mx, my);
+            return;
+        }
+        r.push();
+        r.scale(fit);
+        renderScaled(r, Math.round(mx / fit), Math.round(my / fit));
+        r.pop();
+    }
+
+    private void renderScaled(Render r, int mx, int my) {
+        lastW = Math.round(r.width() / fit);
+        lastH = Math.round(r.height() / fit);
         appear = Draw.approach(appear, 1, 0.22f);
         scroll = Draw.approach(scroll, scrollTarget, 0.35f);
         tabAnim = Draw.approach(tabAnim, tab, 0.3f);
@@ -152,11 +168,13 @@ public final class CobraMenu {
         }
         r.rect(0, 0, lastW, lastH, Draw.alpha(backdrop(), appear));
 
-        pw = Math.min(520, lastW - 20);
-        ph = Math.min(300, lastH - 20);
+        pw = Math.min(520, lastW - 16);          // with the scaling above this is 520 x 300 unless the window is tiny
+        ph = Math.min(300, lastH - 16);
         px = (lastW - pw) / 2;
-        py = (lastH - ph) / 2 + Math.round((1 - appear) * 14);
-        float s = 0.96f + 0.04f * appear;       // gentle scale-in
+        // opening animation: rises in and pops to size with a small overshoot
+        float back = appear >= 1 ? 1 : 1 + 2.2f * (float) Math.pow(appear - 1, 3) + 1.2f * (float) Math.pow(appear - 1, 2);
+        py = (lastH - ph) / 2 + Math.round((1 - appear) * 40);
+        float s = 0.86f + 0.14f * back;
         r.push();
         r.translate(lastW / 2f, lastH / 2f);
         r.scale(s);
@@ -477,11 +495,12 @@ public final class CobraMenu {
                 r.text(tip, bx + bs / 2f - tw / 2f, by + bs + 8, Draw.alpha(Draw.FG, modsBtnHover), false);
             }
         }
-        String hint = "Drag to move \u00b7 drag the corner to resize \u00b7 right-click for options \u00b7 middle button: mods \u00b7 Esc closes";
-        int tw = r.textWidth(hint);
+        String hint = "Drag: move \u00b7 Corner: resize \u00b7 Right-click: options \u00b7 Esc: close";
+        float hs = Math.min(1f, (lastW - 24) / (float) (r.textWidth(hint) + 16));    // shrink on small windows
+        int tw = Math.round(r.textWidth(hint) * hs);
         int hy = lastH - 30 + Math.round((1 - in) * 24);
         Draw.box(r, (lastW - tw) / 2 - 8, hy, tw + 16, 16, 4, panel(), panelLine());
-        r.text(hint, (lastW - tw) / 2f, hy + 4, Draw.alpha(Draw.FG, in), false);
+        Draw.scaledText(r, hint, (lastW - tw) / 2f, hy + 4 + (1 - hs) * 4, hs, Draw.alpha(Draw.FG, in), false);
     }
 
     /** Is the pointer on the resize corner of h? */
@@ -568,7 +587,7 @@ public final class CobraMenu {
     // ================================================================= input
 
     public boolean mouseClicked(double dmx, double dmy, int button) {
-        int mx = (int) dmx, my = (int) dmy;
+        int mx = (int) (dmx / fit), my = (int) (dmy / fit);
         particles.burst(mx, my);
         Render r = lastRender;
         if (picker.isOpen()) {
@@ -771,7 +790,8 @@ public final class CobraMenu {
         sliding.set(sliding.min + f * (sliding.max - sliding.min));
     }
 
-    public void mouseDragged(double mx, double my) {
+    public void mouseDragged(double mx0, double my0) {
+        double mx = mx0 / fit, my = my0 / fit;
         if (picker.isOpen()) {
             picker.drag((int) mx, (int) my);
             return;
@@ -807,7 +827,8 @@ public final class CobraMenu {
         guideX = guideY = -1;
     }
 
-    public void mouseScrolled(double mx, double my, double amount) {
+    public void mouseScrolled(double mx0, double my0, double amount) {
+        double mx = mx0 / fit, my = my0 / fit;
         if (editing) {
             HudModule h = lastRender == null ? null : hudAt(lastRender, (int) mx, (int) my);
             if (h != null) {

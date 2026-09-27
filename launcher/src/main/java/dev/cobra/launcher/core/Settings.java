@@ -48,6 +48,9 @@ public final class Settings {
     public int gradientStrength = 45;
     /** Super optimization (Vulkan): VulkanMod + companions added to your profiles; off removes them. */
     public boolean superOptimization = false;
+    /** More optimization: plain panels, single-colour background, no blur, no animations. */
+    public boolean moreOptimization = false;
+    public Boolean savedAnimationsLite;
     /** What Super optimization changed, to put back when it's turned off. */
     public String savedStyle, savedGlassLook;
     public Boolean savedAnimations;
@@ -60,6 +63,8 @@ public final class Settings {
     /** Your own Discord lines (empty = automatic), elapsed time, profile name, a "Get Cobra" button. */
     public String discordDetails = "", discordState = "";
     public boolean discordShowTime = true, discordShowProfile = false, discordButton = true;
+    /** Second line (what you're doing) and the small round status icon. */
+    public boolean discordShowActivity = true, discordSmallIcon = true;
     /** Discord application ID for the presence (its name is what Discord shows). See README. */
     public String discordAppId = "";
     /** Azure app (client) id used for Microsoft sign-in. See README. */

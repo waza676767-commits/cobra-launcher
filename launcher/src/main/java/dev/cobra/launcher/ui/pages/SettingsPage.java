@@ -61,7 +61,9 @@ public final class SettingsPage extends Page {
             }
         });
         Components.Toggle vulkan = vulkanRef[0];
+        Components.Toggle lite = new Components.Toggle(s.moreOptimization, v -> MainWindow.get().setMoreOptimization(v));
         stack.add(new Section("Performance", new Row[]{
+                new Row("More optimization", "Plain colours instead of wallpaper and glass, no blur, no animations. The lightest launcher.", lite, 50),
                 new Row("Super optimization (Vulkan)", "VulkanMod + EntityCulling, FerriteCore, MoreCulling, Clumps. Also turns off costly launcher effects. Off undoes it all.", vulkan, 50)}));
         stack.add(new Section("Game", new Row[]{
                 new Row("Memory", "Maximum RAM Minecraft may use. 4–6 GB suits most setups.", ram, 380),
@@ -126,8 +128,22 @@ public final class SettingsPage extends Page {
         }
 
         Components.Button importBtn = new Components.Button("Import", "download", Components.Variant.GHOST, SettingsPage::importProfile);
+        Components.Button updateBtn = new Components.Button("Update", "download", Components.Variant.PRIMARY, null);
+        updateBtn.onClick(() -> {
+            updateBtn.setEnabled(false);
+            MainWindow.get().toast("Checking for a newer Cobra…");
+            new Thread(() -> {
+                String msg = dev.cobra.launcher.core.Updater.checkNow();
+                SwingUtilities.invokeLater(() -> {
+                    updateBtn.setEnabled(true);
+                    MainWindow.get().toast(msg);
+                });
+            }, "cobra-check-update").start();
+        });
         stack.add(new Section("Launcher", new Row[]{
-                new Row("Import a profile", "From Prism, MultiMC, Modrinth App, CurseForge, ATLauncher or the Minecraft launcher: options, mods, packs.", importBtn, 150),
+                new Row("Update to the newest", "Gets the latest Cobra Launcher and Client (build " + dev.cobra.launcher.core.Updater.BUILD
+                        + "). It's used the next time you open the launcher.", updateBtn, 150),
+                new Row("Import a profile", "From Lunar, Dawn, Prism, MultiMC, Modrinth App, CurseForge, ATLauncher or Minecraft: options, mods, packs.", importBtn, 150),
                 new Row("Keep launcher open", "Stay on screen while you play instead of minimizing.", keep, 50)}));
 
         // ------------------------------------------------------------- Account
@@ -190,6 +206,16 @@ public final class SettingsPage extends Page {
             s.save();
             dev.cobra.launcher.core.DiscordPresence.refresh();
         });
+        Components.Toggle dActivity = new Components.Toggle(s.discordShowActivity, v -> {
+            s.discordShowActivity = v;
+            s.save();
+            dev.cobra.launcher.core.DiscordPresence.refresh();
+        });
+        Components.Toggle dSmall = new Components.Toggle(s.discordSmallIcon, v -> {
+            s.discordSmallIcon = v;
+            s.save();
+            dev.cobra.launcher.core.DiscordPresence.refresh();
+        });
         Components.Toggle dButton = new Components.Toggle(s.discordButton, v -> {
             s.discordButton = v;
             s.save();
@@ -200,10 +226,11 @@ public final class SettingsPage extends Page {
                 new Row("Show server", "Adds the server you're on (e.g. \"On mc.eclypse.net\"). Off shows just \"Multiplayer\".", showServer, 50),
                 new Row("Top line", "Your own text instead of the automatic one. Empty = automatic.", dDetails, 300),
                 new Row("Bottom line", "Your own text instead of what you're doing. Empty = automatic.", dState, 300),
+                new Row("Show what you're doing", "In the menus / Playing singleplayer / On a server. Off hides the second line.", dActivity, 50),
+                new Row("Status icon", "The small round icon (launcher, menus, singleplayer, server) on the Cobra logo.", dSmall, 50),
                 new Row("Show play time", "The \"elapsed\" timer on your status.", dTime, 50),
                 new Row("Show profile name", "Adds the Cobra profile you're playing.", dProfile, 50),
-                new Row("\"Get Cobra Client\" button", "A button on your status so friends can download it.", dButton, 50),
-                new Row("Application ID", "From discord.com/developers: an app named Cobra Client. See README.", appId, 300)}));
+                new Row("\"Get Cobra Client\" button", "A button on your status so friends can download it.", dButton, 50)}));
 
         // --------------------------------------------------------------- Files
         Components.Button open = new Components.Button("Open folder", "folder", Components.Variant.GHOST, () -> MainWindow.openPath(Paths.ROOT));
@@ -240,9 +267,15 @@ public final class SettingsPage extends Page {
         SettingsPage p = instance;
         if (p == null) return;
         for (Component c : p.stack.getComponents()) if (c instanceof Section sec) sec.filter(query);
+        p.scroll.getVerticalScrollBar().setValue(0);   // results start at the top
         p.stack.revalidate();
         p.stack.doLayout();
         p.stack.repaint();
+    }
+
+    /** For the Profiles page's Import button. */
+    public static void importProfileNow() {
+        importProfile();
     }
 
     /** Settings → Import a profile: pick the launcher, then the profile. */

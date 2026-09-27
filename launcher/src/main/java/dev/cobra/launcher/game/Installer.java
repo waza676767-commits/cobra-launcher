@@ -403,8 +403,70 @@ public final class Installer {
                     throw new IOException("Couldn't download Fabric API: " + e.getMessage());
                 }
             }
+            // Cobra's Sky module needs Skyboxify (custom skies from packs) and its config library;
+            // they live with Cobra in the launcher's folder and aren't listed as your mods
+            for (String slug : List.of("skyboxify", "yacl")) {
+                String prefix = slug.equals("yacl") ? "yet_another_config_lib" : slug;
+                boolean have;
+                try (var s = Files.list(managed)) {
+                    have = s.anyMatch(f -> f.getFileName().toString().toLowerCase().startsWith(prefix) && f.getFileName().toString().endsWith(".jar"));
+                }
+                if (!have) {
+                    try {
+                        Modrinth.installLatest(slug, gv, managed, false);
+                    } catch (IOException ignored) {
+                        // offline: the Sky module just has no custom skies this time
+                    }
+                }
+            }
         }
+        installSkies(gameDir);
         return bundled;
+    }
+
+    /**
+     * Sky packs for the Sky module: every .zip in the launcher's "skies" folder (plus any bundled
+     * in the launcher) is copied into the profile's resourcepacks as cobra-sky-<name>.zip, which
+     * the in-game Sky module lists and switches between.
+     */
+    private static void installSkies(Path gameDir) {
+        try {
+            Path packs = gameDir.resolve("resourcepacks");
+            Files.createDirectories(packs);
+            Path own = dev.cobra.launcher.core.Paths.ROOT.resolve("skies");
+            Files.createDirectories(own);
+            java.util.Set<String> want = new java.util.HashSet<>();
+            try (var s = Files.list(own)) {
+                for (Path z : s.toList()) {
+                    String fn = z.getFileName().toString();
+                    if (!fn.toLowerCase().endsWith(".zip")) continue;
+                    String name = "cobra-sky-" + fn.replaceAll("[^A-Za-z0-9._-]", "_");
+                    want.add(name);
+                    Path dst = packs.resolve(name);
+                    if (!Files.exists(dst) || Files.size(dst) != Files.size(z)) Files.copy(z, dst, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+            try (InputStream idx = Installer.class.getResourceAsStream("/bundled/skies/index.txt")) {
+                if (idx != null) {
+                    for (String fn : new String(idx.readAllBytes()).split("\\R")) {
+                        if (fn.isBlank()) continue;
+                        String name = "cobra-sky-" + fn.trim().replaceAll("[^A-Za-z0-9._-]", "_");
+                        want.add(name);
+                        Path dst = packs.resolve(name);
+                        if (Files.exists(dst)) continue;
+                        try (InputStream in = Installer.class.getResourceAsStream("/bundled/skies/" + fn.trim())) {
+                            if (in != null) Files.copy(in, dst);
+                        }
+                    }
+                }
+            }
+            try (var s = Files.list(packs)) {                 // removed from the skies folder: remove here too
+                for (Path f : s.toList()) {
+                    String fn = f.getFileName().toString();
+                    if (fn.startsWith("cobra-sky-") && !want.contains(fn)) Files.deleteIfExists(f);
+                }
+            }
+        } catch (IOException ignored) {}
     }
 
     /**

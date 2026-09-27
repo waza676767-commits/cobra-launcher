@@ -54,7 +54,7 @@ public final class ContentPage extends Page {
             refresh();
         });
         addFiles = new Components.Button("Add files", "plus", Components.Variant.GHOST, this::chooseFiles);
-        openFolder = new Components.Button("Open folder", "folder", Components.Variant.GHOST,
+        openFolder = new Components.Button("", "folder", Components.Variant.GHOST,
                 () -> MainWindow.openPath(ContentManager.dir(version(), kind)));
         search = new Components.Input("", kind == Modrinth.Kind.MODS ? "Search mods on Modrinth" : "Search resource packs on Modrinth", "search");
         debounce = new Timer(350, e -> runSearch());
@@ -66,6 +66,9 @@ public final class ContentPage extends Page {
         versions.setVisible(false);   // only 1.21.11 now; the subtitle already says it
         add(tabs);
         add(addFiles);
+        updateAll = new Components.Button("", "download", Components.Variant.GHOST, this::updateAll);   // icon only: keeps the search roomy
+        updateAll.setToolTipText("Update all mods to their newest version");
+        add(updateAll);
         add(openFolder);
         add(search);
         add(filter);
@@ -113,18 +116,19 @@ public final class ContentPage extends Page {
         Dimension td = tabs.getPreferredSize();
         tabs.setBounds(0, 86, td.width, 40);
         int bx = w;
-        for (Components.Button b : new Components.Button[]{openFolder, addFiles}) {
+        for (Components.Button b : new Components.Button[]{openFolder, addFiles, updateAll}) {
             int bw = b.getPreferredSize().width;
             bx -= bw;
             b.setBounds(bx, 87, bw, 38);
             bx -= 10;
         }
         search.setBounds(td.width + 14, 86, w - td.width - 14, 40);
-        filter.setBounds(td.width + 14, 86, Math.max(120, bx - td.width - 14), 40);
+        filter.setBounds(td.width + 14, 86, Math.max(100, bx - td.width - 14 - 4), 40);
         boolean fps = fpsLocked();
         if (fps && browsing) browsing = false;
         tabs.setVisible(!fps);
         addFiles.setVisible(!browsing && !fps);
+        updateAll.setVisible(!browsing && !fps && kind == Modrinth.Kind.MODS);   // packs don't need it
         openFolder.setVisible(!browsing);
         search.setVisible(browsing);
         filter.setVisible(!browsing);
@@ -245,6 +249,30 @@ public final class ContentPage extends Page {
     /** The built-in FPS Boost profile's mods are fixed: no adding, removing or browsing. */
     private boolean fpsLocked() {
         return kind == Modrinth.Kind.MODS && dev.cobra.launcher.core.Profiles.current().locked();
+    }
+
+    private Components.Button updateAll;
+
+    /** Updates every outdated mod / pack to its newest version for this Minecraft version (Modrinth). */
+    private void updateAll() {
+        updateAll.setEnabled(false);
+        MainWindow.get().toast("Checking your mods for updates…");
+        GameVersion v = version();
+        new Thread(() -> {
+            String msg;
+            try {
+                int n = Modrinth.updateAll(ContentManager.dir(v, kind), kind, v);
+                msg = n == 0 ? "Everything is up to date." : "Updated " + n + (n == 1 ? " file." : " files.");
+            } catch (Exception e) {
+                msg = "Update failed: " + e.getMessage();
+            }
+            String m = msg;
+            SwingUtilities.invokeLater(() -> {
+                updateAll.setEnabled(true);
+                MainWindow.get().toast(m);
+                refresh();
+            });
+        }, "cobra-update-all").start();
     }
 
     private void importPaths(List<Path> paths) {

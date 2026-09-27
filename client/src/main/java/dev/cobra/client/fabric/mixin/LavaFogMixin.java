@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(targets = "net.minecraft.client.render.fog.LavaFogModifier")
+@Mixin(targets = "net.minecraft.client.render.fog.LavaFogModifier")   // not public: by name
 public abstract class LavaFogMixin {
     @Inject(method = "applyStartEndModifier", at = @At("TAIL"), require = 0)
     private void cobra$fog(FogData data, Camera camera, ClientWorld world, float viewDistance, RenderTickCounter tickCounter, CallbackInfo ci) {

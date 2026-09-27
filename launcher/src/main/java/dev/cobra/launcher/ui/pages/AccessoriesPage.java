@@ -9,25 +9,27 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.List;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 
-/** Import your own skin and cape; Cobra Client shows them on your player. */
+/**
+ * Skins and capes: a library of saved ones (click to wear, × to forget), added from a file, a
+ * player's name (their skin and official cape, from Mojang) or a link (NameMC skin/cape pages,
+ * textures.minecraft.net or any .png). Cobra Client shows what you wear; "Apply to my Minecraft
+ * account" makes the skin visible to everyone.
+ */
 public final class AccessoriesPage extends Page {
-    private final Components.Button importSkin, removeSkin, upload, importCape, removeCape;
-    private final Components.Segmented model;
-    private BufferedImage skin, cape;
+    private final Components.Stack stack = new Components.Stack(18);
+    private final JScrollPane scroll = Components.scroll(stack);
+    private final Card skinCard = new Card(true), capeCard = new Card(false);
+    private final Components.Button upload;
 
     public AccessoriesPage() {
-        importSkin = new Components.Button("Import skin", "folder", Components.Variant.PRIMARY, () -> pick(true));
-        removeSkin = new Components.Button("Remove", "trash", Components.Variant.GHOST, () -> remove(true));
         upload = new Components.Button("Apply to my Minecraft account", "external", Components.Variant.GHOST, this::upload);
-        importCape = new Components.Button("Import cape", "folder", Components.Variant.PRIMARY, () -> pick(false));
-        removeCape = new Components.Button("Remove", "trash", Components.Variant.GHOST, () -> remove(false));
-        model = new Components.Segmented(List.of("Classic arms", "Slim arms"), Settings.get().skinSlim ? 1 : 0, i -> {
-            Settings.get().skinSlim = i == 1;
-            Settings.get().save();
-            repaint();
-        });
-        for (JComponent c : new JComponent[]{importSkin, removeSkin, upload, importCape, removeCape, model}) add(c);
+        skinCard.extra(upload);
+        stack.add(skinCard);
+        stack.add(capeCard);
+        add(scroll);
     }
 
     @Override public String title() { return "Accessories"; }
@@ -35,57 +37,275 @@ public final class AccessoriesPage extends Page {
 
     @Override
     public void onShow() {
-        skin = Accessories.skin();
-        cape = Accessories.cape();
-        removeSkin.setEnabled(skin != null);
-        upload.setEnabled(skin != null);
-        removeCape.setEnabled(cape != null);
+        skinCard.reload();
+        capeCard.reload();
+        upload.setEnabled(Accessories.hasSkin());
         repaint();
-    }
-
-    private Rectangle card(int i) {
-        int w = getWidth(), gap = 18, cw = (w - gap) / 2, top = 84;
-        return new Rectangle(i * (cw + gap), top, cw, getHeight() - top);
     }
 
     @Override
     public void doLayout() {
-        Rectangle a = card(0), b = card(1);
-        int by = a.y + a.height - 150;
-        Dimension md = model.getPreferredSize();
-        model.setBounds(a.x + 20, by, Math.min(a.width - 40, md.width), 38);
-        importSkin.setBounds(a.x + 20, by + 50, 150, 40);
-        removeSkin.setBounds(a.x + 180, by + 50, 110, 40);
-        upload.setBounds(a.x + 20, by + 100, a.width - 40, 36);
-        importCape.setBounds(b.x + 20, by + 50, 150, 40);
-        removeCape.setBounds(b.x + 180, by + 50, 110, 40);
+        scroll.setBounds(0, 76, getWidth() + 10, getHeight() - 76);
+        stack.doLayout();
     }
 
     @Override
     protected void paintComponent(Graphics g0) {
         Graphics2D g = Theme.aa(g0.create());
         Theme.left(g, "Accessories", Theme.font(Theme.BOLD, 30f), Theme.TEXT, 0, 0, 42);
-        Theme.left(g, "Your own skin and cape in Cobra Client. Other players only see the skin if you apply it to your account.",
+        Theme.left(g, "Your skins and capes. Click one to wear it in Cobra Client; add more from files, player names or NameMC.",
                 Theme.font(Theme.REGULAR, 13.5f), Theme.SOFT, 0, 44, 22);
-        for (int i = 0; i < 2; i++) {
-            Rectangle c = card(i);
-            Theme.surface(g, this, c.x, c.y, c.width, c.height, 20);
-            Theme.left(g, i == 0 ? "Skin" : "Cape", Theme.font(Theme.BOLD, 16f), Theme.TEXT, c.x + 20, c.y + 14, 26);
-            Theme.left(g, i == 0 ? "PNG, 64×64 or old 64×32" : "PNG, 64×32, 64×64 or 32×32 (HD works too)",
-                    Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, c.x + 20, c.y + 38, 20);
-            int areaH = c.height - 150 - 80;
-            Rectangle area = new Rectangle(c.x + 20, c.y + 66, c.width - 40, Math.max(60, areaH));
-            Theme.fill(g, area.x, area.y, area.width, area.height, 14, Theme.alpha(Theme.BLACK, Theme.isLight() ? 0.05 : 0.35));
-            BufferedImage img = i == 0 ? skin : cape;
-            if (img == null) {
-                Theme.center(g, i == 0 ? "No skin imported" : "No cape imported", Theme.font(Theme.MEDIUM, 14f), Theme.SOFT, area.x, area.y, area.width, area.height);
-            } else if (i == 0) {
-                drawSkin(g, img, Settings.get().skinSlim, area);
-            } else {
-                drawCape(g, img, area);
-            }
-        }
         g.dispose();
+    }
+
+    /** One card: preview of what you wear, the library, and ways to add. */
+    private final class Card extends JPanel {
+        final boolean skin;
+        private final Components.Input input;
+        private final Components.Button add, file, browse, none;
+        private final Components.Segmented arms;
+        private final List<java.nio.file.Path> items = new java.util.ArrayList<>();
+        private final java.util.Map<java.nio.file.Path, BufferedImage> thumbs = new java.util.HashMap<>();
+        private BufferedImage worn;
+        private int hover = -1;
+        private boolean hoverX;
+        private JComponent extra;
+
+        Card(boolean skin) {
+            super(null);
+            this.skin = skin;
+            setOpaque(false);
+            input = new Components.Input("", "Player name, NameMC link or .png link", skin ? "user" : "link");
+            add = new Components.Button("Add", "plus", Components.Variant.PRIMARY, this::addFromInput);
+            input.addActionListener(e -> addFromInput());
+            file = new Components.Button("File", "folder", Components.Variant.GHOST, this::addFile);
+            browse = new Components.Button("NameMC", "globe", Components.Variant.GHOST,
+                    () -> MainWindow.openUri(skin ? "https://namemc.com/minecraft-skins" : "https://namemc.com/capes"));
+            none = new Components.Button(skin ? "Default skin" : "No cape", "close", Components.Variant.GHOST, () -> {
+                try {
+                    if (skin) Accessories.removeSkin();
+                    else Accessories.removeCape();
+                } catch (Exception ignored) {}
+                AccessoriesPage.this.onShow();
+            });
+            arms = skin ? new Components.Segmented(List.of("Classic arms", "Slim arms"), Settings.get().skinSlim ? 1 : 0, i -> {
+                Settings.get().skinSlim = i == 1;
+                Settings.get().save();
+                repaint();
+            }) : null;
+            for (JComponent c : new JComponent[]{input, add, file, browse, none}) add(c);
+            if (arms != null) add(arms);
+            MouseAdapter m = new MouseAdapter() {
+                @Override public void mouseMoved(MouseEvent e) {
+                    int h = thumbAt(e.getX(), e.getY());
+                    boolean x = h >= 0 && onX(h, e.getX(), e.getY());
+                    if (h != hover || x != hoverX) {
+                        hover = h;
+                        hoverX = x;
+                        setCursor(Cursor.getPredefinedCursor(h >= 0 ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
+                        repaint();
+                    }
+                }
+
+                @Override public void mouseExited(MouseEvent e) {
+                    hover = -1;
+                    repaint();
+                }
+
+                @Override public void mouseClicked(MouseEvent e) {
+                    int i = thumbAt(e.getX(), e.getY());
+                    if (i < 0) return;
+                    java.nio.file.Path p = items.get(i);
+                    try {
+                        if (onX(i, e.getX(), e.getY())) Accessories.forget(p);
+                        else Accessories.wear(p, skin);
+                    } catch (Exception ex) {
+                        MainWindow.get().toast(ex.getMessage());
+                    }
+                    AccessoriesPage.this.onShow();
+                }
+            };
+            addMouseListener(m);
+            addMouseMotionListener(m);
+        }
+
+        void extra(JComponent c) {
+            extra = c;
+            add(c);
+        }
+
+        void reload() {
+            items.clear();
+            items.addAll(Accessories.library(skin));
+            thumbs.keySet().retainAll(items);
+            worn = skin ? Accessories.skin() : Accessories.cape();
+            revalidate();
+            repaint();
+        }
+
+        private BufferedImage thumb(java.nio.file.Path p) {
+            return thumbs.computeIfAbsent(p, k -> {
+                try {
+                    return javax.imageio.ImageIO.read(k.toFile());
+                } catch (Exception e) {
+                    return null;
+                }
+            });
+        }
+
+        // layout: preview 170 wide on the left, library on the right, add controls at the bottom
+        private static final int PREVIEW = 170, TW = 76, TH = 104, GAP = 10, CONTROLS = 104;
+
+        private Rectangle grid() {
+            return new Rectangle(PREVIEW + 40, 56, getWidth() - PREVIEW - 60, getHeight() - 56 - CONTROLS);
+        }
+
+        private int perRow() {
+            return Math.max(1, (grid().width + GAP) / (TW + GAP));
+        }
+
+        private Rectangle thumbRect(int i) {
+            Rectangle g = grid();
+            return new Rectangle(g.x + (i % perRow()) * (TW + GAP), g.y + (i / perRow()) * (TH + GAP), TW, TH);
+        }
+
+        private int thumbAt(int x, int y) {
+            for (int i = 0; i < items.size(); i++) if (thumbRect(i).contains(x, y)) return i;
+            return -1;
+        }
+
+        private boolean onX(int i, int x, int y) {
+            Rectangle r = thumbRect(i);
+            return x >= r.x + r.width - 22 && y <= r.y + 22;
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            int w = Math.max(400, getParent() == null ? 800 : getParent().getWidth());
+            int per = Math.max(1, (w - PREVIEW - 60 + GAP) / (TW + GAP));
+            int rows = Math.max(1, (items.size() + per - 1) / per);
+            return new Dimension(100, Math.max(56 + 220 + CONTROLS, 56 + rows * (TH + GAP) + CONTROLS));
+        }
+
+        @Override
+        public void doLayout() {
+            int w = getWidth(), y = getHeight() - CONTROLS + 12;
+            int x = 20;
+            none.setBounds(w - 20 - 140, y, 140, 40);
+            browse.setBounds(none.getX() - 8 - 110, y, 110, 40);
+            file.setBounds(browse.getX() - 8 - 86, y, 86, 40);
+            add.setBounds(file.getX() - 8 - 86, y, 86, 40);
+            input.setBounds(x, y, Math.max(160, add.getX() - 8 - x), 40);
+            int y2 = y + 48;
+            if (arms != null) {
+                Dimension d = arms.getPreferredSize();
+                arms.setBounds(x, y2, d.width, 36);
+            }
+            if (extra != null) extra.setBounds(w - 20 - 250, y2, 250, 36);
+        }
+
+        private void addFromInput() {
+            String text = input.getText().trim();
+            if (text.isEmpty()) {
+                MainWindow.get().toast(skin ? "Type a player name or paste a NameMC skin link." : "Type a player name or paste a NameMC cape link.");
+                return;
+            }
+            add.setEnabled(false);
+            new Thread(() -> {
+                String msg;
+                try {
+                    if (text.contains("/") || text.startsWith("http")) {
+                        BufferedImage img = Accessories.fromLink(text);
+                        Accessories.addToLibrary(img, skin, skin ? "NameMC skin" : "NameMC cape");
+                        msg = (skin ? "Skin" : "Cape") + " added and worn.";
+                    } else {
+                        Object[] got = Accessories.fromPlayer(text);
+                        if (skin) {
+                            Accessories.addToLibrary((BufferedImage) got[0], true, text);
+                            Settings.get().skinSlim = (Boolean) got[2];
+                            Settings.get().save();
+                            msg = text + "'s skin added and worn.";
+                        } else if (got[1] != null) {
+                            Accessories.addToLibrary((BufferedImage) got[1], false, text);
+                            msg = text + "'s cape added and worn.";
+                        } else {
+                            msg = text + " doesn't have an official cape.";
+                        }
+                    }
+                } catch (Exception ex) {
+                    msg = ex.getMessage();
+                }
+                String m = msg;
+                SwingUtilities.invokeLater(() -> {
+                    add.setEnabled(true);
+                    input.setText("");
+                    MainWindow.get().toast(m);
+                    AccessoriesPage.this.onShow();
+                });
+            }, "cobra-accessory").start();
+        }
+
+        private void addFile() {
+            java.nio.file.Path picked = FilePicker.one(skin ? "Choose a skin" : "Choose a cape", "PNG pictures", "png");
+            if (picked == null) return;
+            try {
+                Accessories.addToLibrary(picked, skin, picked.getFileName().toString().replaceFirst("(?i)\\.png$", ""));
+                MainWindow.get().toast((skin ? "Skin" : "Cape") + " added and worn. It shows in game next launch.");
+            } catch (Exception e) {
+                MainWindow.get().toast(e.getMessage());
+            }
+            AccessoriesPage.this.onShow();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            int w = getWidth(), h = getHeight();
+            Theme.surface(g, this, 0, 0, w, h, 20);
+            Theme.left(g, skin ? "Skins" : "Capes", Theme.font(Theme.BOLD, 16f), Theme.TEXT, 20, 14, 26);
+            Theme.left(g, skin ? "PNG 64×64 (old 64×32 is converted) · click one to wear it" : "PNG 64×32, 64×64, 32×32 or HD · click one to wear it",
+                    Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 110, 16, 22);
+            // what you wear
+            Rectangle full = new Rectangle(20, 56, PREVIEW, h - 56 - CONTROLS - 8);
+            Rectangle area = new Rectangle(full.x, full.y, full.width, full.height - 22);   // room for "Wearing" under it
+            Theme.fill(g, full.x, full.y, full.width, full.height, 14, Theme.alpha(Theme.BLACK, Theme.isLight() ? 0.05 : 0.3));
+            if (worn == null) {
+                Theme.center(g, skin ? "Default skin" : "No cape", Theme.font(Theme.MEDIUM, 13.5f), Theme.SOFT, area.x, area.y, area.width, area.height);
+            } else if (skin) {
+                drawSkin(g, worn, Settings.get().skinSlim, area);
+            } else {
+                drawCape(g, worn, area);
+            }
+            Theme.center(g, "Wearing", Theme.font(Theme.REGULAR, 11.5f), Theme.MUTED, full.x, full.y + full.height - 22, full.width, 18);
+            // library
+            if (items.isEmpty()) {
+                Rectangle gr = grid();
+                Theme.center(g, "Nothing saved yet: add one below.", Theme.font(Theme.REGULAR, 13f), Theme.MUTED, gr.x, gr.y, gr.width, 120);
+            }
+            for (int i = 0; i < items.size(); i++) {
+                Rectangle r = thumbRect(i);
+                java.nio.file.Path p = items.get(i);
+                boolean wearing = worn != null && Accessories.wearing(p, skin);
+                boolean hv = i == hover;
+                Theme.fill(g, r.x, r.y, r.width, r.height, 12, Theme.alpha(Theme.TEXT, hv ? 0.10 : 0.05));
+                if (wearing) Theme.stroke(g, r.x + 1, r.y + 1, r.width - 2, r.height - 2, 11, Theme.ACCENT, 2f);
+                BufferedImage img = thumb(p);
+                Rectangle pic = new Rectangle(r.x + 6, r.y + 6, r.width - 12, r.height - 30);
+                if (img != null) {
+                    if (skin) drawSkin(g, img, false, pic);
+                    else drawCape(g, img, pic);
+                }
+                String name = p.getFileName().toString().replaceFirst("(?i)\\.png$", "");
+                g.setFont(Theme.font(Theme.REGULAR, 11f));
+                Theme.center(g, Theme.ellipsize(name, g.getFontMetrics(), r.width - 8), Theme.font(Theme.REGULAR, 11f),
+                        wearing ? Theme.TEXT : Theme.SOFT, r.x, r.y + r.height - 22, r.width, 18);
+                if (hv) {   // forget
+                    Theme.fill(g, r.x + r.width - 22, r.y + 4, 18, 18, 9, hoverX ? new Color(0xE5484D) : Theme.alpha(Theme.BLACK, 0.6));
+                    Icons.paint(g, "close", r.x + r.width - 19, r.y + 7, 12, Color.WHITE);
+                }
+            }
+            g.dispose();
+        }
     }
 
     /** Front view of the skin: head, body, arms, legs, with the outer layer on top. */
@@ -115,27 +335,6 @@ public final class AccessoriesPage extends Page {
         int k = Math.max(1, c.getWidth() / 64);   // HD capes: same layout, k times the pixels
         g.drawImage(c, ox, oy, ox + 10 * u, oy + 16 * u, k, k, 11 * k, 17 * k, null);   // the outside face of the cape
         g.dispose();
-    }
-
-    private void pick(boolean isSkin) {
-        java.nio.file.Path picked = FilePicker.one(isSkin ? "Choose a skin" : "Choose a cape", "PNG pictures", "png");
-        if (picked == null) return;
-        try {
-            if (isSkin) Accessories.importSkin(picked);
-            else Accessories.importCape(picked);
-            MainWindow.get().toast((isSkin ? "Skin" : "Cape") + " imported. It shows in game next launch.");
-        } catch (Exception e) {
-            MainWindow.get().toast(e.getMessage());
-        }
-        onShow();
-    }
-
-    private void remove(boolean isSkin) {
-        try {
-            if (isSkin) Accessories.removeSkin();
-            else Accessories.removeCape();
-        } catch (Exception ignored) {}
-        onShow();
     }
 
     private void upload() {

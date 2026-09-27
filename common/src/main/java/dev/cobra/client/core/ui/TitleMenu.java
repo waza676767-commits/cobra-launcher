@@ -101,6 +101,7 @@ public final class TitleMenu {
         } else {
             mainButton(r, 5, bx, by + bh + 6, bw, bh, "Multiplayer", mx, my);
         }
+        mainButton(r, 6, bx, by + 2 * (bh + 6), bw, bh, "Quit Game", mx, my);
 
         // footer
         r.text(Cobra.NAME + " " + Cobra.VERSION + " (" + Cobra.platform.version() + ")", 4, h - 10, light ? 0xFF55565C : 0xFF9A9B9F, shadow);
@@ -172,9 +173,32 @@ public final class TitleMenu {
         int bw = Math.min(200, w - 40), bh = 20, bx = (w - bw) / 2, by = renderedButtonY;
         if (in(mx, my, bx, by, bw, bh)) Cobra.platform.titleAction(Platform.TitleAction.SINGLEPLAYER);
         else if (!Cobra.offline && in(mx, my, bx, by + bh + 6, bw, bh)) Cobra.platform.titleAction(Platform.TitleAction.MULTIPLAYER);
+        else if (in(mx, my, bx, by + 2 * (bh + 6), bw, bh)) Cobra.platform.titleAction(Platform.TitleAction.QUIT);
     }
 
     private static boolean in(int mx, int my, int x, int y, int w, int h) {
         return mx >= x && my >= y && mx < x + w && my < y + h;
+    }
+
+    /**
+     * Joining a server / loading a world: the Cobra mark breathing in the middle, with a ring of
+     * dots running round it. Drawn over Minecraft's own connecting screens.
+     */
+    public static void loading(Render r, int w, int h) {
+        long t = System.currentTimeMillis();
+        float cx = w / 2f, cy = h / 2f - 46;
+        float pulse = 0.5f + 0.5f * (float) Math.sin(t / 380.0);
+        int size = Math.round(26 + 4 * pulse);
+        r.texture("logo", cx - size / 2f, cy - size / 2f, size, size, Draw.alpha(Draw.FG, 0.75f + 0.25f * pulse));
+        int dots = 12;
+        float head = (t % 1200) / 1200f * dots;
+        for (int i = 0; i < dots; i++) {
+            double a = Math.PI * 2 * i / dots - Math.PI / 2;
+            float dist = (head - i + dots) % dots;              // 0 = the leading dot
+            float fade = Math.max(0.12f, 1 - dist / 6f);
+            int d = dist < 1 ? 3 : 2;
+            float x = cx + (float) Math.cos(a) * 24, y = cy + (float) Math.sin(a) * 24;
+            r.rect(Math.round(x - d / 2f), Math.round(y - d / 2f), d, d, Draw.alpha(Draw.FG, fade));
+        }
     }
 }

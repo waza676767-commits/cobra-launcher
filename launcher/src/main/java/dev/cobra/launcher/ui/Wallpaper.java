@@ -179,7 +179,8 @@ public final class Wallpaper {
                     boolean visible = target != null && target.isShowing() && mw != null
                             && mw.frame.getState() != Frame.ICONIFIED
                             && !mw.running()
-                            && !Settings.get().superOptimization;   // Super optimization: still wallpaper
+                            && !Settings.get().superOptimization     // Super optimization: still wallpaper
+                            && !Settings.get().moreOptimization;     // More optimization: no wallpaper at all
                     if (!visible || !Settings.get().animations) {
                         Thread.sleep(400);
                         next = System.nanoTime();

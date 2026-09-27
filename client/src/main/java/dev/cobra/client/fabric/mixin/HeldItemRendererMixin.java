@@ -39,4 +39,12 @@ public abstract class HeldItemRendererMixin {
         if (t[5] != 0) matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(t[5] * side));
         if (t[6] != 1) matrices.scale(t[6], t[6], t[6]);
     }
+
+    /** View Model: no item-switch (equip) animation. */
+    @org.spongepowered.asm.mixin.injection.ModifyVariable(method = "renderFirstPersonItem", at = @At("HEAD"), argsOnly = true, ordinal = 3, require = 0)
+    private float cobra$noEquip(float equipProgress) {
+        if (Cobra.platform == null) return equipProgress;
+        Features.ViewModel vm = Cobra.get(Features.ViewModel.class);
+        return vm.isEnabled() && vm.noEquip.on() ? 0f : equipProgress;
+    }
 }

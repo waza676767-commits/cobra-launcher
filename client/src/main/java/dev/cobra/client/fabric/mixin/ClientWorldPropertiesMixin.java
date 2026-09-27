@@ -14,6 +14,11 @@ public abstract class ClientWorldPropertiesMixin {
     @Inject(method = "getTimeOfDay", at = @At("HEAD"), cancellable = true)
     private void cobra$time(CallbackInfoReturnable<Long> cir) {
         if (Cobra.platform == null) return;
+        long sky = Cobra.get(Features.Sky.class).timeTicks();
+        if (sky >= 0) {
+            cir.setReturnValue(sky);
+            return;
+        }
         Features.TimeChanger t = Cobra.get(Features.TimeChanger.class);
         if (t.isEnabled()) cir.setReturnValue(t.time());
     }

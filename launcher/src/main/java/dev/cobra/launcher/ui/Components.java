@@ -512,7 +512,10 @@ public final class Components {
             if (!b.isVisible()) return;
             double delta = e.getPreciseWheelRotation() * 90;
             if (!Anim.enabled) {
-                b.setValue(b.getValue() + (int) Math.round(delta));
+                int max = b.getMaximum() - b.getVisibleAmount();
+                b.setValue(Math.max(0, Math.min(max, b.getValue() + (int) Math.round(delta))));
+                timer[0].stop();
+                e.consume();
                 return;
             }
             if (!timer[0].isRunning()) target[0] = b.getValue();
@@ -566,6 +569,7 @@ public final class Components {
         public void doLayout() {
             int y = 0;
             for (Component c : getComponents()) {
+                if (!c.isVisible()) continue;          // hidden (e.g. filtered by search): no gap left behind
                 int h = c.getPreferredSize().height;
                 c.setBounds(0, y, getWidth() - 10, h);
                 y += h + gap;
@@ -575,7 +579,7 @@ public final class Components {
         @Override
         public Dimension getPreferredSize() {
             int h = 0;
-            for (Component c : getComponents()) h += c.getPreferredSize().height + gap;
+            for (Component c : getComponents()) if (c.isVisible()) h += c.getPreferredSize().height + gap;
             return new Dimension(100, Math.max(0, h - gap));
         }
 

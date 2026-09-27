@@ -63,7 +63,7 @@ public final class FilePicker {
                     + "$d.Multiselect=$" + multi + ";"
                     + "$o=New-Object System.Windows.Forms.Form -Property @{TopMost=$true};"
                     + "if($d.ShowDialog($o) -eq 'OK'){[Console]::OutputEncoding=[Text.Encoding]::UTF8; $d.FileNames -join \"`n\"}";
-            Process p = new ProcessBuilder("powershell.exe", "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-Command", script)
+            Process p = new ProcessBuilder("powershell.exe", "-NoProfile", "-STA", "-Command", script)
                     .redirectErrorStream(true).start();
             String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
             if (p.waitFor() != 0) return null;

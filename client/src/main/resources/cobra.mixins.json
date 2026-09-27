@@ -15,6 +15,7 @@
     "DarknessFogMixin",
     "EntityMixin",
     "GameOptionsMixin",
+    "GameRendererBobMixin",
     "GameRendererInvoker",
     "GameRendererMixin",
     "HeldItemRendererMixin",
@@ -22,19 +23,22 @@
     "InGameOverlayRendererMixin",
     "ItemEntityRendererMixin",
     "LavaFogMixin",
+    "LivingEntitySwingMixin",
     "MinecraftClientMixin",
     "MouseMixin",
     "OverlayTextureAccessor",
     "ParticleManagerMixin",
     "PlayerListHudMixin",
     "PowderSnowFogMixin",
+    "ResourcePackOrganizerMixin",
     "ScreenMixin",
     "ServerListMixin",
     "SimpleOptionAccessor",
     "TextVisitFactoryMixin",
     "TitleScreenMixin",
     "WaterFogMixin",
-    "WorldRendererMixin"
+    "WorldRendererMixin",
+    "WorldWeatherMixin"
   ],
   "injectors": {
     "defaultRequire": 0

@@ -32,6 +32,8 @@ public final class Sidebar extends JComponent {
     private final Anim.Tween toggleHover, addHover;
     private int selected;
     private int profileScroll;
+    /** The old profile list at the bottom of the sidebar (replaced by the Profiles page). */
+    private static final boolean SHOW_PROFILES = false;
     private Timer resizeTimer;
 
     public Sidebar(List<Page> pages, boolean expanded, IntConsumer onSelect, Runnable onResize) {
@@ -63,6 +65,7 @@ public final class Sidebar extends JComponent {
                         return;
                     }
                 }
+                if (!SHOW_PROFILES) return;
                 List<Profiles.Profile> list = Profiles.all();
                 for (int i = 0; i < list.size(); i++) {
                     if (!profileRect(i).contains(p) || !inProfileArea(p)) continue;
@@ -182,7 +185,7 @@ public final class Sidebar extends JComponent {
         double t = width.get();
 
         if (Glass.on()) {
-            Glass.surface(g, this, 0, 0, w, h, 26, 0.15);
+            Glass.surface(g, this, 0, 0, w, h, 26, 0);   // same blur as the page sheet
         } else {
             Theme.fill(g, 0, 0, w, h, 22, new GradientPaint(0, 0, Theme.alpha(Theme.PANEL, 0.78), 0, h, Theme.alpha(Theme.PANEL_2, 0.5)));
             Theme.stroke(g, 0, 0, w, h, 22, Theme.LINE, 1f);
@@ -216,7 +219,11 @@ public final class Sidebar extends JComponent {
             label(g, r, pages.get(i).title(), ic, t);
         }
 
-        // profiles
+        // profiles now have their own page in the list above
+        if (!SHOW_PROFILES) {
+            g.dispose();
+            return;
+        }
         int pt = profilesTop();
         g.setColor(Theme.alpha(Theme.TEXT, 0.08));
         g.fillRect(14, pt - 30, w - 28, 1);

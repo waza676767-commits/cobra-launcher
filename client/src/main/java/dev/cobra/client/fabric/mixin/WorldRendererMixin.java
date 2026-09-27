@@ -17,4 +17,12 @@ public abstract class WorldRendererMixin {
         if (!bo.isEnabled()) return color;
         return bo.outline.on() ? bo.outlineArgb() : 0;
     }
+
+    /** Block Overlay: outline width. */
+    @ModifyVariable(method = "drawBlockOutline", at = @At("HEAD"), argsOnly = true, ordinal = 0, require = 0)
+    private float cobra$outlineWidth(float width) {
+        if (Cobra.platform == null) return width;
+        Features.BlockOverlay bo = Cobra.get(Features.BlockOverlay.class);
+        return bo.isEnabled() ? bo.width.f() : width;
+    }
 }

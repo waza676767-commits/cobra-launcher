@@ -248,7 +248,17 @@ public final class Glass {
     }
 
     /** Window background in glass mode. */
+    /** Settings → More optimization: flat colours, no wallpaper, no blur (lightest possible). */
+    public static boolean lite() {
+        return dev.cobra.launcher.core.Settings.get().moreOptimization;
+    }
+
     public static void paintBackground(Graphics2D g, int w, int h) {
+        if (lite()) {
+            g.setColor(Theme.isLight() ? new Color(0xEDEAE6) : new Color(0x0E0E11));
+            g.fillRect(0, 0, w, h);
+            return;
+        }
         ensure();
         if (Wallpaper.active() && Wallpaper.animated()) Wallpaper.paint(g, w, h); // live video frame
         else if (backdrop != null) g.drawImage(backdrop, 0, 0, null);
@@ -260,6 +270,16 @@ public final class Glass {
      * @param emphasis 0 = quiet card, 1 = raised element (chips, focused inputs)
      */
     public static void surface(Graphics2D g, Component c, double x, double y, double w, double h, double r, double emphasis) {
+        if (lite()) {                         // plain panel: one fill and a hairline, nothing else
+            Graphics2D f = (Graphics2D) g.create();
+            f.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            f.setColor(Theme.isLight() ? new Color(255, 255, 255, 235) : new Color(26, 26, 31, 245));
+            f.fill(new RoundRectangle2D.Double(x, y, w, h, r * 2, r * 2));
+            f.setColor(Theme.isLight() ? new Color(0, 0, 0, 28) : new Color(255, 255, 255, 22));
+            f.draw(new RoundRectangle2D.Double(x + 0.5, y + 0.5, w - 1, h - 1, r * 2, r * 2));
+            f.dispose();
+            return;
+        }
         ensure();
         Source s = src;
         if (root == null || s == null) return;
@@ -405,8 +425,9 @@ public final class Glass {
         g.setClip(shape);
         // thin tint: keeps text readable without hiding what's behind
         boolean frost = frosted(), solid = solidLook();
-        g.setColor(light ? new Color(255, 255, 255, (int) ((solid ? 185 : frost ? 125 : 95) + 50 * q))
-                : new Color(14, 14, 18, (int) ((solid ? 168 : frost ? 120 : 78) + 35 * q)));
+        // Solid: a smoky pane, not a black one (the wallpaper still shows through, just calmer)
+        g.setColor(light ? new Color(255, 255, 255, (int) ((solid ? 150 : frost ? 125 : 95) + 50 * q))
+                : new Color(24, 24, 30, (int) ((solid ? 112 : frost ? 120 : 78) + 30 * q)));
         g.fillRect(0, 0, w, h);
         if (solid) {                   // plain: just a quiet hairline border, no glass shine
             g.setClip(null);

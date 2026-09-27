@@ -183,7 +183,11 @@ public final class ScreenRecorder {
         add(cmd, "-pix_fmt", "yuv420p", "-movflags", "+faststart", file.getAbsolutePath());
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.redirectErrorStream(true);
-        logFile = new File(dir, file.getName() + ".ffmpeg.log");
+        // ffmpeg's log goes to the launcher's logs (not between your videos); kept only if it failed
+        String root = System.getProperty("cobra.root");
+        File logDir = root != null && !root.isEmpty() ? new File(new File(root, "logs"), "recorder") : new File(dir, ".logs");
+        if (!logDir.isDirectory()) logDir.mkdirs();
+        logFile = new File(logDir, file.getName().replace(".mp4", "") + ".ffmpeg.log");
         pb.redirectOutput(logFile);
         ffmpeg = pb.start();
         out = ffmpeg.getOutputStream();
@@ -245,6 +249,7 @@ public final class ScreenRecorder {
         File f = file;
         final Process p = ffmpeg;
         final Thread wr = writer;
+        final File log = logFile;
         ffmpeg = null;
         writer = null;
         out = null;
@@ -253,6 +258,7 @@ public final class ScreenRecorder {
                 try {
                     if (wr != null) wr.join(5000);
                     if (p != null && !p.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)) p.destroy();
+                    else if (p != null && p.exitValue() == 0 && log != null) log.delete();   // all good: no log to keep
                 } catch (InterruptedException ignored) {}
             }
         }, "cobra-recorder-finish").start();

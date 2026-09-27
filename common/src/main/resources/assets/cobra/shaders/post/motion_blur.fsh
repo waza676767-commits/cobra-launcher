@@ -13,7 +13,7 @@ in vec2 texCoord;
 
 out vec4 fragColor;
 
-const int SAMPLES = 14;
+const int SAMPLES = 20;
 
 void main() {
     vec4 m = texture(MotionSampler, vec2(0.5, 0.5));
@@ -28,7 +28,7 @@ void main() {
     float total = 0.0;
     for (int i = 0; i < SAMPLES; i++) {
         float t = float(i) / float(SAMPLES - 1) - 0.5;   // -0.5 .. 0.5, centred on the pixel
-        float w = 1.0 - abs(t);                           // nearer samples count more
+        float w = exp(-t * t * 8.0);                      // gaussian: soft, no ghost copies
         vec2 uv = texCoord + velocity * t + fromCentre * radial * t;
         sum += texture(InSampler, clamp(uv, vec2(0.001), vec2(0.999))).rgb * w;
         total += w;

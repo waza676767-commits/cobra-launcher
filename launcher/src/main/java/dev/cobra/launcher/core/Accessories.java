@@ -47,6 +47,148 @@ public final class Accessories {
         }
     }
 
+    // ------------------------------------------------------------------ library
+
+    /** Saved skins and capes: pick one to wear without digging through folders. */
+    public static final Path LIB_SKINS = DIR.resolve("library").resolve("skins");
+    public static final Path LIB_CAPES = DIR.resolve("library").resolve("capes");
+
+    /** Saved skins (or capes), newest first. The one you wear is copied to skin.png / cape.png. */
+    public static java.util.List<Path> library(boolean skins) {
+        Path dir = skins ? LIB_SKINS : LIB_CAPES;
+        migrateIntoLibrary();
+        java.util.List<Path> out = new java.util.ArrayList<>();
+        try (var s = Files.list(dir)) {
+            s.filter(p -> p.getFileName().toString().endsWith(".png")).forEach(out::add);
+        } catch (IOException ignored) {}
+        out.sort((a, b) -> Long.compare(b.toFile().lastModified(), a.toFile().lastModified()));
+        return out;
+    }
+
+    private static boolean migrated;
+
+    /** First run: the skin/cape you already had becomes the first library entry. */
+    private static void migrateIntoLibrary() {
+        if (migrated) return;
+        migrated = true;
+        try {
+            Files.createDirectories(LIB_SKINS);
+            Files.createDirectories(LIB_CAPES);
+            if (hasSkin() && isEmpty(LIB_SKINS)) Files.copy(SKIN, LIB_SKINS.resolve("My skin.png"));
+            if (hasCape() && isEmpty(LIB_CAPES)) Files.copy(CAPE, LIB_CAPES.resolve("My cape.png"));
+        } catch (IOException ignored) {}
+    }
+
+    private static boolean isEmpty(Path dir) throws IOException {
+        try (var s = Files.list(dir)) {
+            return s.findAny().isEmpty();
+        }
+    }
+
+    /** Is this library entry the one currently worn? */
+    public static boolean wearing(Path entry, boolean skin) {
+        Path cur = skin ? SKIN : CAPE;
+        try {
+            return Files.exists(cur) && Files.size(cur) == Files.size(entry) && java.util.Arrays.equals(Files.readAllBytes(cur), Files.readAllBytes(entry));
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    public static void wear(Path entry, boolean skin) throws IOException {
+        Files.createDirectories(DIR);
+        Files.copy(entry, skin ? SKIN : CAPE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    public static void forget(Path entry) throws IOException {
+        Files.deleteIfExists(entry);
+    }
+
+    /** Adds a picture (file) to the library, checked and converted like an import, and wears it. */
+    public static Path addToLibrary(Path src, boolean skin, String name) throws IOException {
+        BufferedImage img = ImageIO.read(src.toFile());
+        return addToLibrary(img, skin, name);
+    }
+
+    public static Path addToLibrary(BufferedImage img, boolean skin, String name) throws IOException {
+        if (img == null) throw new IOException("That isn't a PNG picture.");
+        BufferedImage out;
+        if (skin) {
+            if (img.getWidth() != 64 || img.getHeight() != 64 && img.getHeight() != 32) {
+                throw new IOException("A skin must be 64×64 (or old-style 64×32). This one is " + img.getWidth() + "×" + img.getHeight() + ".");
+            }
+            out = img.getHeight() == 32 ? upgradeLegacy(img) : toArgb(img);
+        } else {
+            out = normaliseCape(img);
+        }
+        Path dir = skin ? LIB_SKINS : LIB_CAPES;
+        Files.createDirectories(dir);
+        String base = (name == null || name.isBlank() ? (skin ? "Skin" : "Cape") : name).replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+        Path dest = dir.resolve(base + ".png");
+        for (int i = 2; Files.exists(dest); i++) dest = dir.resolve(base + " " + i + ".png");
+        ImageIO.write(out, "png", dest.toFile());
+        wear(dest, skin);
+        return dest;
+    }
+
+    /**
+     * Skin (and cape, if they have an official one) of any Minecraft player by name, from Mojang.
+     * @return {skin, cape-or-null}; also tells whether the skin uses slim arms via the array's third slot ("slim")
+     */
+    public static Object[] fromPlayer(String player) throws IOException {
+        String name = player.trim();
+        if (!name.matches("[A-Za-z0-9_]{2,16}")) throw new IOException("That isn't a Minecraft name.");
+        Http.Response r = Http.get("https://api.mojang.com/users/profiles/minecraft/" + name);
+        if (r.code() == 404 || r.code() == 204) throw new IOException("No Minecraft player called " + name + ".");
+        if (!r.ok()) throw new IOException("Mojang answered " + r.code() + ". Try again in a minute.");
+        String id = r.json().get("id").getAsString();
+        com.google.gson.JsonObject prof = Http.get("https://sessionserver.mojang.com/session/minecraft/profile/" + id).json();
+        String value = prof.getAsJsonArray("properties").get(0).getAsJsonObject().get("value").getAsString();
+        com.google.gson.JsonObject tex = com.google.gson.JsonParser.parseString(new String(java.util.Base64.getDecoder().decode(value),
+                java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject().getAsJsonObject("textures");
+        BufferedImage skin = null, cape = null;
+        boolean slim = false;
+        if (tex.has("SKIN")) {
+            com.google.gson.JsonObject sk = tex.getAsJsonObject("SKIN");
+            skin = download(sk.get("url").getAsString());
+            slim = sk.has("metadata") && "slim".equals(sk.getAsJsonObject("metadata").get("model").getAsString());
+        }
+        if (tex.has("CAPE")) cape = download(tex.getAsJsonObject("CAPE").get("url").getAsString());
+        if (skin == null) throw new IOException(name + " uses a default skin.");
+        return new Object[]{skin, cape, slim};
+    }
+
+    /**
+     * A skin/cape from a link: a NameMC skin or cape page (namemc.com/skin/…, namemc.com/cape/…),
+     * a textures.minecraft.net link, or any direct .png link.
+     */
+    public static BufferedImage fromLink(String link) throws IOException {
+        String url = link.trim();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("namemc\\.com/(?:skin|cape|texture)/([0-9a-fA-F]{16,})").matcher(url);
+        if (m.find()) url = "https://s.namemc.com/i/" + m.group(1) + ".png";
+        if (!url.startsWith("http")) throw new IOException("Paste a NameMC skin/cape link or a link to a .png.");
+        BufferedImage img = download(url);
+        if (img == null) throw new IOException("That link isn't a picture.");
+        return img;
+    }
+
+    private static BufferedImage download(String url) throws IOException {
+        java.net.http.HttpClient c = java.net.http.HttpClient.newBuilder().followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+                .connectTimeout(java.time.Duration.ofSeconds(15)).build();
+        try {
+            java.net.http.HttpResponse<byte[]> r = c.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
+                    .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) CobraLauncher").GET().build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+            if (r.statusCode() == 403 || r.statusCode() == 503) {
+                throw new IOException("NameMC blocked the download. Open the skin page, right-click the skin → Save image, then use \"Add file\".");
+            }
+            if (r.statusCode() != 200) throw new IOException("The link answered " + r.statusCode() + ".");
+            return ImageIO.read(new java.io.ByteArrayInputStream(r.body()));
+        } catch (InterruptedException e) {
+            throw new IOException("Interrupted");
+        }
+    }
+
     /** Accepts 64×64 skins and legacy 64×32 skins (converted to 64×64 like Minecraft does). */
     public static void importSkin(Path src) throws IOException {
         BufferedImage img = ImageIO.read(src.toFile());

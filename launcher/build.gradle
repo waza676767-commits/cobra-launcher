@@ -27,7 +27,27 @@ application {
 
 // Bundle the Cobra Client mod (built separately by client/gradlew build; build-appimage.sh does
 // it for you) so the launcher can install it into each profile.
+// Sky packs for the Sky module: put .zip packs in packaging/skies/ (only ones you may share) and
+// they're bundled; an index lists them for the launcher.
+def skyDir = rootProject.file('packaging/skies')
+def skyIndex = layout.buildDirectory.file('generated/skies/bundled/skies/index.txt')
+tasks.register('skyIndex') {
+    inputs.dir(skyDir).optional()
+    outputs.file(skyIndex)
+    doLast {
+        def f = skyIndex.get().asFile
+        f.parentFile.mkdirs()
+        f.text = (skyDir.exists() ? skyDir.listFiles().findAll { it.name.toLowerCase().endsWith('.zip') }*.name : []).join('\n')
+    }
+}
+
 tasks.named('processResources', ProcessResources) {
+    dependsOn 'skyIndex'
+    from(layout.buildDirectory.dir('generated/skies'))
+    from(skyDir) {
+        include '*.zip'
+        into 'bundled/skies'
+    }
     from(rootProject.file('client/build/libs')) {
         include 'cobra-client-1.21.11-*.jar'
         exclude '*-sources.jar', '*-dev.jar'

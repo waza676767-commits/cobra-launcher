@@ -112,4 +112,65 @@ public final class Modrinth {
     private static String s(JsonObject o, String k) {
         return o.has(k) && !o.get(k).isJsonNull() ? o.get(k).getAsString() : "";
     }
+
+    /**
+     * Updates every mod / pack in {@code dir} that Modrinth has a newer version of (for this
+     * Minecraft version and Fabric), matching files by their SHA-1. Returns how many were updated.
+     */
+    public static int updateAll(java.nio.file.Path dir, Kind kind, GameVersion gv) throws IOException {
+        java.util.Map<String, java.nio.file.Path> byHash = new java.util.HashMap<>();
+        try (var s = java.nio.file.Files.list(dir)) {
+            for (java.nio.file.Path f : s.toList()) {
+                String n = f.getFileName().toString();
+                if (!(n.endsWith(".jar") || n.endsWith(".zip"))) continue;
+                byHash.put(sha1(f), f);
+            }
+        }
+        if (byHash.isEmpty()) return 0;
+        com.google.gson.JsonObject body = new com.google.gson.JsonObject();
+        com.google.gson.JsonArray hashes = new com.google.gson.JsonArray();
+        byHash.keySet().forEach(hashes::add);
+        body.add("hashes", hashes);
+        body.addProperty("algorithm", "sha1");
+        com.google.gson.JsonArray loaders = new com.google.gson.JsonArray();
+        loaders.add(kind == Kind.MODS ? "fabric" : "minecraft");
+        body.add("loaders", loaders);
+        com.google.gson.JsonArray versions = new com.google.gson.JsonArray();
+        versions.add(gv.mc);
+        body.add("game_versions", versions);
+        Http.Response r = Http.postJson(API + "/version_files/update", body);
+        if (!r.ok()) throw new IOException("Modrinth answered " + r.code());
+        com.google.gson.JsonObject res = r.json();
+        int updated = 0;
+        for (String hash : res.keySet()) {
+            java.nio.file.Path old = byHash.get(hash);
+            com.google.gson.JsonObject ver = res.getAsJsonObject(hash);
+            com.google.gson.JsonObject file = null;
+            for (var e : ver.getAsJsonArray("files")) {
+                com.google.gson.JsonObject fo = e.getAsJsonObject();
+                if (file == null || fo.has("primary") && fo.get("primary").getAsBoolean()) file = fo;
+            }
+            if (old == null || file == null) continue;
+            String newHash = file.getAsJsonObject("hashes").get("sha1").getAsString();
+            if (newHash.equalsIgnoreCase(hash)) continue;                    // already the newest
+            String name = file.get("filename").getAsString();
+            java.nio.file.Path dest = dir.resolve(name);
+            Http.download(file.get("url").getAsString(), dest, newHash);
+            if (!dest.equals(old)) java.nio.file.Files.deleteIfExists(old);
+            updated++;
+        }
+        return updated;
+    }
+
+    private static String sha1(java.nio.file.Path f) throws IOException {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
+            md.update(java.nio.file.Files.readAllBytes(f));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : md.digest()) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IOException(e);
+        }
+    }
 }

@@ -61,6 +61,7 @@ public final class Cobra {
         MODULES.add(new Features.Particles());
         MODULES.add(new Features.Tweaks());
         MODULES.add(new Features.MouseTrail());
+        MODULES.add(new Features.Sky());
         MODULES.add(new Features.Recorder());
         MODULES.add(new Features.BlockOverlay());
         // Utility
@@ -91,7 +92,7 @@ public final class Cobra {
                 {"waypoints", "flag"}, {"chat", "chat"}, {"nickhider", "mask"}, {"screenshots", "camera"}, {"bedwars", "bed"}, {"client", "settings"},
                 {"memory", "gauge"}, {"stopwatch", "clock"}, {"serveraddress", "globe"}, {"itemcounter", "list"}, {"teamview", "user"},
                 {"chunkborders", "mods"}, {"hitboxes", "crosshair"}, {"glint", "sparkle"}, {"hypixel", "link"},
-                {"tweaks", "flame"}, {"mousetrail", "sparkle"}, {"recorder", "camera"}, {"blockoverlay", "crosshair"}, {"blockinfo", "search"}};
+                {"tweaks", "flame"}, {"mousetrail", "sparkle"}, {"sky", "sun"}, {"recorder", "camera"}, {"blockoverlay", "crosshair"}, {"blockinfo", "search"}};
         for (Module m : MODULES) {
             for (String[] ic : icons) if (ic[0].equals(m.id)) m.icon = ic[1];
             if (!m.hidden) {
@@ -140,10 +141,22 @@ public final class Cobra {
     // ------------------------------------------------------------------ events
 
     /** Applies the Client settings (theme, animations). Cheap; runs every tick. */
+    private static int customBg, customFg;
+
     public static void syncClient() {
         Features.Client c = get(Features.Client.class);
-        boolean light = c.theme.is("Light");
-        if (light != dev.cobra.client.core.ui.Draw.light) dev.cobra.client.core.ui.Draw.setLight(light);
+        if (c.theme.is("Custom")) {
+            int bg = c.themeBg.argb(), fg = c.themeText.argb();
+            if (bg != customBg || fg != customFg) {
+                dev.cobra.client.core.ui.Draw.setCustom(bg, fg);
+                customBg = bg;
+                customFg = fg;
+            }
+        } else {
+            boolean light = c.theme.is("Light");
+            if (customBg != 0 || light != dev.cobra.client.core.ui.Draw.light) dev.cobra.client.core.ui.Draw.setLight(light);
+            customBg = customFg = 0;
+        }
         animations = c.animations.on();
     }
 

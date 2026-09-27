@@ -22,10 +22,39 @@ public final class CobraMenuScreen extends Screen {
         if (client.world == null) {
             if (!r.wallpaper(width, height)) renderPanoramaBackground(context, delta);
         } else if (!menu.editingHud() && dev.cobra.client.core.Cobra.get(dev.cobra.client.core.module.Features.Client.class).blur.on()) {
-            super.renderBackground(context, mouseX, mouseY, delta);   // vanilla blur of the world + HUD behind the menu
+            // the world behind is blurred by a post effect (see init); a light dim on top
+            context.fill(0, 0, width, height, 0x40000000);
         }
         menu.setRender(r);
         menu.render(r, mouseX, mouseY);
+    }
+
+    private boolean blurOn;
+
+    /** Blur behind the modules: Minecraft's own blur post effect on the world while the menu is open. */
+    @Override
+    protected void init() {
+        super.init();
+        try {
+            var gr = (dev.cobra.client.fabric.mixin.GameRendererInvoker) client.gameRenderer;
+            if (client.world != null && gr.cobra$getPostProcessorId() == null
+                    && dev.cobra.client.core.Cobra.get(dev.cobra.client.core.module.Features.Client.class).blur.on()) {
+                gr.cobra$setPostProcessor(net.minecraft.util.Identifier.ofVanilla("blur"));
+                blurOn = true;
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
+    public void removed() {
+        super.removed();
+        if (!blurOn) return;
+        blurOn = false;
+        try {
+            var gr = (dev.cobra.client.fabric.mixin.GameRendererInvoker) client.gameRenderer;
+            net.minecraft.util.Identifier cur = gr.cobra$getPostProcessorId();
+            if (cur != null && cur.getPath().equals("blur") && cur.getNamespace().equals("minecraft")) gr.cobra$clearPostProcessor();
+        } catch (Throwable ignored) {}
     }
 
     @Override

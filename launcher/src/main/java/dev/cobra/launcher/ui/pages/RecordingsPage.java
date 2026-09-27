@@ -44,6 +44,7 @@ public final class RecordingsPage extends Page {
     }
 
     private void refresh() {
+        tidyLogs();
         list.removeAll();
         List<Path> files = new ArrayList<>();
         try {
@@ -60,6 +61,19 @@ public final class RecordingsPage extends Page {
         list.revalidate();
         list.repaint();
         repaint();
+    }
+
+    /** Older builds left ffmpeg logs next to the videos: move them to the launcher's logs. */
+    private static void tidyLogs() {
+        if (!Files.isDirectory(DIR)) return;
+        Path to = Paths.LOGS.resolve("recorder");
+        try (Stream<Path> s = Files.list(DIR)) {
+            for (Path f : s.toList()) {
+                if (!f.getFileName().toString().endsWith(".log")) continue;
+                Files.createDirectories(to);
+                Files.move(f, to.resolve(f.getFileName()), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception ignored) {}
     }
 
     @Override

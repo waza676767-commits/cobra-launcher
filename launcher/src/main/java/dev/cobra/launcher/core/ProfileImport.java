@@ -21,13 +21,15 @@ public final class ProfileImport {
     public record Source(String name, List<Found> profiles) {}
 
     /** One of its profiles / instances. */
-    public record Found(String name, Path gameDir) {}
+    public record Found(String name, Path gameDir, Path modsDir) {
+        public Found(String name, Path gameDir) { this(name, gameDir, gameDir.resolve("mods")); }
+    }
 
     private ProfileImport() {}
 
     public static List<Source> detect() {
         String home = System.getProperty("user.home");
-        String appdata = System.getenv("APPDATA");
+        String appdata = System.getenv("APPDATA");   // Windows
         String xdg = System.getenv("XDG_DATA_HOME");
         Path data = xdg != null && !xdg.isBlank() ? Path.of(xdg) : Path.of(home, ".local", "share");
         List<Source> out = new ArrayList<>();
@@ -53,6 +55,42 @@ public final class ProfileImport {
 
         add(out, "ATLauncher", plainDirs(List.of(data.resolve("ATLauncher/instances"), Path.of(home, "ATLauncher/instances"),
                 appdata != null ? Path.of(appdata, "ATLauncher", "instances") : Path.of(home, ".atlauncher/instances"))));
+
+        // Lunar Client: its own mods per profile/version in ~/.lunarclient/profiles, options in .minecraft
+        Path mcDir = appdata != null ? Path.of(appdata, ".minecraft") : Path.of(home, ".minecraft");
+        List<Found> lunar = new ArrayList<>();
+        for (Path prof : children(Path.of(home, ".lunarclient", "profiles"))) {
+            for (Path ver : children(prof)) {
+                if (Files.isDirectory(ver.resolve("mods"))) {
+                    Path game = Files.exists(ver.resolve("options.txt")) ? ver : mcDir;
+                    lunar.add(new Found("Lunar " + prof.getFileName() + " " + ver.getFileName(), game, ver.resolve("mods")));
+                }
+            }
+        }
+        if (lunar.isEmpty() && Files.isDirectory(Path.of(home, ".lunarclient")) && Files.isDirectory(mcDir)) {
+            lunar.add(new Found("Lunar Client (options)", mcDir, mcDir.resolve("mods")));
+        }
+        add(out, "Lunar Client", lunar);
+
+        // Dawn Client: its folder holds one game folder per profile/version
+        List<Found> dawn = new ArrayList<>();
+        List<Path> dawnRoots = new ArrayList<>(List.of(Path.of(home, ".dawnclient"), Path.of(home, ".dawn"), data.resolve("DawnClient")));
+        if (appdata != null) {
+            dawnRoots.add(Path.of(appdata, ".dawnclient"));
+            dawnRoots.add(Path.of(appdata, "DawnClient"));
+        }
+        for (Path r : dawnRoots) {
+            if (Files.isDirectory(r.resolve("mods")) || Files.exists(r.resolve("options.txt"))) dawn.add(new Found("Dawn Client", r));
+            for (Path d : children(r)) {
+                if (Files.isDirectory(d.resolve("mods")) || Files.exists(d.resolve("options.txt"))) dawn.add(new Found("Dawn " + d.getFileName(), d));
+                for (Path d2 : children(d)) {
+                    if (Files.isDirectory(d2.resolve("mods")) || Files.exists(d2.resolve("options.txt"))) {
+                        dawn.add(new Found("Dawn " + d.getFileName() + " " + d2.getFileName(), d2));
+                    }
+                }
+            }
+        }
+        add(out, "Dawn Client", dawn);
 
         List<Found> vanilla = new ArrayList<>();
         Path mc = appdata != null ? Path.of(appdata, ".minecraft") : Path.of(home, ".minecraft");
@@ -121,8 +159,9 @@ public final class ProfileImport {
             Path a = f.gameDir().resolve(file);
             if (Files.isRegularFile(a)) Files.copy(a, to.resolve(file), StandardCopyOption.REPLACE_EXISTING);
         }
-        for (String dir : new String[]{"mods", "resourcepacks", "shaderpacks", "config"}) {
-            copyTree(f.gameDir().resolve(dir), to.resolve(dir), dir.equals("mods"));
+        copyTree(f.modsDir(), to.resolve("mods"), true);
+        for (String dir : new String[]{"resourcepacks", "shaderpacks", "config"}) {
+            copyTree(f.gameDir().resolve(dir), to.resolve(dir), false);
         }
         return p;
     }

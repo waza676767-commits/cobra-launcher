@@ -139,8 +139,46 @@ public final class CobraFabric implements ClientModInitializer {
         updateHitColor(mc);
         syncDebugToggles(mc);
         syncMotionBlur(mc);
+        tickCount++;
+        syncSky(mc);
         if (mc.world != null || mc.currentScreen != null) syncGlint(mc);
         Cobra.tick();
+    }
+
+    // ------------------------------------------------------------------ sky packs
+
+    private static String skyApplied;
+    private static int tickCount, skyRetries;
+
+    /** Sky module: turns the chosen cobra-sky pack on (others off) and reloads resources once. */
+    private static void syncSky(MinecraftClient mc) {
+        if (mc.getResourcePackManager() == null || mc.getOverlay() != null) return;
+        String want = Cobra.get(Features.Sky.class).packFile();
+        String key = want == null ? "" : want;
+        if (key.equals(skyApplied)) {
+            // the Resource Packs screen can switch it off behind our back: check every 2 s
+            if (key.isEmpty() || tickCount % 40 != 0) return;
+            if (mc.getResourcePackManager().getEnabledIds().contains("file/" + want) || skyRetries >= 2) return;
+            skyRetries++;
+        } else {
+            skyRetries = 0;
+        }
+        if (skyApplied == null) {                   // first tick: remember what's on, don't reload
+            skyApplied = "";
+            for (String id : mc.getResourcePackManager().getEnabledIds()) if (id.contains("cobra-sky-")) skyApplied = id.substring(id.indexOf("cobra-sky-"));
+            if (key.equals(skyApplied)) return;
+        }
+        try {
+            var pm = mc.getResourcePackManager();
+            pm.scanPacks();
+            for (String id : new java.util.ArrayList<>(pm.getEnabledIds())) if (id.contains("cobra-sky-")) pm.disable(id);
+            if (want != null) pm.enable("file/" + want);
+            mc.options.refreshResourcePacks(pm);    // saves and reloads (a short loading screen)
+            skyApplied = key;
+        } catch (Throwable t) {
+            Cobra.get(Features.Sky.class).problem = "Couldn't switch the sky";
+            skyApplied = key;
+        }
     }
 
     // ------------------------------------------------------------------ glint colorizer
@@ -201,18 +239,26 @@ public final class CobraFabric implements ClientModInitializer {
 
     // ------------------------------------------------------------------ screen recorder
 
-    private static volatile boolean capturePending;
-    private static long nextCapture;
+    private static final java.util.concurrent.atomic.AtomicInteger inFlight = new java.util.concurrent.atomic.AtomicInteger();
+    private static long nextCapture, lastRequest;
+    private static final java.util.concurrent.ExecutorService FRAME_COPY = java.util.concurrent.Executors.newFixedThreadPool(2, run -> {
+        Thread t = new Thread(run, "cobra-recorder-copy");
+        t.setDaemon(true);
+        return t;
+    });
 
     /**
      * Once per frame: if recording and a frame is due, ask for an async GPU read-back of the finished
-     * frame (the game doesn't wait for it). One request in flight at a time.
+     * frame (the game doesn't wait for it). Up to three read-backs overlap, so a slow GPU fence can't
+     * throttle the video to a few frames per second; a watchdog clears requests that never came back.
      */
     public static void captureFrame() {
         if (Cobra.platform == null) return;
         Features.Recorder r = Cobra.get(Features.Recorder.class);
-        if (!r.isEnabled() || !r.rec.wantsFrames() || capturePending) return;
+        if (!r.isEnabled() || !r.rec.wantsFrames()) return;
         long now = System.nanoTime();
+        if (inFlight.get() > 0 && now - lastRequest > 1_000_000_000L) inFlight.set(0);   // lost callbacks
+        if (inFlight.get() >= 3) return;
         long every = 1_000_000_000L / Math.max(1, Integer.parseInt(r.fps.get()));
         if (now < nextCapture) return;
         nextCapture = Math.max(nextCapture + every, now - every);
@@ -220,19 +266,21 @@ public final class CobraFabric implements ClientModInitializer {
         net.minecraft.client.gl.Framebuffer fb = mc.getFramebuffer();
         if (fb == null) return;
         int down = fb.textureHeight >= 2160 && r.resolution.is("1080p") ? 2 : 1;   // 4K screens: halve on the GPU
-        capturePending = true;
+        inFlight.incrementAndGet();
+        lastRequest = now;
         try {
-            net.minecraft.client.util.ScreenshotRecorder.takeScreenshot(fb, down, image -> {
+            net.minecraft.client.util.ScreenshotRecorder.takeScreenshot(fb, down, image -> FRAME_COPY.execute(() -> {
+                // the 8 MB copy happens here, off the render thread, so recording doesn't cost FPS
                 try {
                     int[] px = image.copyPixelsArgb();
                     r.rec.offer(px, image.getWidth(), image.getHeight(), r.ffmpeg(), r.folder(), r.resolution.get(), r.quality.get());
                 } finally {
                     image.close();
-                    capturePending = false;
+                    inFlight.updateAndGet(v -> Math.max(0, v - 1));
                 }
-            });
+            }));
         } catch (Throwable t) {
-            capturePending = false;
+            inFlight.updateAndGet(v -> Math.max(0, v - 1));
             r.problem = "Couldn't capture frames";
         }
     }

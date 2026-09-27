@@ -37,7 +37,7 @@ jobs:
           chmod +x build-appimage.sh gradlew client/gradlew
           ./build-appimage.sh
           cp launcher/build/libs/cobra-launcher.jar .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: CobraLauncher-linux
           path: |
@@ -69,7 +69,7 @@ jobs:
       - name: Zip the portable app too
         shell: pwsh
         run: Compress-Archive -Path "dist/Cobra Launcher" -DestinationPath "dist/Cobra-Launcher-portable.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: CobraLauncher-windows
           path: |
@@ -83,7 +83,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: out
       - name: Publish the release (launchers update from this)
