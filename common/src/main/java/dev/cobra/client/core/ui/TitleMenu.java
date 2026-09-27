@@ -14,7 +14,7 @@ public final class TitleMenu {
     private static final String[] ICON_TIPS = {"Options", "Resource Packs", "Cobra Settings"};
     private static boolean introPlayed;
 
-    private final float[] hover = new float[6];
+    private final float[] hover = new float[12];   // one per button (Quit Game is #6)
     private final long openedAt = System.currentTimeMillis();
     private final boolean intro;
     private final Particles particles = new Particles();
@@ -125,6 +125,7 @@ public final class TitleMenu {
 
     private void iconButton(Render r, int i, int x, int y, String icon, int mx, int my) {
         boolean hov = in(mx, my, x, y, 20, 20);
+        if (i < 0 || i >= hover.length) i = 0;
         hover[i] = Draw.approach(hover[i], hov ? 1 : 0, 0.3f);
         float t = hover[i];
         if (Draw.light) Draw.box(r, x, y, 20, 20, 5, Draw.mix(0xE6FFFFFF, 0xFFFFFFFF, t), Draw.mix(0x55000000, 0xFF121316, t));

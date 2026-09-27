@@ -181,22 +181,54 @@ public final class Cobra {
             }
             m.keyWasDown = down;
         }
-        for (Module m : MODULES) if (m.isEnabled()) m.onTick();
+        for (Module m : MODULES) {
+            if (!m.isEnabled()) continue;
+            try {
+                m.onTick();
+            } catch (Throwable t) {
+                fail(m, t);
+            }
+        }
         if (ticks % 1200 == 0) save();
     }
 
     public static void renderHud(Render r) {
         Features.Recorder recorder = get(Features.Recorder.class);
-        if (recorder.isEnabled()) recorder.renderBadge(r);
+        try {
+            if (recorder.isEnabled()) recorder.renderBadge(r);
+        } catch (Throwable t) {
+            fail(recorder, t);
+        }
         if (platform.hudHidden()) return;
         Features.Waypoints wp = get(Features.Waypoints.class);
-        if (wp.isEnabled() && platform.inWorld()) wp.render(r);
+        try {
+            if (wp.isEnabled() && platform.inWorld()) wp.render(r);
+        } catch (Throwable t) {
+            fail(wp, t);
+        }
         for (Module m : MODULES) {
             if (!(m instanceof HudModule) || !m.isEnabled()) continue;
             HudModule h = (HudModule) m;
-            if (!h.visible()) continue;
-            drawHud(r, h, false);
+            try {
+                if (!h.visible()) continue;
+                drawHud(r, h, false);
+            } catch (Throwable t) {
+                fail(m, t);
+            }
         }
+    }
+
+    /**
+     * Safety net: a module that throws is switched off (with the reason shown in the menu) instead
+     * of crashing the game. Other mods and the rest of Cobra keep working.
+     */
+    public static void fail(Module m, Throwable t) {
+        try {
+            if (m.isEnabled()) m.toggle();
+        } catch (Throwable ignored) {}
+        m.problem = "Turned off after an error: " + t.getClass().getSimpleName();
+        System.err.println("[Cobra] " + m.name + " failed and was turned off");
+        t.printStackTrace();
     }
 
     public static void drawHud(Render r, HudModule h, boolean editing) {

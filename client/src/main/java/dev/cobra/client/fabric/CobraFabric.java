@@ -43,11 +43,28 @@ public final class CobraFabric implements ClientModInitializer {
         FREELOOK = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.cobra.freelook", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_LEFT_ALT, CATEGORY));
         WAYPOINT = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.cobra.waypoint", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_B, CATEGORY));
 
-        ClientTickEvents.END_CLIENT_TICK.register(CobraFabric::tick);
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            try {
+                tick(client);
+            } catch (Throwable t) {                 // a Cobra bug must never stop the game
+                if (!tickErrorShown) {
+                    tickErrorShown = true;
+                    System.err.println("[Cobra] error in the client tick (kept running):");
+                    t.printStackTrace();
+                }
+            }
+        });
 
         net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.addLast(net.minecraft.util.Identifier.of("cobra", "hud"), (ctx, tickCounter) -> {
-            pollClicks(mc);
-            Cobra.renderHud(RENDER.with(ctx));
+            try {
+                pollClicks(mc);
+                Cobra.renderHud(RENDER.with(ctx));
+            } catch (Throwable t) {
+                if (!hudErrorShown) {
+                    hudErrorShown = true;
+                    t.printStackTrace();
+                }
+            }
         });
 
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hit) -> {
@@ -147,6 +164,7 @@ public final class CobraFabric implements ClientModInitializer {
 
     // ------------------------------------------------------------------ sky packs
 
+    private static boolean tickErrorShown, hudErrorShown;
     private static String skyApplied;
     private static int tickCount, skyRetries;
 

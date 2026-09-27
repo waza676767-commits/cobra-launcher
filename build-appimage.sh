@@ -32,7 +32,7 @@ export JAVA_HOME
 if [[ -z "${KEEP_UPDATE_PROPERTIES:-}" ]]; then
     REPO_URL=$(git config --get remote.origin.url 2>/dev/null || true)
     REPO_NAME=$(echo "$REPO_URL" | sed -nE 's#.*github\.com[:/]([^/]+/[^/.]+)(\.git)?$#\1#p')
-    printf 'repo=%s\nbuild=0\n' "$REPO_NAME" > launcher/src/main/resources/update.properties
+    printf 'repo=%s\nbuild=999999\n' "$REPO_NAME" > launcher/src/main/resources/update.properties   # your own build: never swapped for an older GitHub release
 fi
 
 # ---------------------------------------------------------------- client + launcher

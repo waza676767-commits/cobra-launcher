@@ -26,7 +26,12 @@ public final class CobraMenuScreen extends Screen {
             context.fill(0, 0, width, height, 0x40000000);
         }
         menu.setRender(r);
-        menu.render(r, mouseX, mouseY);
+        try {
+            menu.render(r, mouseX, mouseY);
+        } catch (Throwable t) {           // a Cobra bug closes the menu instead of crashing the game
+            t.printStackTrace();
+            close();
+        }
     }
 
     private boolean blurOn;
