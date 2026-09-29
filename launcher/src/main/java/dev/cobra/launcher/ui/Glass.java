@@ -111,6 +111,11 @@ public final class Glass {
         return !"glass".equals(dev.cobra.launcher.core.Settings.get().style);
     }
 
+    /** Page cards are separate pieces of frosted glass (not with Solid / Clear). */
+    public static boolean frostedCards() {
+        return !solidLook() && !"liquid".equals(dev.cobra.launcher.core.Settings.get().glassLook);
+    }
+
     static boolean frosted() {
         return solidLook() || !"liquid".equals(dev.cobra.launcher.core.Settings.get().glassLook);
     }
@@ -179,7 +184,8 @@ public final class Glass {
     /** Blurs {@code base} into the next ring buffer and makes it the current source. */
     private static synchronized void publish(BufferedImage base, int frost) {
         int w = base.getWidth(), h = base.getHeight();
-        double factor = solidLook() ? 5 + frost * 0.1 : frosted() ? 3 + frost * 0.1 : 1 + frost * 0.06;   // frosted: always soft; liquid: frost 100 = 7x
+        // Clear (default): almost no blur, the wallpaper stays sharp and bends at the edges
+        double factor = solidLook() ? 5 + frost * 0.1 : frosted() ? 3 + frost * 0.1 : 1 + frost * 0.02;   // frosted: always soft; liquid: frost 100 = 7x
         // down: native bilinear halvings to about w / factor
         BufferedImage cur = base;
         int tw = Math.max(8, (int) (w / factor));
@@ -201,9 +207,80 @@ public final class Glass {
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         g.drawImage(cur, 0, 0, w, h, null);
         g.dispose();
+        if (!frosted()) liquidize(((java.awt.image.DataBufferInt) out.getRaster().getDataBuffer()).getData(), w, h);
         ring = (ring + 1) % RING.length;
         src = new Source(((java.awt.image.DataBufferInt) out.getRaster().getDataBuffer()).getData(), w, h, ++stampGen);
         stamp++;
+    }
+
+    // ------------------------------------------------------------------ liquid (Clear) look
+
+    private static int[] noiseDx, noiseDy, liquidTmp;
+    private static int noiseW, noiseH;
+
+    /**
+     * The liquid part of Clear glass, like an SVG turbulence + displacement filter: the backdrop is
+     * pushed around by a smooth, low-frequency noise field (organic, water-like wobble), then made a
+     * little more saturated (x1.2) and brighter (x1.15). Done once per backdrop, not per panel.
+     */
+    private static void liquidize(int[] px, int w, int h) {
+        if (noiseDx == null || noiseW != w || noiseH != h) {
+            noiseDx = turbulence(w, h, 11, 22);
+            noiseDy = turbulence(w, h, 29, 22);
+            noiseW = w;
+            noiseH = h;
+            liquidTmp = new int[w * h];
+        }
+        int[] tmp = liquidTmp;
+        for (int y = 0; y < h; y++) {
+            int row = y * w;
+            for (int x = 0; x < w; x++) {
+                int i = row + x;
+                int sx = Math.max(0, Math.min(w - 1, x + noiseDx[i])), sy = Math.max(0, Math.min(h - 1, y + noiseDy[i]));
+                int c = px[sy * w + sx];
+                int r = c >> 16 & 255, gg = c >> 8 & 255, b = c & 255;
+                int l = (r * 77 + gg * 150 + b * 29) >> 8;            // luminance
+                r = l + (r - l) * 6 / 5;                              // saturate 120%
+                gg = l + (gg - l) * 6 / 5;
+                b = l + (b - l) * 6 / 5;
+                r = r * 23 / 20;                                      // brightness 115%
+                gg = gg * 23 / 20;
+                b = b * 23 / 20;
+                tmp[i] = 0xFF000000 | clamp(r) << 16 | clamp(gg) << 8 | clamp(b);
+            }
+        }
+        System.arraycopy(tmp, 0, px, 0, w * h);
+    }
+
+    private static int clamp(int v) {
+        return v < 0 ? 0 : Math.min(255, v);
+    }
+
+    /** Smooth 2-octave value noise (period ~125 px, like baseFrequency 0.008) scaled to +-amp pixels. */
+    private static int[] turbulence(int w, int h, long seed, int amp) {
+        java.util.Random rnd = new java.util.Random(seed);
+        int cell = 125;
+        int gw = w / cell + 3, gh = h / cell + 3;
+        float[] g1 = new float[gw * gh], g2 = new float[(gw * 2 + 2) * (gh * 2 + 2)];
+        for (int i = 0; i < g1.length; i++) g1[i] = rnd.nextFloat() * 2 - 1;
+        for (int i = 0; i < g2.length; i++) g2[i] = rnd.nextFloat() * 2 - 1;
+        int[] out = new int[w * h];
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                float v = sample(g1, gw, x / (float) cell, y / (float) cell) + 0.5f * sample(g2, gw * 2 + 2, x * 2f / cell, y * 2f / cell);
+                out[y * w + x] = Math.round(v / 1.5f * amp);
+            }
+        }
+        return out;
+    }
+
+    private static float sample(float[] g, int gw, float fx, float fy) {
+        int x0 = (int) fx, y0 = (int) fy;
+        float tx = fx - x0, ty = fy - y0;
+        tx = tx * tx * (3 - 2 * tx);                                  // smoothstep: no creases
+        ty = ty * ty * (3 - 2 * ty);
+        float a = g[y0 * gw + x0], b = g[y0 * gw + x0 + 1], c = g[(y0 + 1) * gw + x0], d = g[(y0 + 1) * gw + x0 + 1];
+        return (a + (b - a) * tx) + ((c + (d - c) * tx) - (a + (b - a) * tx)) * ty;
     }
 
     private static BufferedImage scaled(BufferedImage img, int w, int h, boolean smooth) {
@@ -309,13 +386,34 @@ public final class Glass {
         int dx = (int) Math.round(x), dy = (int) Math.round(y);
         g.drawImage(e.buf, dx, dy, null);
         g.drawImage(e.overlay, dx, dy, null);
+        specular(g, c, x, y, w, h, r);
+    }
+
+    /**
+     * Light that follows the pointer (glass-specular): a soft white spot where your mouse is over a
+     * glass shape. Only on small glass parts (the big frame would need a repaint on every move).
+     */
+    private static void specular(Graphics2D g, Component c, double x, double y, double w, double h, double r) {
+        if (c == null || c == root || lite() || frosted() || w * h > 250_000 || !c.isShowing()) return;
+        PointerInfo pi = MouseInfo.getPointerInfo();
+        if (pi == null) return;
+        Point p = pi.getLocation();
+        SwingUtilities.convertPointFromScreen(p, c);
+        if (p.x < x || p.y < y || p.x > x + w || p.y > y + h) return;
+        float rad = (float) Math.max(40, Math.min(w, h) * 0.9);
+        Graphics2D s = (Graphics2D) g.create();
+        s.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        s.setPaint(new RadialGradientPaint(new Point2D.Double(p.x, p.y), rad, new float[]{0f, 0.3f, 0.6f},
+                new Color[]{new Color(255, 255, 255, 38), new Color(255, 255, 255, 13), new Color(255, 255, 255, 0)}));
+        s.fill(new RoundRectangle2D.Double(x, y, w, h, r * 2, r * 2));
+        s.dispose();
     }
 
     /** The rim band of a rounded rectangle: antialiased edge, cut corners and refraction offsets. */
     private static Band band(int w, int h, int ri) {
         double r = Math.max(0.5, ri);
         double bandW = Math.max(4, Math.min(Math.min(18, r + 8), Math.min(w, h) / 2.5));
-        double strength = frosted() ? 0 : bandW * 0.6;   // frosted: no bending at all; liquid: a gentle bend at the rim
+        double strength = frosted() ? 0 : bandW * 0.85;  // frosted: no bending; clear: a clean lens at the rim
         double hw = w / 2.0, hh = h / 2.0;
         int cap = Math.min(w * h, (int) ((w + h) * 2 * (bandW + 2)) + 64);
         int[] idx = new int[cap];
@@ -421,35 +519,47 @@ public final class Glass {
         double r = k.r(), q = k.q() / 4.0;
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = Theme.aa(img.createGraphics());
+        // every layer is an anti-aliased fill of the rounded shape (a clip would give jagged corners)
         Shape shape = new RoundRectangle2D.Double(0, 0, w, h, r * 2, r * 2);
-        g.setClip(shape);
-        // thin tint: keeps text readable without hiding what's behind
         boolean frost = frosted(), solid = solidLook();
-        // Solid: a smoky pane, not a black one (the wallpaper still shows through, just calmer)
-        g.setColor(light ? new Color(255, 255, 255, (int) ((solid ? 150 : frost ? 125 : 95) + 50 * q))
-                : new Color(24, 24, 30, (int) ((solid ? 112 : frost ? 120 : 78) + 30 * q)));
-        g.fillRect(0, 0, w, h);
+        g.setColor(light ? new Color(255, 255, 255, (int) ((solid ? 150 : frost ? 125 : 60) + 50 * q))
+                : new Color(10, 10, 10, (int) ((solid ? 150 : frost ? 120 : 46) + 30 * q)));
+        g.fill(shape);
         if (solid) {                   // plain: just a quiet hairline border, no glass shine
-            g.setClip(null);
             g.setStroke(new BasicStroke(1f));
             g.setColor(light ? new Color(0, 0, 0, 30) : new Color(255, 255, 255, 34));
             g.draw(new RoundRectangle2D.Double(0.5, 0.5, w - 1, h - 1, Math.max(0, r * 2 - 1), Math.max(0, r * 2 - 1)));
             g.dispose();
             return img;
         }
-        // sheen: light falling on the top of the glass
-        g.setPaint(new GradientPaint(0, 0, new Color(255, 255, 255, light ? 70 : (int) (20 + 12 * q)), 0, (float) Math.min(h, 60), new Color(255, 255, 255, 0)));
-        g.fillRect(0, 0, w, h);
-        // inner glow along the rim (the glass is thicker there)
-        for (int i = 0; i < 1; i++) {      // one soft ring (was three): cleaner edge
-            float sw = 6;
-            g.setStroke(new BasicStroke(sw));
-            g.setColor(new Color(255, 255, 255, light ? 10 : 7 + i * 3));
-            double o = sw / 2.0;
-            g.draw(new RoundRectangle2D.Double(o, o, w - sw, h - sw, Math.max(0, r * 2 - sw), Math.max(0, r * 2 - sw)));
+        if (frost) {
+            // frosted: a thin even border and a whisper of light at the top, nothing else
+            g.setPaint(new GradientPaint(0, 0, new Color(255, 255, 255, light ? 60 : 14), 0, (float) Math.min(h, 80), new Color(255, 255, 255, 0)));
+            g.fill(shape);
+            g.setStroke(new BasicStroke(1f));
+            g.setColor(light ? new Color(255, 255, 255, 190) : new Color(255, 255, 255, (int) (54 + 30 * q)));
+            g.draw(new RoundRectangle2D.Double(0.5, 0.5, w - 1, h - 1, Math.max(0, r * 2 - 1), Math.max(0, r * 2 - 1)));
+            g.dispose();
+            return img;
         }
-        g.setClip(null);
-        // specular rim: bright where the light hits (top-left), a second catch-light bottom-right
+        // sheen: light falling on the top of the glass, fading out downwards
+        g.setPaint(new GradientPaint(0, 0, new Color(255, 255, 255, light ? 70 : (int) (20 + 12 * q)), 0, (float) Math.min(h, 60), new Color(255, 255, 255, 0)));
+        g.fill(shape);
+        // depth: a soft darker band along the bottom inside edge
+        g.setPaint(new GradientPaint(0, (float) (h - Math.min(h, 34)), new Color(0, 0, 0, 0), 0, h, new Color(0, 0, 0, light ? 10 : 26)));
+        g.fill(shape);
+        // one soft inner ring
+        g.setStroke(new BasicStroke(6f));
+        g.setColor(new Color(255, 255, 255, light ? 10 : 7));
+        g.draw(new RoundRectangle2D.Double(3, 3, w - 6, h - 6, Math.max(0, r * 2 - 6), Math.max(0, r * 2 - 6)));
+        // specular: a thin bright line hugging the top edge, strongest at the upper-left (liquid only)
+        if (!frost && h > 12) {
+            g.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.setPaint(new GradientPaint(0, 0, new Color(255, 255, 255, light ? 150 : 95), (float) w * 0.6f, 0, new Color(255, 255, 255, 0)));
+            double in = 1.6;
+            g.draw(new java.awt.geom.Arc2D.Double(in, in, r * 2 - in * 2, r * 2 - in * 2, 90, 90, java.awt.geom.Arc2D.OPEN));
+            g.draw(new java.awt.geom.Line2D.Double(r, in, w - r, in));
+        }
         Paint rim = new LinearGradientPaint(0, 0, (float) (w * 0.75), (float) (h * 0.75 + 1),
                 new float[]{0f, 0.28f, 0.55f, 1f},
                 new Color[]{new Color(255, 255, 255, light ? 210 : 125), new Color(255, 255, 255, light ? 110 : 34),

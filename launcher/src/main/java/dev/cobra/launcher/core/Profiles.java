@@ -27,6 +27,8 @@ public final class Profiles {
     public static final class Profile {
         public String id;
         public String name;
+        /** Category on the Profiles page (e.g. "PvP"), or null for none. */
+        public String category;
         public String version = GameVersion.MODERN.id;
         public long created;
 

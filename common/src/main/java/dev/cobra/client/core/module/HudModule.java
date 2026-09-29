@@ -34,6 +34,10 @@ public abstract class HudModule extends Module {
     /** Background box using this element's background colour / rounding. */
     protected void bg(Render r, int x, int y, int w, int h) {
         if (!background.on()) return;
+        if (dev.cobra.client.core.Cobra.get(Features.Client.class).hudStyle.is("Liquid Glass")) {
+            dev.cobra.client.core.ui.Draw.glassPanel(r, x, y, w, h, rounded.on() ? 4 : 2, bgColor.argb());
+            return;
+        }
         if (rounded.on()) dev.cobra.client.core.ui.Draw.round(r, x, y, w, h, 3, bgColor.argb());
         else r.rect(x, y, w, h, bgColor.argb());
     }

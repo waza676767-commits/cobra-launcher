@@ -59,7 +59,7 @@ public final class AnalyticsPage extends Page {
     protected void paintComponent(Graphics g0) {
         Graphics2D g = Theme.aa(g0.create());
         int w = getWidth();
-        Theme.left(g, "Analytics", Theme.font(Theme.BOLD, 30f), Theme.TEXT, 0, 0, 42);
+        Theme.left(g, "Analytics", Theme.font(Theme.REGULAR, 34f), Theme.TEXT, 0, 0, 42);
         Theme.left(g, "Play time from this launcher over the last 7 days.", Theme.font(Theme.REGULAR, 13.5f), Theme.SOFT, 0, 44, 22);
 
         String[][] stats = {

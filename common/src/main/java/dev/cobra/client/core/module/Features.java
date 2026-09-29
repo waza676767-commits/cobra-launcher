@@ -43,6 +43,10 @@ public final class Features {
         public final Setting.Action update = add(new Setting.Action("update", "Update to the newest", new Runnable() {
             public void run() { dev.cobra.client.core.SelfUpdate.checkAndDownload(); }
         }));
+        /** Hide Cobra's HUD while the F3 debug screen is open (hitboxes / chunk borders never hide it). */
+        public final Setting.Bool hideHudOnF3 = add(new Setting.Bool("hidehudf3", "Hide HUD while F3 is open", true));
+        /** Look of HUD element backgrounds: plain boxes, or Liquid Glass panels. */
+        public final Setting.Mode hudStyle = add(new Setting.Mode("hudstyle", "HUD style", "Liquid Glass", "Classic", "Liquid Glass"));
         /** Cobra icon next to other Cobra players in the Tab list (and let them see yours). */
         public final Setting.Bool tabIcon = add(new Setting.Bool("tabicon", "Cobra icon in Tab", true));
         /** Turns every particle off (explosions, crits, rain splashes, …): cleaner screen and more FPS. */
@@ -89,9 +93,16 @@ public final class Features {
         public final Setting.Mode resolution = add(new Setting.Mode("resolution", "Resolution", "1080p", "1080p", "Window size"));
         public final Setting.Mode quality = add(new Setting.Mode("quality", "Quality", "High", "High", "Balanced", "Small file"));
         public final Setting.Bool indicator = add(new Setting.Bool("indicator", "Show REC in the corner", true));
+        /** Auto: record with the graphics card outside the game when possible (no FPS loss). */
+        public final Setting.Mode capture = add(new Setting.Mode("capture", "Capture", "Auto (lightest)", "Auto (lightest)", "Game frames"));
+
+        private boolean external() {
+            return capture.is("Auto (lightest)") && dev.cobra.client.core.ExternalCapture.available(ffmpeg());
+        }
 
         public final dev.cobra.client.core.ScreenRecorder rec = new dev.cobra.client.core.ScreenRecorder();
         private boolean sDown, pDown, xDown;
+        private long extStart;
 
         public Recorder() { super("recorder", "Screen Recorder", "Record 1080p at 30/60/120 fps with your own keys", Category.UTILITY, false); }
 
@@ -101,7 +112,40 @@ public final class Features {
             boolean s = !menus && start.code() >= 0 && Cobra.platform.rawKeyDown(start.code());
             boolean p = !menus && pause.code() >= 0 && Cobra.platform.rawKeyDown(pause.code());
             boolean x = !menus && stop.code() >= 0 && Cobra.platform.rawKeyDown(stop.code());
-            if (s && !sDown && rec.state() == dev.cobra.client.core.ScreenRecorder.State.IDLE) {
+            if (s && !sDown && !dev.cobra.client.core.ExternalCapture.running() && external()) {
+                problem = null;
+                try {
+                    dev.cobra.client.core.ExternalCapture.start(ffmpeg(), folder(), Integer.parseInt(fps.get()), quality.get());
+                    Cobra.platform.chat("\u00a7c\u25cf\u00a7r Recording with your graphics card (" + fps.get() + " fps)");
+                } catch (Exception e) {
+                    Cobra.platform.chat("\u00a7cCouldn't start: " + e.getMessage());
+                }
+                sDown = true;
+                return;
+            }
+            if (p && !pDown && dev.cobra.client.core.ExternalCapture.running()) {
+                try {
+                    dev.cobra.client.core.ExternalCapture.togglePause(ffmpeg(), folder(), Integer.parseInt(fps.get()), quality.get());
+                } catch (Exception ignored) {}
+                Cobra.platform.chat(dev.cobra.client.core.ExternalCapture.paused() ? "Recording paused" : "Recording resumed");
+                pDown = true;
+                return;
+            }
+            if (p && !pDown && dev.cobra.client.core.ExternalCapture.paused()) {
+                try {
+                    dev.cobra.client.core.ExternalCapture.resumeIfPaused(ffmpeg(), folder(), Integer.parseInt(fps.get()), quality.get());
+                    Cobra.platform.chat("Recording resumed (new part)");
+                } catch (Exception ignored) {}
+                pDown = true;
+                return;
+            }
+            if (x && !xDown && (dev.cobra.client.core.ExternalCapture.running() || dev.cobra.client.core.ExternalCapture.paused())) {
+                java.io.File f = dev.cobra.client.core.ExternalCapture.stop();
+                Cobra.platform.chat("Recording saved" + (f != null ? ": " + f.getName() : "") + " (open the launcher's Recordings)");
+                xDown = true;
+                return;
+            }
+            if (s && !sDown && rec.state() == dev.cobra.client.core.ScreenRecorder.State.IDLE && !dev.cobra.client.core.ExternalCapture.running()) {
                 problem = null;
                 rec.start(Integer.parseInt(fps.get()));
                 Cobra.platform.chat("\u00a7c\u25cf\u00a7r Recording (" + fps.get() + " fps, " + resolution.get() + ")");
@@ -128,6 +172,7 @@ public final class Features {
         @Override
         public void onDisable() {
             rec.stop();
+            dev.cobra.client.core.ExternalCapture.stop();
         }
 
         /** Where recordings go (the launcher passes its folder; fallback: the game folder). */
@@ -143,9 +188,12 @@ public final class Features {
 
         /** Little REC badge while recording (drawn by the HUD pass). */
         public void renderBadge(dev.cobra.client.core.Render r) {
-            if (!indicator.on() || rec.state() == dev.cobra.client.core.ScreenRecorder.State.IDLE) return;
-            long t = rec.seconds();
-            boolean paused = rec.state() == dev.cobra.client.core.ScreenRecorder.State.PAUSED;
+            boolean ext = dev.cobra.client.core.ExternalCapture.running() || dev.cobra.client.core.ExternalCapture.paused();
+            if (!indicator.on() || rec.state() == dev.cobra.client.core.ScreenRecorder.State.IDLE && !ext) return;
+            if (ext && extStart == 0) extStart = System.currentTimeMillis();
+            if (!ext) extStart = 0;
+            long t = ext ? (System.currentTimeMillis() - extStart) / 1000 : rec.seconds();
+            boolean paused = ext ? dev.cobra.client.core.ExternalCapture.paused() : rec.state() == dev.cobra.client.core.ScreenRecorder.State.PAUSED;
             String label = (paused ? "PAUSED " : "REC ") + String.format(java.util.Locale.ROOT, "%d:%02d", t / 60, t % 60);
             int w = r.textWidth(label) + 16;
             r.rect(4, 4, w, 14, 0x99000000);
@@ -421,11 +469,13 @@ public final class Features {
          * Transform for an item type: {x, y, z, rotX, rotY, rotZ, size}. "All items" plus the type's
          * own tweak. Null when the module is off.
          */
+        private final float[] buf = new float[7];
+
         public float[] transform(String type) {
             if (!isEnabled()) return null;
             int t = 0;
             for (int i = 1; i < KEYS.length; i++) if (KEYS[i].equals(type)) t = i;
-            float[] out = new float[7];
+            float[] out = buf;                                   // reused: this runs for every hand, every frame
             for (int k = 0; k < 6; k++) out[k] = values[0][k].f() + (t == 0 ? 0 : values[t][k].f());
             out[6] = values[0][6].f() * (t == 0 ? 1 : values[t][6].f());
             return out;

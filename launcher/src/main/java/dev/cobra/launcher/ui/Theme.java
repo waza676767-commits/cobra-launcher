@@ -11,17 +11,17 @@ import java.util.Map;
 
 public final class Theme {
     /** Dark: Royal Charcoal + grayscale ramp from the reference boards. Light: the same set inverted. */
-    public static Color BLACK = new Color(0x121212);   // canvas / ink on accent
-    public static Color PANEL = new Color(0x2D2D2D);
-    public static Color PANEL_2 = new Color(0x1e2023);
-    public static Color RAISED = new Color(0x2b2a2a);
-    public static Color LINE = new Color(0x2b2a2a);
-    public static Color LINE_2 = new Color(0x3d3d3d);
-    public static Color MID = new Color(0x454444);
-    public static Color STEEL = new Color(0x4c4e51);
-    public static Color MUTED = new Color(0x646464);
-    public static Color SOFT = new Color(0x9a9b9f);
-    public static Color TEXT = new Color(0xF8F5F2);    // accent / primary text
+    public static Color BLACK = new Color(0x000000);   // canvas / ink on accent
+    public static Color PANEL = new Color(0x171717);
+    public static Color PANEL_2 = new Color(0x0A0A0A);
+    public static Color RAISED = new Color(0x262626);
+    public static Color LINE = new Color(0x262626);
+    public static Color LINE_2 = new Color(0x373737);
+    public static Color MID = new Color(0x525252);
+    public static Color STEEL = new Color(0x525252);
+    public static Color MUTED = new Color(0x8A8A8A);
+    public static Color SOFT = new Color(0xD4D4D4);
+    public static Color TEXT = new Color(0xFAFAFA);    // accent / primary text
     public static Color DANGER = new Color(0xff6b6b);
     public static Color GLOW = new Color(0x1e1f22);    // centre of the background gradient
     public static Color EDGE = new Color(0x0a0a0b);    // outer ring of the background gradient
@@ -103,38 +103,37 @@ public final class Theme {
     /** Swaps the whole palette. Call repaint on the window afterwards. */
     public static void setLight(boolean on) {
         light = on;
+        // neutral greys, AAA contrast (the 50–950 scales): no warm tint
         if (on) {
-            // Ivory #F8F5F2 with charcoal #2D2D2D ink
-            BLACK = new Color(0xF8F5F2);
-            PANEL = new Color(0xEFEBE6);
-            PANEL_2 = new Color(0xE9E4DE);
-            RAISED = new Color(0xE2DDD6);
-            LINE = new Color(0xDDD7CF);
-            LINE_2 = new Color(0xCBC4BB);
-            MID = new Color(0xAFA89F);
-            STEEL = new Color(0xC4BDB4);
-            MUTED = new Color(0x8C857C);
-            SOFT = new Color(0x5B5650);
-            TEXT = new Color(0x2D2D2D);
+            BLACK = new Color(0xFFFFFF);    // base
+            PANEL = new Color(0xFAFAFA);    // 50
+            PANEL_2 = new Color(0xF5F5F5);  // 100
+            RAISED = new Color(0xE5E5E5);   // 200
+            LINE = new Color(0xE5E5E5);     // 200
+            LINE_2 = new Color(0xD4D4D4);   // 300
+            MID = new Color(0xA3A3A3);      // 400
+            STEEL = new Color(0xD4D4D4);
+            MUTED = new Color(0x737373);    // 500
+            SOFT = new Color(0x404040);     // 700
+            TEXT = new Color(0x0A0A0A);     // 950
             DANGER = new Color(0xC8373F);
             GLOW = new Color(0xFFFFFF);
-            EDGE = new Color(0xEEE9E3);
+            EDGE = new Color(0xF5F5F5);
         } else {
-            // Charcoal #2D2D2D surfaces on near-black, ivory ink
-            BLACK = new Color(0x121212);
-            PANEL = new Color(0x2D2D2D);
-            PANEL_2 = new Color(0x262626);
-            RAISED = new Color(0x363636);
-            LINE = new Color(0x333333);
-            LINE_2 = new Color(0x444444);
-            MID = new Color(0x555555);
-            STEEL = new Color(0x5A5A5A);
-            MUTED = new Color(0x7C7A77);
-            SOFT = new Color(0xA8A5A1);
-            TEXT = new Color(0xF8F5F2);
+            BLACK = new Color(0x000000);    // base
+            PANEL = new Color(0x171717);    // 100
+            PANEL_2 = new Color(0x0A0A0A);  // 50
+            RAISED = new Color(0x262626);   // 200
+            LINE = new Color(0x262626);     // 200
+            LINE_2 = new Color(0x373737);   // 300
+            MID = new Color(0x525252);      // 400
+            STEEL = new Color(0x525252);
+            MUTED = new Color(0x8A8A8A);    // 500
+            SOFT = new Color(0xD4D4D4);     // 700
+            TEXT = new Color(0xFAFAFA);     // 950
             DANGER = new Color(0xFF6B6B);
-            GLOW = new Color(0x2A2A2A);
-            EDGE = new Color(0x161616);
+            GLOW = new Color(0x262626);
+            EDGE = new Color(0x0A0A0A);
         }
         TINTED.clear();
         LOGOS.clear();
@@ -213,12 +212,34 @@ public final class Theme {
     }
 
     /** @param hover 0..1 hover highlight, @param emphasis 0..1 raised look (glass) */
+    /**
+     * A card on a page: a soft see-through fill with no outline. The page itself sits on one glass
+     * sheet, so cards don't stack glass on glass (that's what drew all the outlines).
+     */
     public static void surface(Graphics2D g, Component c, double x, double y, double w, double h, double r, double hover, double emphasis) {
-        if (Glass.on()) {
-            Glass.surface(g, c, x, y, w, h, r, Math.min(1, emphasis + hover * 0.6));
+        if (Glass.on() && !Glass.lite() && Glass.frostedCards()) {
+            // frosted glass card: the blurred wallpaper, a dark tint and a thin light border (the
+            // reference widgets)
+            Glass.surface(g, c, x, y, w, h, r, Math.min(1, emphasis * 0.4 + hover * 0.6));
             return;
         }
-        Glass.solid(g, x, y, w, h, r, hover, emphasis);
+        double level = Math.min(1, emphasis * 0.6 + hover * 0.8);
+        Color base = isLight() ? new Color(255, 255, 255, (int) (120 + 60 * level)) : new Color(255, 255, 255, (int) (9 + 12 * level));
+        fill(g, x, y, w, h, r, base);
+        // a hint of light on the top edge, fading out: depth without a border
+        Graphics2D t = (Graphics2D) g.create();
+        t.clip(new java.awt.Rectangle((int) x, (int) y, (int) Math.ceil(w), (int) Math.min(h, 2 + r)));
+        t.setPaint(new GradientPaint(0, (float) y, new Color(255, 255, 255, isLight() ? 90 : 22), 0, (float) (y + Math.min(h, 2 + r)), new Color(255, 255, 255, 0)));
+        t.setStroke(new BasicStroke(1f));
+        t.draw(new RoundRectangle2D.Double(x + 0.5, y + 0.5, w - 1, h - 1, r * 2 - 1, r * 2 - 1));
+        t.dispose();
+    }
+
+    /** Buttons, inputs and switches: a flat tinted shape, stronger on hover/focus. No outline. */
+    public static void chip(Graphics2D g, double x, double y, double w, double h, double r, double level) {
+        level = Math.max(0, Math.min(1, level));
+        Color c = isLight() ? new Color(0, 0, 0, (int) (12 + 16 * level)) : new Color(255, 255, 255, (int) (14 + 20 * level));
+        fill(g, x, y, w, h, r, c);
     }
 
     public static void stroke(Graphics2D g, double x, double y, double w, double h, double r, Color c, float width) {
@@ -299,5 +320,37 @@ public final class Theme {
         gl.scale(size / px, size / px);
         gl.drawImage(img, 0, 0, null);
         gl.dispose();
+    }
+
+    private static final java.util.Map<Object, java.awt.image.BufferedImage> ROUNDED = new java.util.WeakHashMap<>();
+
+    /**
+     * Draws a picture with smooth (anti-aliased) rounded corners. Clipping to a rounded shape
+     * leaves jagged corners in Java2D, so the corners are cut out of a cached copy instead.
+     * @param smooth bicubic scaling (photos, icons) or nearest (pixel art like skin faces)
+     */
+    public static void roundedImage(Graphics2D g, Image img, double x, double y, double w, double h, double arc, boolean smooth) {
+        if (img == null) return;
+        double scale = Math.max(1, g.getTransform().getScaleX());
+        int pw = Math.max(1, (int) Math.round(w * scale)), ph = Math.max(1, (int) Math.round(h * scale));
+        Object key = java.util.List.of(System.identityHashCode(img), pw, ph, (int) Math.round(arc * scale), smooth);
+        java.awt.image.BufferedImage out = ROUNDED.get(key);
+        if (out == null) {
+            out = new java.awt.image.BufferedImage(pw, ph, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            Graphics2D b = out.createGraphics();
+            b.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            b.fill(new RoundRectangle2D.Double(0, 0, pw, ph, arc * scale, arc * scale));
+            b.setComposite(AlphaComposite.SrcIn);
+            b.setRenderingHint(RenderingHints.KEY_INTERPOLATION, smooth ? RenderingHints.VALUE_INTERPOLATION_BICUBIC
+                    : RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            b.drawImage(img, 0, 0, pw, ph, null);
+            b.dispose();
+            if (ROUNDED.size() > 256) ROUNDED.clear();
+            ROUNDED.put(key, out);
+        }
+        Graphics2D d = (Graphics2D) g.create();
+        d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        d.drawImage(out, (int) Math.round(x), (int) Math.round(y), (int) Math.round(w), (int) Math.round(h), null);
+        d.dispose();
     }
 }

@@ -92,7 +92,7 @@ jobs:
         run: |
           shopt -s nullglob
           # never ship a launcher without Cobra Client inside
-          if ! unzip -l out/CobraLauncher-linux/cobra-launcher.jar | grep -q "bundled/cobra-client-1.21.11.jar"; then
+          if ! unzip -l out/CobraLauncher-linux/cobra-launcher.jar | grep "bundled/cobra-client-1.21.11.jar" >/dev/null; then
             echo "::error::Cobra Client didn't build, so nothing was published. See build/client-errors.txt in the linux artifact."
             exit 1
           fi

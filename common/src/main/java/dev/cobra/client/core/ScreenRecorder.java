@@ -116,7 +116,9 @@ public final class ScreenRecorder {
      */
     static synchronized String pickEncoder(String ffmpeg) {
         if (ffmpeg.equals(encoderCmd) && encoderFor != null) return encoderFor;
-        String[] order = {"libx264", "h264_nvenc", "h264_qsv", "h264_amf", "libopenh264", "mpeg4"};
+        // the graphics card's own encoder first: it records almost for free, so the game doesn't lag;
+        // then the CPU encoders (libx264 works everywhere but costs several CPU cores at 1080p60)
+        String[] order = {"h264_nvenc", "h264_amf", "h264_qsv", "h264_vaapi", "libx264", "libopenh264", "mpeg4"};
         String chosen = "mpeg4";
         for (String enc : order) {
             if (enc.equals("mpeg4") || works(ffmpeg, enc)) {
@@ -129,11 +131,31 @@ public final class ScreenRecorder {
         return chosen;
     }
 
+    /** Linux GPU encoder (AMD / Intel through VA-API): the render node, or null when there's none. */
+    static String vaapiDevice() {
+        File dri = new File("/dev/dri");
+        String[] n = dri.list();
+        if (n == null) return null;
+        java.util.Arrays.sort(n);
+        for (String f : n) if (f.startsWith("renderD")) return "/dev/dri/" + f;
+        return null;
+    }
+
     private static boolean works(String ffmpeg, String enc) {
         try {
-            Process p = new ProcessBuilder(ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-                    "color=c=black:s=256x144:r=30", "-frames:v", "5", "-c:v", enc, "-pix_fmt", "yuv420p", "-f", "null", "-")
-                    .redirectErrorStream(true).start();
+            List<String> test = new ArrayList<String>();
+            add(test, ffmpeg, "-hide_banner", "-loglevel", "error");
+            if (enc.equals("h264_vaapi")) {
+                String dev = vaapiDevice();
+                if (dev == null) return false;
+                add(test, "-vaapi_device", dev);
+            }
+            add(test, "-f", "lavfi", "-i", "color=c=black:s=256x144:r=30", "-frames:v", "5");
+            if (enc.equals("h264_vaapi")) add(test, "-vf", "format=nv12,hwupload");
+            add(test, "-c:v", enc);
+            if (!enc.equals("h264_vaapi")) add(test, "-pix_fmt", "yuv420p");
+            add(test, "-f", "null", "-");
+            Process p = new ProcessBuilder(test).redirectErrorStream(true).start();
             java.io.InputStream in = p.getInputStream();
             byte[] buf = new byte[4096];
             while (in.read(buf) > 0) { /* drain */ }
@@ -155,15 +177,16 @@ public final class ScreenRecorder {
         String crf = quality.equals("Small file") ? "28" : quality.equals("Balanced") ? "23" : "18";
         String preset = fps >= 120 ? "ultrafast" : fps >= 60 ? "superfast" : "veryfast";
         List<String> cmd = new ArrayList<String>();
-        String[] base = {ffmpegCmd, "-y", "-loglevel", "error",
-                "-f", "rawvideo", "-pix_fmt", "bgra", "-s", w + "x" + h, "-r", String.valueOf(fps), "-i", "-"};
-        for (String s : base) cmd.add(s);
-        // H.264 yuv420p requires even output dimensions, including native/window mode.
-        cmd.add("-vf");
-        cmd.add(scale.equals("1080p") ? "scale=-2:1080:flags=bicubic"
-                : "pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:black");
-        // H.264 MP4 with whatever encoder this ffmpeg has (Fedora's ffmpeg has no libx264, for example)
+        // H.264 MP4 with the best encoder this PC has (the GPU's own when possible)
         String encoder = pickEncoder(ffmpegCmd);
+        boolean vaapi = encoder.equals("h264_vaapi");
+        add(cmd, ffmpegCmd, "-y", "-loglevel", "error");
+        if (vaapi) add(cmd, "-vaapi_device", vaapiDevice());
+        add(cmd, "-f", "rawvideo", "-pix_fmt", "bgra", "-s", w + "x" + h, "-r", String.valueOf(fps), "-i", "-");
+        // H.264 needs even dimensions, including native/window mode; VA-API also needs the frames on the GPU
+        String vf = scale.equals("1080p") ? "scale=-2:1080:flags=fast_bilinear" : "pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:black";
+        cmd.add("-vf");
+        cmd.add(vaapi ? vf + ",format=nv12,hwupload" : vf);
         cmd.add("-c:v");
         cmd.add(encoder);
         int q = Integer.parseInt(crf);
@@ -171,6 +194,8 @@ public final class ScreenRecorder {
             add(cmd, "-preset", preset, "-crf", crf);
         } else if (encoder.endsWith("_nvenc")) {
             add(cmd, "-preset", "p2", "-rc", "vbr", "-cq", String.valueOf(q + 2));
+        } else if (vaapi) {
+            add(cmd, "-rc_mode", "CQP", "-qp", String.valueOf(q + 4));
         } else if (encoder.endsWith("_qsv")) {
             add(cmd, "-preset", "veryfast", "-global_quality", String.valueOf(q + 4));
         } else if (encoder.endsWith("_amf")) {
@@ -180,7 +205,8 @@ public final class ScreenRecorder {
         } else {                                   // mpeg4: works with every ffmpeg, still an .mp4
             add(cmd, "-q:v", q <= 18 ? "2" : q <= 23 ? "4" : "6");
         }
-        add(cmd, "-pix_fmt", "yuv420p", "-movflags", "+faststart", file.getAbsolutePath());
+        if (!vaapi) add(cmd, "-pix_fmt", "yuv420p");       // VA-API frames are already nv12 on the GPU
+        add(cmd, "-movflags", "+faststart", file.getAbsolutePath());
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.redirectErrorStream(true);
         // ffmpeg's log goes to the launcher's logs (not between your videos); kept only if it failed

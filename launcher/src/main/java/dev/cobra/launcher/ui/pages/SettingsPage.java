@@ -95,11 +95,14 @@ public final class SettingsPage extends Page {
                 }), 50),
                 new IconRow(),
                 new Row("Wallpaper dim", "Darkens the wallpaper so text stays readable (lightens in Light mode).", dim, 300)}));
+        Components.Segmented gui = new Components.Segmented(List.of("New", "Classic"), "classic".equals(s.launcherGui) ? 1 : 0,
+                i -> MainWindow.get().setLauncherGui(i == 1 ? "classic" : "new"));
         stack.add(new Section("Look", new Row[]{
+                new Row("Launcher GUI", "New: the dashboard with the round rail. Classic: the previous look with the wide side panel.", gui, 250),
                 new Row("Light mode", "Flips the palette: white surfaces, black text and buttons. Also used in game.", lightMode, 50),
                 new Row("Style", "Glass: clear panels with a shine. Solid: darker, more blurred panels, calmer to read.", style, 250),
-                new Row("Glass look", "Frosted: soft and calm. Liquid: clear glass that bends at the edges.", new Components.Segmented(
-                        List.of("Frosted", "Liquid"), "liquid".equals(s.glassLook) ? 1 : 0, i -> {
+                new Row("Glass look", "Clear: sharp glass that bends at the edges. Frosted: soft and calm.", new Components.Segmented(
+                        List.of("Frosted", "Clear"), "liquid".equals(s.glassLook) ? 1 : 0, i -> {
                             s.glassLook = i == 1 ? "liquid" : "frosted";
                             s.save();
                             Glass.invalidate();
@@ -128,6 +131,27 @@ public final class SettingsPage extends Page {
         }
 
         Components.Button importBtn = new Components.Button("Import", "download", Components.Variant.GHOST, SettingsPage::importProfile);
+        Components.Button lockBtn = new Components.Button(dev.cobra.launcher.core.AppLock.enabled() ? "Change" : "Set", "user", Components.Variant.GHOST, null);
+        Components.Button unlockBtn = new Components.Button("Remove", "close", Components.Variant.GHOST, null);
+        lockBtn.onClick(() -> LockScreen.showSetup(MainWindow.get().frame.getRootPane(), () -> {
+            lockBtn.setText("Change");
+            unlockBtn.setEnabled(dev.cobra.launcher.core.AppLock.enabled());
+        }));
+        unlockBtn.setEnabled(dev.cobra.launcher.core.AppLock.enabled());
+        unlockBtn.onClick(() -> {
+            try {
+                dev.cobra.launcher.core.AppLock.remove();
+            } catch (Exception ignored) {}
+            lockBtn.setText("Set");
+            unlockBtn.setEnabled(false);
+            MainWindow.get().toast("Password removed.");
+        });
+        JPanel lockBox = new JPanel(null);
+        lockBox.setOpaque(false);
+        lockBox.add(lockBtn);
+        lockBox.add(unlockBtn);
+        lockBtn.setBounds(0, 0, 110, 40);
+        unlockBtn.setBounds(118, 0, 112, 40);
         Components.Button updateBtn = new Components.Button("Update", "download", Components.Variant.PRIMARY, null);
         updateBtn.onClick(() -> {
             updateBtn.setEnabled(false);
@@ -141,6 +165,7 @@ public final class SettingsPage extends Page {
             }, "cobra-check-update").start();
         });
         stack.add(new Section("Launcher", new Row[]{
+                new Row("Launcher password", "Asked when Cobra Launcher opens, so nobody else on this PC can use it.", lockBox, 230),
                 new Row("Update to the newest", "Gets the latest Cobra Launcher and Client (build " + dev.cobra.launcher.core.Updater.BUILD
                         + "). It's used the next time you open the launcher.", updateBtn, 150),
                 new Row("Import a profile", "From Lunar, Dawn, Prism, MultiMC, Modrinth App, CurseForge, ATLauncher or Minecraft: options, mods, packs.", importBtn, 150),
@@ -350,7 +375,7 @@ public final class SettingsPage extends Page {
     @Override
     protected void paintComponent(Graphics g0) {
         Graphics2D g = Theme.aa(g0.create());
-        Theme.left(g, "Settings", Theme.font(Theme.BOLD, 30f), Theme.TEXT, 0, 0, 42);
+        Theme.left(g, "Settings", Theme.font(Theme.REGULAR, 34f), Theme.TEXT, 0, 0, 42);
         Theme.left(g, "Changes save automatically and apply the next time you launch.", Theme.font(Theme.REGULAR, 13.5f), Theme.SOFT, 0, 44, 22);
         g.dispose();
     }

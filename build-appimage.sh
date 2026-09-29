@@ -84,7 +84,7 @@ fi
 [[ -f "$JAR" ]] || die "Launcher jar not found at $JAR"
 
 # ---------------------------------------------------------------- report
-if unzip -l "$JAR" 2>/dev/null | grep -q "bundled/cobra-client-1.21.11.jar"; then
+if unzip -l "$JAR" 2>/dev/null | grep "bundled/cobra-client-1.21.11.jar" >/dev/null; then   # no -q: an early exit would SIGPIPE unzip and pipefail would call it a failure
     printf '\n\033[1;32m==> Cobra Client for 1.21.11: OK\033[0m (bundled in the launcher)\n'
 else
     printf '\n\033[1;31m==> Cobra Client for 1.21.11: FAILED to build\033[0m (the launcher still works, the game runs without Cobra)\n'

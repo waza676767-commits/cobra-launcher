@@ -91,12 +91,12 @@ public final class CobraMenu {
 
     // Black glass over the blurred game (light mode: white glass). Only ENABLED/DISABLED keep colour.
     private static int backdrop() { return Draw.light ? 0x38FFFFFF : 0x48000000; }
-    private static int panel() { return Draw.light ? 0x9EF7F7F8 : 0x8A0A0A0B; }
-    private static int panelLine() { return Draw.light ? 0x33000000 : 0x38FFFFFF; }
+    private static int panel() { return Draw.light ? 0x9EF7F7F8 : 0x70101012; }
+    private static int panelLine() { return Draw.light ? 0x40FFFFFF : 0x40FFFFFF; }
     private static int side() { return Draw.light ? 0x66FFFFFF : 0x55000000; }
-    private static int card() { return Draw.light ? 0x94FFFFFF : 0x70141416; }
-    private static int cardHov() { return Draw.light ? 0xD9FFFFFF : 0xA0262629; }
-    private static int line() { return Draw.light ? 0x22000000 : 0x2EFFFFFF; }
+    private static int card() { return Draw.light ? 0x94FFFFFF : 0x40000000; }
+    private static int cardHov() { return Draw.light ? 0xD9FFFFFF : 0x1CFFFFFF; }
+    private static int line() { return Draw.light ? 0x22000000 : 0x24FFFFFF; }
     private static int soft() { return Draw.light ? 0xFF505257 : 0xFFA8AAB0; }
     private static int muted() { return Draw.light ? 0xFF8C8E94 : 0xFF6C6E75; }
     /** Selection colour: white on dark, black on light. */
@@ -188,22 +188,30 @@ public final class CobraMenu {
         nx += Draw.spaced(r, "\u00a7lCOBRA", nx, py + 11, 0.8f, Draw.FG, false) + 5;
         Draw.spaced(r, "CLIENT", nx, py + 11, 0.8f, soft(), false);
         int tx = px + 150;
+        int trackW = 0;
+        for (int i = 0; i < TABS.length; i++) trackW += Draw.spacedWidth(r, TABS[i], 0.8f) + 16 + (i > 0 ? 2 : 0);
+        Draw.round(r, tx - 3, py + 5, trackW + 6, 19, 9, Draw.light ? 0x14000000 : 0x14FFFFFF);   // the track
+        for (int i = 0; i < TABS.length; i++) {
+            int w = Draw.spacedWidth(r, TABS[i], 0.8f) + 16;
+            if (tab == i) {  // the white thumb glides to the selected tab
+                if (tabLine < 0) {
+                    tabLine = tx;
+                    tabLineW = w;
+                }
+                tabLine = Draw.approach(tabLine, tx, 0.3f);
+                tabLineW = Draw.approach(tabLineW, w, 0.3f);
+            }
+            tx += w + 2;
+        }
+        Draw.round(r, Math.round(tabLine), py + 7, Math.round(tabLineW), 15, 7, accent());
+        tx = px + 150;
         for (int i = 0; i < TABS.length; i++) {
             int w = Draw.spacedWidth(r, TABS[i], 0.8f) + 16;
             boolean hov = in(mx, my, tx, py + 6, w, 17);
             boolean sel = tab == i;
-            Draw.spaced(r, TABS[i], tx + 8, py + 11, 0.8f, sel ? Draw.FG : hov ? Draw.mix(soft(), Draw.FG, 0.6f) : muted(), false);
-            if (sel) {       // underline glides to the selected tab
-                if (tabLine < 0) {
-                    tabLine = tx + 6;
-                    tabLineW = w - 12;
-                }
-                tabLine = Draw.approach(tabLine, tx + 6, 0.3f);
-                tabLineW = Draw.approach(tabLineW, w - 12, 0.3f);
-            }
-            tx += w + 5;
+            Draw.spaced(r, TABS[i], tx + 8, py + 11, 0.8f, sel ? onAccent() : hov ? Draw.FG : muted(), false);
+            tx += w + 2;
         }
-        Draw.round(r, Math.round(tabLine), py + 22, Math.round(tabLineW), 2, 1, accent());
         boolean hc = in(mx, my, px + pw - 23, py + 6, 17, 17);
         Draw.box(r, px + pw - 23, py + 6, 17, 17, 3, hc ? 0xFFC7404F : card(), hc ? 0xFFC7404F : line());
         r.texture("icon/close", px + pw - 19, py + 10, 9, 9, hc ? 0xFFFFFFFF : Draw.FG);
@@ -659,7 +667,7 @@ public final class CobraMenu {
                 scroll = scrollTarget = 0;
                 return true;
             }
-            tx += w + 5;
+            tx += w + 2;
         }
         if (tab == 0) {
             for (int i = 0; i < CHIPS.length; i++) {

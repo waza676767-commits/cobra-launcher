@@ -108,22 +108,15 @@ public final class Components {
                     fg = Theme.ON_ACCENT;
                 }
                 case DANGER -> {
-                    Theme.fill(g, 0, 0, w, ht, r, Theme.alpha(Theme.DANGER, 0.08 + 0.1 * h));
-                    Theme.stroke(g, 0, 0, w, ht, r, Theme.alpha(Theme.DANGER, 0.5 + 0.3 * h), 1f);
+                    Theme.fill(g, 0, 0, w, ht, r, Theme.alpha(Theme.DANGER, 0.14 + 0.12 * h));
                     fg = Theme.DANGER;
                 }
                 case SUBTLE -> {
-                    if (Glass.on()) Glass.surface(g, this, 0, 0, w, ht, r, h + (pressed ? 0.4 : 0));
-                    else Theme.fill(g, 0, 0, w, ht, r, Theme.mix(Theme.PANEL, Theme.RAISED, h + (pressed ? 0.4 : 0)));
+                    Theme.chip(g, 0, 0, w, ht, r, 0.2 + h * 0.8 + (pressed ? 0.3 : 0));
                     fg = Theme.TEXT;
                 }
                 default -> {
-                    if (Glass.on()) {
-                        Glass.surface(g, this, 0, 0, w, ht, r, 0.3 + 0.5 * h + (pressed ? 0.2 : 0));
-                    } else {
-                        Theme.fill(g, 0, 0, w, ht, r, Theme.alpha(Theme.TEXT, 0.02 + 0.05 * h + (pressed ? 0.05 : 0)));
-                        Theme.stroke(g, 0, 0, w, ht, r, Theme.mix(Theme.LINE_2, Theme.MUTED, h), 1f);
-                    }
+                    Theme.chip(g, 0, 0, w, ht, r, h * 0.8 + (pressed ? 0.3 : 0));
                     fg = Theme.TEXT;
                 }
             }
@@ -198,8 +191,8 @@ public final class Components {
             Graphics2D g = Theme.aa(g0.create());
             double t = pos.get();
             double w = 46, h = 26, x = (getWidth() - w) / 2.0, y = (getHeight() - h) / 2.0;
+            Theme.chip(g, x, y, w, h, h / 2, 0.35 + 0.4 * hover.get());          // off: a soft track, no ring
             Theme.fill(g, x, y, w, h, h / 2, Theme.alpha(Theme.ACCENT, t));
-            Theme.stroke(g, x, y, w, h, h / 2, Theme.mix(Theme.mix(Theme.MUTED, Theme.SOFT, hover.get()), Theme.TEXT, t), 1.6f);
             double k = h - 8;
             double kx = x + 4 + (w - 8 - k) * t;
             g.setColor(Theme.mix(Theme.TEXT, Theme.ON_ACCENT, t));
@@ -308,12 +301,8 @@ public final class Components {
             setSelectedTextColor(Theme.TEXT);
             Graphics2D g = Theme.aa(g0.create());
             int w = getWidth(), h = getHeight();
-            if (Glass.on()) {
-                Glass.surface(g, this, 0, 0, w, h, 12, 0.2 + 0.6 * focus.get());
-            } else {
-                Theme.fill(g, 0, 0, w, h, 12, Theme.PANEL);
-                Theme.stroke(g, 0, 0, w, h, 12, Theme.mix(Theme.LINE_2, Theme.SOFT, focus.get()), 1f);
-            }
+            Theme.chip(g, 0, 0, w, h, 12, 0.15 + 0.4 * focus.get());
+            if (focus.get() > 0.01) Theme.stroke(g, 0.5, 0.5, w - 1, h - 1, 11.5, Theme.alpha(Theme.ACCENT, 0.55 * focus.get()), 1.2f);   // focus ring only
             if (icon != null) Icons.paint(g, icon, 14, (h - 17) / 2.0, 17, Theme.SOFT);
             if (getText().isEmpty() && placeholder != null) {
                 Theme.left(g, placeholder, getFont(), Theme.MUTED, getInsets().left, 0, h);
@@ -378,11 +367,7 @@ public final class Components {
         protected void paintComponent(Graphics g0) {
             Graphics2D g = Theme.aa(g0.create());
             int w = getWidth(), h = getHeight();
-            if (Glass.on()) Glass.surface(g, this, 0, 0, w, h, h / 2.0, 0.2);
-            else {
-                Theme.fill(g, 0, 0, w, h, h / 2.0, Theme.PANEL);
-                Theme.stroke(g, 0, 0, w, h, h / 2.0, Theme.LINE, 1f);
-            }
+            Theme.chip(g, 0, 0, w, h, h / 2.0, 0.1);
             double seg = (w - 8) / (double) options.size();
             Theme.fill(g, 4 + seg * slide.get(), 4, seg, h - 8, (h - 8) / 2.0, Theme.ACCENT);
             for (int i = 0; i < options.size(); i++) {
@@ -414,12 +399,7 @@ public final class Components {
         @Override
         protected void paintComponent(Graphics g0) {
             Graphics2D g = Theme.aa(g0.create());
-            if (Glass.on()) {
-                Glass.surface(g, this, 0, 0, getWidth(), getHeight(), radius, solid ? 0.5 : 0);
-            } else {
-                Theme.fill(g, 0, 0, getWidth(), getHeight(), radius, solid ? Theme.mix(Theme.PANEL, Theme.BLACK, 0.3) : Theme.alpha(Theme.PANEL, 0.72));
-                Theme.stroke(g, 0, 0, getWidth(), getHeight(), radius, solid ? Theme.LINE_2 : Theme.LINE, 1f);
-            }
+            Theme.surface(g, this, 0, 0, getWidth(), getHeight(), radius, 0, solid ? 0.6 : 0.2);
             g.dispose();
         }
     }

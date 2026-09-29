@@ -43,7 +43,13 @@ public final class MainWindow {
     private final Root root = new Root();
     private final TitleBar titleBar = new TitleBar();
     private final List<Page> pages = new ArrayList<>();
-    private final Sidebar sidebar;
+    private final Rail sidebar;
+    /** The previous look (Settings → Launcher GUI → Classic): the wide side panel. */
+    private final Sidebar classicBar;
+
+    public static boolean classic() {
+        return "classic".equals(dev.cobra.launcher.core.Settings.get().launcherGui);
+    }
     private final PageHost host = new PageHost();
     private final Overlays.Launch launchOverlay = new Overlays.Launch();
     private final Overlays.Login login = new Overlays.Login();
@@ -77,7 +83,8 @@ public final class MainWindow {
         pages.add(new dev.cobra.launcher.ui.pages.ProfilesPage());
         pages.add(new dev.cobra.launcher.ui.pages.RecordingsPage());
         pages.add(new dev.cobra.launcher.ui.pages.LogsPage());
-        sidebar = new Sidebar(pages, settings.sidebarExpanded, this::showPage, () -> { root.doLayout(); root.repaint(); });
+        sidebar = new Rail(pages, this::showPage);
+        classicBar = new Sidebar(pages, true, this::showPage, () -> { root.doLayout(); root.repaint(); });
 
         translucent = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice()
                 .isWindowTranslucencySupported(GraphicsDevice.WindowTranslucency.PERPIXEL_TRANSPARENT);
@@ -90,6 +97,7 @@ public final class MainWindow {
 
         root.add(titleBar);
         root.add(sidebar);
+        root.add(classicBar);
         root.add(host);
         for (Page p : pages) {
             p.setVisible(false);
@@ -137,6 +145,10 @@ public final class MainWindow {
         Theme.setLight(settings.lightMode);
         frame.setVisible(true);
         applyShape();
+        LockScreen.showIfLocked(frame.getRootPane(), () -> new Timer(500, e -> {   // password first (if set)
+            ((Timer) e.getSource()).stop();
+            betaNotice();
+        }).start());
     }
 
     /** Rounded corners without a translucent window: a window shape keeps the content pane opaque,
@@ -180,6 +192,8 @@ public final class MainWindow {
 
     public void showPage(int i) {
         sidebar.setSelected(i);
+        classicBar.setSelected(i);
+        SwingUtilities.invokeLater(() -> { root.doLayout(); root.repaint(); });   // Home uses the full frame
         root.repaint();   // the glass sheet behind pages shows/hides with Home
         Page from = null;
         for (Page p : pages) if (p.isVisible()) from = p;
@@ -199,6 +213,10 @@ public final class MainWindow {
     }
 
     public void openSettings() { showPage(4); }
+
+    public int pageCount() { return pages.size(); }
+
+    public String pageTitle(int i) { return pages.get(i).title(); }
 
     // ------------------------------------------------------------ state
 
@@ -236,6 +254,20 @@ public final class MainWindow {
                 sidebar.repaint();
             }
         });
+    }
+
+    /** Settings → Launcher GUI: the new dashboard or the previous look. */
+    public void setLauncherGui(String gui) {
+        settings.launcherGui = gui;
+        settings.save();
+        Glass.invalidate();
+        root.doLayout();
+        for (Page p : pages) {
+            p.doLayout();
+            p.repaint();
+        }
+        titleBar.doLayout();
+        frame.repaint();
     }
 
     public void setStyle(String style) {
@@ -390,6 +422,32 @@ public final class MainWindow {
         toast(on ? "More optimization on: plain colours, no blur, no animations." : "More optimization off: your look is back.");
     }
 
+    /** First start: the beta notice (shown once). */
+    private void betaNotice() {
+        if (settings.betaNoticeSeen) return;
+        choice.askMarked("Warning",
+                "This client is still in the beta version. If you experience any bug, please report it to lucawascookin.\n"
+                        + "Cobra Launcher used some artificial intelligence for some of the code!\n"
+                        + "Shoutout to Mili, mrgetpeaced, initialls, kris, and everyone else for helping me out.",
+                "lucawascookin", java.util.List.of("Got it"), 0, i -> {
+                    settings.betaNoticeSeen = true;
+                    settings.save();
+                    passwordQuestion();
+                });
+    }
+
+    /** First start, after the notice: would you like a password? */
+    private void passwordQuestion() {
+        if (settings.passwordAsked || dev.cobra.launcher.core.AppLock.enabled()) return;
+        settings.passwordAsked = true;
+        settings.save();
+        SwingUtilities.invokeLater(() -> choice.ask("Set a password?",
+                "You can protect Cobra Launcher with a password, so nobody else on this PC can open it. You can change this later in Settings.",
+                java.util.List.of("Set a password", "No thanks"), 0, i -> {
+                    if (i == 0) LockScreen.showSetup(frame.getRootPane(), null);
+                }));
+    }
+
     /** Asks a question with one button per option; {@code onPick} gets the option's index. */
     public void ask(String title, String body, java.util.List<String> options, int primary, java.util.function.IntConsumer onPick) {
         choice.ask(title, body, options, primary, onPick);
@@ -456,11 +514,7 @@ public final class MainWindow {
             Icons.paint(g, "user", x + size * 0.18, y + size * 0.18, size * 0.64, Theme.SOFT);
             return;
         }
-        Graphics2D g2 = (Graphics2D) g.create();
-        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-        g2.setClip(new RoundRectangle2D.Double(x, y, size, size, size * 0.56, size * 0.56));
-        g2.drawImage(face, x, y, size, size, null);
-        g2.dispose();
+        Theme.roundedImage(g, face, x, y, size, size, size * 0.56, false);
     }
 
     // ------------------------------------------------------------ popups & toasts
@@ -641,6 +695,9 @@ public final class MainWindow {
 
     // ================================================================ parts
 
+    /** Gap between the window edge and the frame. */
+    static final int FRAME = 8;
+
     private final class Root extends JPanel {
         private BufferedImage bg, scrim;
         private boolean bgLight, scrimLight;
@@ -677,12 +734,26 @@ public final class MainWindow {
         @Override
         public void doLayout() {
             int w = getWidth(), h = getHeight();
-            titleBar.setBounds(0, 0, w, 58);
-            int sw = sidebar.currentWidth();
-            sidebar.setBounds(16, 62, sw, h - 78);
-            int x = 16 + sw + 28;
-            if (Glass.on()) host.setBounds(x, 76, w - x - 34, h - 76 - 30);   // inside the glass sheet
-            else host.setBounds(x, 62, w - x - 28, h - 62 - 20);
+            boolean old = classic();
+            sidebar.setVisible(!old);
+            classicBar.setVisible(old);
+            if (old) {                                  // the previous layout
+                titleBar.setBounds(0, 0, w, 58);
+                int sw = classicBar.currentWidth();
+                classicBar.setBounds(16, 62, sw, h - 78);
+                int x = 16 + sw + 28;
+                host.setBounds(x, 76, w - x - 34, h - 76 - 30);
+                host.doLayout();
+                return;
+            }
+            // one frame with a rail on the left; the title pill (clock, account, window buttons) top right
+            int in = FRAME + 12;
+            sidebar.setBounds(in, in, Rail.WIDTH, h - 2 * in);
+            int x = in + Rail.WIDTH + 12;
+            titleBar.setBounds(x, in, w - x - in, 48);
+            boolean home = pages.get(0).isVisible();
+            if (home) host.setBounds(x, in, w - x - in, h - 2 * in);              // Home arranges itself round the pill
+            else host.setBounds(x + 6, in + 62, w - x - in - 12, h - 2 * in - 68);
             host.doLayout();
         }
 
@@ -701,10 +772,15 @@ public final class MainWindow {
             if (Glass.on()) {
                 Glass.paintBackground(g, w, h);
                 if (Wallpaper.active() && !Glass.lite()) g.drawImage(scrim(w, h), 0, 0, null);
-                // one big glass sheet behind every page except Home, so text never sits on a busy wallpaper
-                if (!pages.get(0).isVisible() && host.getWidth() > 0) {
-                    int sx = sidebar.getX() + sidebar.getWidth() + 10;
-                    Glass.surface(g, this, sx, 62, w - 16 - sx, h - 16 - 62, 26, 0);
+                if (classic()) {
+                    // previous look: one glass sheet behind every page except Home
+                    if (!pages.get(0).isVisible() && host.getWidth() > 0) {
+                        int sx = classicBar.getX() + classicBar.getWidth() + 10;
+                        Glass.surface(g, this, sx, 62, w - 16 - sx, h - 16 - 62, 26, 0);
+                    }
+                } else {
+                    // the frame: one sheet of glass over the wallpaper, holding the rail and the cards
+                    Glass.surface(g, this, FRAME, FRAME, w - 2 * FRAME, h - 2 * FRAME, 30, 0);
                 }
                 Theme.stroke(g, 0, 0, w, h, translucent ? 14 : 0, Theme.alpha(Theme.TEXT, 0.12), 1f);
                 g.dispose();
@@ -766,20 +842,32 @@ public final class MainWindow {
             addMouseMotionListener(m);
         }
 
+        /** Width of the pill on the right (Home lines its right column up with it). */
+        static final int PILL = 380;
+
         @Override
         public void doLayout() {
             int w = getWidth();
-            close.setBounds(w - 50, 14, 34, 34);
-            min.setBounds(w - 88, 14, 34, 34);
             int cw = chip.getPreferredSize().width;
-            chip.setBounds(w - 104 - cw, 13, cw, 36);
-            clock.setBounds(w - 104 - cw - 18 - 150, 11, 150, 40);
+            if (classic()) {
+                close.setBounds(w - 50, 14, 34, 34);
+                min.setBounds(w - 88, 14, 34, 34);
+                chip.setBounds(w - 104 - cw, 13, cw, 36);
+                clock.setBounds(w - 104 - cw - 18 - 150, 11, 150, 40);
+                return;
+            }
+            close.setBounds(w - 42, 7, 34, 34);
+            min.setBounds(w - 78, 7, 34, 34);
+            chip.setBounds(w - 92 - cw, 6, cw, 36);
+            clock.setBounds(w - PILL + 16, 4, 150, 40);
         }
 
         @Override
         protected void paintComponent(Graphics g0) {
             Graphics2D g = Theme.aa(g0.create());
-            Theme.left(g, "Cobra Launcher", Theme.font(Theme.MEDIUM, 13f), Theme.MUTED, 28, 14, 34);
+            int w = getWidth();
+            if (classic()) Theme.left(g, "Cobra Launcher", Theme.font(Theme.MEDIUM, 13f), Theme.MUTED, 28, 14, 34);
+            else Theme.surface(g, this, w - PILL, 0, PILL, 48, 24, 0, 0.6);   // the top-right pill
             g.dispose();
         }
     }

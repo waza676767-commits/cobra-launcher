@@ -16,13 +16,44 @@ public final class Anim {
     private static void tick() {
         long now = System.nanoTime();
         for (Tween t : ACTIVE) t.step(now);
+        // push the last frame to the screen now (X11 queues drawing): steadier motion, no bunching
+        Toolkit.getDefaultToolkit().sync();
         if (ACTIVE.isEmpty()) TIMER.stop();
     }
 
-    /** Exponential ease toward a target, or a timed ease when {@link #over(double, long)} is used. */
+    /**
+     * The curve iOS uses for most of its transitions (a smooth, confident ease-out): fast at the
+     * start, gently settling at the end. Approximates cubic-bezier(0.32, 0.72, 0, 1).
+     */
+    public static double iosEase(double p) {
+        if (p <= 0) return 0;
+        if (p >= 1) return 1;
+        // solve the bezier for t by a few Newton steps, then evaluate y
+        double x1 = 0.32, y1 = 0.72, x2 = 0, y2 = 1, t = p;
+        for (int i = 0; i < 6; i++) {
+            double x = bez(t, x1, x2) - p, dx = bezD(t, x1, x2);
+            if (Math.abs(dx) < 1e-6) break;
+            t -= x / dx;
+            t = Math.max(0, Math.min(1, t));
+        }
+        return bez(t, y1, y2);
+    }
+
+    private static double bez(double t, double a, double b) {
+        double u = 1 - t;
+        return 3 * u * u * t * a + 3 * u * t * t * b + t * t * t;
+    }
+
+    private static double bezD(double t, double a, double b) {
+        double u = 1 - t;
+        return 3 * u * u * a + 6 * u * t * (b - a) + 3 * t * t * (1 - b);
+    }
+
+    /** A spring toward a target (iOS-like), or a timed iOS ease when {@link #over(double, long)} is used. */
     public static final class Tween {
         private final Component owner;
         private double value, target, from;
+        private double velocity;                 // for the spring
         private double rate = 14; // per second
         private long startNs, durationNs;
         private Runnable onDone;
@@ -59,6 +90,7 @@ public final class Anim {
 
         public void set(double v) {
             value = target = v;
+            velocity = 0;
             ACTIVE.remove(this);
             repaint();
         }
@@ -86,17 +118,28 @@ public final class Anim {
             boolean done;
             if (durationNs > 0) {
                 double p = Math.min(1, (now - startNs) / (double) durationNs);
-                double e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+                double e = iosEase(p);
                 value = from + (target - from) * e;
                 done = p >= 1;
             } else {
-                double dt = (now - lastNs) / 1e9;
-                value += (target - value) * (1 - Math.exp(-rate * dt));
-                done = Math.abs(target - value) < 0.002;
+                // iOS-style spring: a quick start, a soft landing with a hint of overshoot. Stiffness
+                // comes from the old rate so every animation keeps its speed; damping 0.82 of critical.
+                double dt = Math.min(0.05, (now - lastNs) / 1e9);
+                double omega = rate * 0.9, zeta = 0.82;
+                int steps = Math.max(1, (int) Math.ceil(dt / 0.004));  // small steps: stable at any frame rate
+                double h = dt / steps;
+                for (int i = 0; i < steps; i++) {
+                    double accel = omega * omega * (target - value) - 2 * zeta * omega * velocity;
+                    velocity += accel * h;
+                    value += velocity * h;
+                }
+                double span = Math.max(1e-6, Math.abs(target - from));
+                done = Math.abs(target - value) < 0.0015 * Math.max(1, span) && Math.abs(velocity) < 0.01 * Math.max(1, span);
             }
             lastNs = now;
             if (done) {
                 value = target;
+                velocity = 0;
                 ACTIVE.remove(this);
             }
             repaint();

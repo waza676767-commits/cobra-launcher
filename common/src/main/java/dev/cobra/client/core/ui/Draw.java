@@ -181,4 +181,27 @@ public final class Draw {
         if (Math.abs(d) < 0.01f) return target;
         return cur + d * speed;
     }
+
+    /**
+     * Liquid Glass panel for HUD elements, built from plain GUI fills so it costs next to nothing:
+     * a soft floating shadow, a see-through tint (your background colour), a lighter top half for
+     * depth, and a 1 px specular edge along the top and left like light catching glass.
+     */
+    public static void glassPanel(Render r, int x, int y, int w, int h, int radius, int tint) {
+        if (w <= 0 || h <= 0) return;
+        // floating shadow: three widening, fading layers, offset down
+        for (int i = 3; i >= 1; i--) {
+            round(r, x - i + 1, y - i + 3, w + 2 * i - 2, h + 2 * i - 2, radius + i, (0x10 + 4 * (3 - i)) << 24);
+        }
+        int a = tint >>> 24;
+        int base = (Math.max(0x30, Math.min(0xB0, a)) << 24) | (tint & 0xFFFFFF);
+        round(r, x, y, w, h, radius, base);
+        // depth: the top half a touch lighter, the bottom edge a touch darker
+        int top = Math.max(1, h / 2);
+        round(r, x, y, w, top, radius, 0x14FFFFFF);
+        r.rect(x + radius, y + h - 1, Math.max(0, w - 2 * radius), 1, 0x33000000);
+        // specular edge
+        r.rect(x + radius, y, Math.max(0, w - 2 * radius), 1, light ? 0xBFFFFFFF : 0x40FFFFFF);
+        r.rect(x, y + radius, 1, Math.max(0, h / 2 - radius), light ? 0x80FFFFFF : 0x26FFFFFF);
+    }
 }

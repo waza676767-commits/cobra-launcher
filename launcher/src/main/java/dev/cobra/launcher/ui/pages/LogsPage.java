@@ -85,7 +85,7 @@ public final class LogsPage extends Page {
     @Override
     protected void paintComponent(Graphics g0) {
         Graphics2D g = Theme.aa(g0.create());
-        Theme.left(g, title(), Theme.font(Theme.BOLD, 30f), Theme.TEXT, 0, 0, 42);
+        Theme.left(g, title(), Theme.font(Theme.REGULAR, 34f), Theme.TEXT, 0, 0, 42);
         Theme.left(g, "Game logs and crash reports of every profile. Read them here or open the folder.",
                 Theme.font(Theme.REGULAR, 13.5f), Theme.SOFT, 0, 44, 22);
         g.dispose();

@@ -87,7 +87,7 @@ public final class RecordingsPage extends Page {
     @Override
     protected void paintComponent(Graphics g0) {
         Graphics2D g = Theme.aa(g0.create());
-        Theme.left(g, title(), Theme.font(Theme.BOLD, 30f), Theme.TEXT, 0, 0, 42);
+        Theme.left(g, title(), Theme.font(Theme.REGULAR, 34f), Theme.TEXT, 0, 0, 42);
         Theme.left(g, "Screen Recorder in game: turn it on in Cobra's modules, then F9 start, F10 pause, F12 stop (changeable).",
                 Theme.font(Theme.REGULAR, 13.5f), Theme.SOFT, 0, 44, 22);
         g.dispose();

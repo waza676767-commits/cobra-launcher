@@ -14,10 +14,7 @@ public final class ProfileArt {
         double r = size * 0.3;
         Shape shape = new RoundRectangle2D.Double(x, y, size, size, r * 2, r * 2);
         if (img != null) {
-            Shape before = g.getClip();                 // keep the caller's clip (the sidebar's profile area)
-            g.clip(shape);
-            g.drawImage(img, (int) x, (int) y, (int) size, (int) size, null);
-            g.setClip(before);
+            Theme.roundedImage(g, img, x, y, size, size, r * 2, true);   // smooth corners
         } else {
             int seed = Math.abs(name.hashCode());
             Color a = Theme.mix(Theme.PANEL, Theme.TEXT, 0.18 + (seed % 5) * 0.05);

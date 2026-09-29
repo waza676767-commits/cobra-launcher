@@ -52,7 +52,22 @@ public final class FabricPlatform implements Platform {
     @Override public File gameDir() { return mc.runDirectory; }
     @Override public boolean inWorld() { return mc.player != null && mc.world != null; }
     @Override public boolean screenOpen() { return mc.currentScreen != null; }
-    @Override public boolean hudHidden() { return mc.options.hudHidden || mc.getDebugHud().shouldShowDebugHud(); }
+    /**
+     * F1 hides the HUD. F3 only hides it while the real debug screen is open (and only if you want
+     * that): since 1.21.9 "always on" debug views such as hitboxes (F3+B) and chunk borders (F3+G)
+     * make shouldShowDebugHud() true too, which used to make the whole Cobra HUD vanish.
+     */
+    @Override
+    public boolean hudHidden() {
+        if (mc.options.hudHidden) return true;
+        boolean f3Screen;
+        try {
+            f3Screen = mc.debugHudEntryList.isF3Enabled();
+        } catch (Throwable t) {
+            f3Screen = false;
+        }
+        return f3Screen && dev.cobra.client.core.Cobra.get(dev.cobra.client.core.module.Features.Client.class).hideHudOnF3.on();
+    }
     @Override public int fps() { return mc.getCurrentFps(); }
 
     @Override

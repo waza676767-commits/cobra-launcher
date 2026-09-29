@@ -52,7 +52,7 @@ public final class AccessoriesPage extends Page {
     @Override
     protected void paintComponent(Graphics g0) {
         Graphics2D g = Theme.aa(g0.create());
-        Theme.left(g, "Accessories", Theme.font(Theme.BOLD, 30f), Theme.TEXT, 0, 0, 42);
+        Theme.left(g, "Accessories", Theme.font(Theme.REGULAR, 34f), Theme.TEXT, 0, 0, 42);
         Theme.left(g, "Your skins and capes. Click one to wear it in Cobra Client; add more from files, player names or NameMC.",
                 Theme.font(Theme.REGULAR, 13.5f), Theme.SOFT, 0, 44, 22);
         g.dispose();
@@ -309,7 +309,7 @@ public final class AccessoriesPage extends Page {
     }
 
     /** Front view of the skin: head, body, arms, legs, with the outer layer on top. */
-    private static void drawSkin(Graphics2D g0, BufferedImage s, boolean slim, Rectangle area) {
+    static void drawSkin(Graphics2D g0, BufferedImage s, boolean slim, Rectangle area) {
         Graphics2D g = (Graphics2D) g0.create();
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
         int u = Math.max(2, Math.min(area.width / 18, area.height / 34));

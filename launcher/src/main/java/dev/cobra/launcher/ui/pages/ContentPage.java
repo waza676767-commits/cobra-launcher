@@ -139,7 +139,7 @@ public final class ContentPage extends Page {
     @Override
     protected void paintComponent(Graphics g0) {
         Graphics2D g = Theme.aa(g0.create());
-        Theme.left(g, title(), Theme.font(Theme.BOLD, 30f), Theme.TEXT, 0, 0, 42);
+        Theme.left(g, title(), Theme.font(Theme.REGULAR, 34f), Theme.TEXT, 0, 0, 42);
         GameVersion v = version();
         String sub = (kind == Modrinth.Kind.MODS ? "Mods" : "Packs") + " in profile \"" + dev.cobra.launcher.core.Profiles.current().name
                 + "\" for " + v.id + " (" + v.loaderName + "). Drop files anywhere here to add them.";
@@ -300,11 +300,7 @@ public final class ContentPage extends Page {
 
     private static void drawBadge(Graphics2D g, BufferedImage icon, String name, int x, int y, int s) {
         if (icon != null) {
-            Graphics2D gi = (Graphics2D) g.create();
-            gi.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-            gi.setClip(new java.awt.geom.RoundRectangle2D.Double(x, y, s, s, 20, 20));
-            gi.drawImage(icon, x, y, s, s, null);
-            gi.dispose();
+            Theme.roundedImage(g, icon, x, y, s, s, 20, true);
             return;
         }
         Theme.fill(g, x, y, s, s, 10, new GradientPaint(x, y, Theme.MID, x, y + s, Theme.RAISED));

@@ -48,6 +48,16 @@ public final class Settings {
     public int gradientStrength = 45;
     /** Super optimization (Vulkan): VulkanMod + companions added to your profiles; off removes them. */
     public boolean superOptimization = false;
+    /** The beta warning was shown (first start). */
+    public boolean betaNoticeSeen = false;
+    /** The first-start "set a password?" question was asked. */
+    public boolean passwordAsked = false;
+    /** "new" (dashboard with the rail) or "classic" (the previous look with the wide side panel). */
+    public String launcherGui = "new";
+    /** Home cards you hid ("profiles", "skins", "quick"). */
+    public java.util.Set<String> homeHidden = new java.util.HashSet<>();
+    /** Profile categories (e.g. "PvP"), in the order they're shown. */
+    public java.util.List<String> profileCategories = new java.util.ArrayList<>();
     /** More optimization: plain panels, single-colour background, no blur, no animations. */
     public boolean moreOptimization = false;
     public Boolean savedAnimationsLite;
@@ -55,7 +65,7 @@ public final class Settings {
     public String savedStyle, savedGlassLook;
     public Boolean savedAnimations;
     /** Glass look: "frosted" (soft blur, calm, no bending; default) or "liquid" (clear, bends at the rim). */
-    public String glassLook = "frosted";
+    public String glassLook = "frosted";   // "frosted" (default, like the reference widgets) or "liquid" (Clear)
     /** Discord Rich Presence: show "Playing Cobra Client" on your Discord profile. */
     public boolean discordRpc = true;
     /** Show the server address (e.g. "On mc.eclypse.net") in the Discord status. */

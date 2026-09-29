@@ -66,9 +66,9 @@ public final class Overlays {
             Graphics2D g = Theme.aa(g0.create());
             double a = fade.get();
             int w = getWidth(), h = getHeight();
-            g.setClip(new RoundRectangle2D.Double(0, 0, w, h, 28, 28));
             g.setColor(Theme.alpha(Theme.BLACK, 0.94 * a));
-            g.fillRect(0, 0, w, h);
+            g.fill(new RoundRectangle2D.Double(0, 0, w, h, 28, 28));   // anti-aliased corners
+            g.clip(new Rectangle(0, 0, w, h));
             double cx = w / 2.0, cy = h / 2.0 - 24;
             // soft halo behind the logo
             float[] fr = {0f, 1f};
@@ -616,19 +616,24 @@ public final class Overlays {
 
     /** Word-wrapped text; returns the y just below the last line. */
     private static int drawWrapped(Graphics2D g, String text, int x, int y, int w, Color color) {
+        return drawRich(g, text, x, y, w, color, null, null);
+    }
+
+    /** Wrapped text; any word containing {@code mark} is drawn in {@code markColor} (e.g. a name in red). */
+    private static int drawRich(Graphics2D g, String text, int x, int y, int w, Color color, String mark, Color markColor) {
         FontMetrics fm = g.getFontMetrics();
-        g.setColor(color);
-        StringBuilder line = new StringBuilder();
-        int yy = y + fm.getAscent();
+        int space = fm.stringWidth(" ");
+        int cx = x, yy = y + fm.getAscent();
         for (String word : text.split(" ")) {
-            if (fm.stringWidth(line + word) > w && line.length() > 0) {
-                g.drawString(line.toString().trim(), x, yy);
+            int ww = fm.stringWidth(word);
+            if (cx > x && cx + ww > x + w) {
+                cx = x;
                 yy += fm.getHeight() + 2;
-                line.setLength(0);
             }
-            line.append(word).append(' ');
+            g.setColor(mark != null && word.contains(mark) ? markColor : color);
+            g.drawString(word, cx, yy);
+            cx += ww + space;
         }
-        g.drawString(line.toString().trim(), x, yy);
         return yy + fm.getDescent();
     }
 
@@ -640,6 +645,8 @@ public final class Overlays {
      */
     public static final class Choice extends Modal {
         private String title = "", body = "";
+        /** A word drawn in red in the body (the beta notice's contact name), or null. */
+        private String red;
         private final JPanel list = new JPanel(null);
         private final JScrollPane scroll;
         private final Components.Button cancel;
@@ -673,6 +680,8 @@ public final class Overlays {
             this.title = title;
             this.body = body;
             this.onPick = onPick;
+            this.red = null;
+            cancel.setVisible(true);
             list.removeAll();
             count = options.size();
             for (int i = 0; i < options.size(); i++) {
@@ -690,12 +699,20 @@ public final class Overlays {
             repaint();
         }
 
+        /** Like ask(), with one word in the text shown in red. */
+        public void askMarked(String title, String body, String redWord, java.util.List<String> options, int primary, java.util.function.IntConsumer onPick) {
+            ask(title, body, options, primary, onPick);
+            this.red = redWord;
+            cancel.setVisible(false);
+            repaint();
+        }
+
         @Override
         Rectangle card() {
             int w = 480;
             int textH = 40 + 20 * Math.max(1, (body.length() / 52) + body.split("\n").length);
             int listH = Math.min(count, 6) * 50;
-            int h = Math.min(getHeight() - 40, 70 + textH + listH + 64);
+            int h = Math.min(getHeight() - 40, 70 + textH + listH + (cancel.isVisible() ? 64 : 14));
             return new Rectangle((getWidth() - w) / 2, (getHeight() - h) / 2, w, h);
         }
 
@@ -705,7 +722,7 @@ public final class Overlays {
             int x = c.x + 28, bw = c.width - 56;
             int textH = 40 + 20 * Math.max(1, (body.length() / 52) + body.split("\n").length);
             int top = c.y + 30 + textH;
-            int listH = c.y + c.height - 64 - top;
+            int listH = c.y + c.height - (cancel.isVisible() ? 64 : 14) - top;
             scroll.setBounds(x, top, bw, Math.max(0, listH));
             for (int i = 0; i < list.getComponentCount(); i++) list.getComponent(i).setBounds(0, i * 50, bw - (count > 6 ? 12 : 0), 42);
             list.setPreferredSize(new Dimension(bw - 12, count * 50));
@@ -722,7 +739,7 @@ public final class Overlays {
             g.setFont(Theme.font(Theme.REGULAR, 13.5f));
             int y = c.y + 70;
             for (String para : body.split("\n")) {
-                y = drawWrapped(g, para, c.x + 28, y, c.width - 56, Theme.SOFT) + 6;
+                y = drawRich(g, para, c.x + 28, y, c.width - 56, Theme.SOFT, red, new Color(0xFF4D4D)) + 8;
             }
             g.dispose();
         }
