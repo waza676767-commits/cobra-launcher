@@ -97,6 +97,76 @@ public final class HudModules {
         @Override public void draw(Render r, boolean editing) { textBox(r, p().fps() + " FPS"); }
     }
 
+    /** Hunger and saturation (the hidden food bar) as numbers. */
+    public static final class Saturation extends HudModule {
+        private final Setting.Bool hunger = add(new Setting.Bool("hunger", "Show hunger too", true));
+
+        public Saturation() { super("saturation", "Saturation", "Your hidden saturation (and hunger) as numbers", false, 0.72f, 0.86f); }
+
+        @Override
+        public void draw(Render r, boolean editing) {
+            float sat = p().saturation();
+            int food = p().food();
+            if (sat < 0 && !editing) {
+                w = h = 0;
+                return;
+            }
+            if (sat < 0) {
+                sat = 5.2f;
+                food = 18;
+            }
+            String t = (hunger.on() ? "Food " + food + "  " : "") + "Saturation " + String.format(java.util.Locale.ROOT, "%.1f", sat);
+            textBox(r, t);
+        }
+    }
+
+    /** The resource packs you have on, top to bottom. */
+    public static final class PackInfo extends HudModule {
+        private final Setting.Number max = add(new Setting.Number("max", "Packs shown", 5, 1, 12, 1, ""));
+
+        public PackInfo() { super("packinfo", "Pack Info", "Which resource packs you're using", false, 0.72f, 0.2f); }
+
+        @Override
+        public void draw(Render r, boolean editing) {
+            java.util.List<String> packs = p().activePacks();
+            if (packs.isEmpty() && editing) packs = java.util.Arrays.asList("My PvP Pack", "Clear Glass");
+            if (packs.isEmpty()) {
+                w = h = 0;
+                return;
+            }
+            int n = Math.min(packs.size(), max.i());
+            int wMax = r.textWidth("Resource packs");
+            for (int i = 0; i < n; i++) wMax = Math.max(wMax, r.textWidth(packs.get(i)));
+            w = wMax + 10;
+            h = (n + 1) * 10 + 6;
+            bg(r, 0, 0, w, h);
+            r.text("Resource packs", 5, 4, 0xFF9A9B9F, textShadow());
+            for (int i = 0; i < n; i++) r.text(packs.get(i), 5, 14 + i * 10, color.argb(), textShadow());
+        }
+    }
+
+    /** A little badge with the Cobra mark and your text (your name by default). */
+    public static final class Watermark extends HudModule {
+        private final Setting.Text text = add(new Setting.Text("text", "Text (empty = your name)", "", 20));
+        private final Setting.Bool mark = add(new Setting.Bool("mark", "Cobra mark", true));
+
+        public Watermark() { super("watermark", "Watermark", "The Cobra mark and your name in a small badge", false, 0.01f, 0.01f); }
+
+        @Override
+        public void draw(Render r, boolean editing) {
+            String t = text.get() == null || text.get().trim().isEmpty() ? p().playerName() : text.get().trim();
+            if (t == null) t = "Cobra";
+            t = t.toUpperCase(java.util.Locale.ROOT);
+            int tw = dev.cobra.client.core.ui.Draw.spacedWidth(r, t, 1f);
+            int markW = mark.on() ? 14 : 0;
+            w = tw + markW + 14;
+            h = 18;
+            bg(r, 0, 0, w, h);
+            if (mark.on()) r.texture("logo", 6, 4, 10, 10, color.argb());
+            dev.cobra.client.core.ui.Draw.spaced(r, t, 7 + markW, 5, 1f, color.argb(), textShadow());
+        }
+    }
+
     public static final class Ping extends HudModule {
         public Ping() { super("ping", "Ping Display", "Your latency to the server", false, 0.01f, 0.48f); }
 

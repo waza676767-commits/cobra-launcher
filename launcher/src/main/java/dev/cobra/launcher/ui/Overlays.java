@@ -682,6 +682,8 @@ public final class Overlays {
             this.onPick = onPick;
             this.red = null;
             cancel.setVisible(true);
+            field.setVisible(false);
+            for (var l : field.getActionListeners()) field.removeActionListener(l);
             list.removeAll();
             count = options.size();
             for (int i = 0; i < options.size(); i++) {
@@ -699,6 +701,27 @@ public final class Overlays {
             repaint();
         }
 
+        private final Components.Input field = new Components.Input("", "", null);
+        {
+            field.setVisible(false);
+        }
+
+        /** A question with a text box (e.g. a link) and one button; {@code onText} gets what was typed. */
+        public void askText(String title, String body, String placeholder, String button, java.util.function.Consumer<String> onText) {
+            if (field.getParent() == null) add(field);
+            field.setText("");
+            field.setPlaceholder(placeholder);
+            ask(title, body, java.util.List.of(button), 0, i -> onText.accept(field.getText().trim()));
+            field.setVisible(true);
+            field.addActionListener(e -> {
+                if (!field.isVisible()) return;
+                disappear(null);
+                onText.accept(field.getText().trim());
+            });
+            doLayout();
+            SwingUtilities.invokeLater(field::requestFocusInWindow);
+        }
+
         /** Like ask(), with one word in the text shown in red. */
         public void askMarked(String title, String body, String redWord, java.util.List<String> options, int primary, java.util.function.IntConsumer onPick) {
             ask(title, body, options, primary, onPick);
@@ -711,7 +734,7 @@ public final class Overlays {
         Rectangle card() {
             int w = 480;
             int textH = 40 + 20 * Math.max(1, (body.length() / 52) + body.split("\n").length);
-            int listH = Math.min(count, 6) * 50;
+            int listH = Math.min(count, 6) * 50 + (field.isVisible() ? 52 : 0);
             int h = Math.min(getHeight() - 40, 70 + textH + listH + (cancel.isVisible() ? 64 : 14));
             return new Rectangle((getWidth() - w) / 2, (getHeight() - h) / 2, w, h);
         }
@@ -722,6 +745,10 @@ public final class Overlays {
             int x = c.x + 28, bw = c.width - 56;
             int textH = 40 + 20 * Math.max(1, (body.length() / 52) + body.split("\n").length);
             int top = c.y + 30 + textH;
+            if (field.isVisible()) {                  // the text box (askText) sits above the buttons
+                field.setBounds(x, top, bw, 40);
+                top += 52;
+            }
             int listH = c.y + c.height - (cancel.isVisible() ? 64 : 14) - top;
             scroll.setBounds(x, top, bw, Math.max(0, listH));
             for (int i = 0; i < list.getComponentCount(); i++) list.getComponent(i).setBounds(0, i * 50, bw - (count > 6 ? 12 : 0), 42);

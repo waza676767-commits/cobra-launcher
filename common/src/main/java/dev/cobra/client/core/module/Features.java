@@ -43,6 +43,27 @@ public final class Features {
         public final Setting.Action update = add(new Setting.Action("update", "Update to the newest", new Runnable() {
             public void run() { dev.cobra.client.core.SelfUpdate.checkAndDownload(); }
         }));
+        /** Use the launcher's colour theme (Settings → Theme) for Cobra's menus. */
+        public final Setting.Bool followLauncher = add(new Setting.Bool("followlauncher", "Use the launcher's colours", true));
+
+        /** The launcher's theme colour for {@code key} (bg, fg, accent), or -1 when not given / turned off. */
+        public int launcherColour(String key) {
+            if (!followLauncher.on()) return -1;
+            String v = System.getProperty("cobra.theme." + key);
+            if (v == null || v.isEmpty()) return -1;
+            try {
+                return 0xFF000000 | Integer.parseInt(v.trim(), 16);
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+
+        /** Size of the Right Shift menu (it still shrinks to fit small windows). */
+        public final Setting.Number menuScale = add(new Setting.Number("menuscale", "Menu size", 100, 70, 130, 5, "%"));
+        /** Speed of the menu animations (100 = normal). */
+        public final Setting.Number menuSpeed = add(new Setting.Number("menuspeed", "Menu animation speed", 100, 50, 200, 10, "%"));
+        /** How strong the Liquid Glass HUD panels are (tint + shine). */
+        public final Setting.Number hudGlass = add(new Setting.Number("hudglass", "HUD glass strength", 100, 0, 200, 10, "%"));
         /** Hide Cobra's HUD while the F3 debug screen is open (hitboxes / chunk borders never hide it). */
         public final Setting.Bool hideHudOnF3 = add(new Setting.Bool("hidehudf3", "Hide HUD while F3 is open", true));
         /** Look of HUD element backgrounds: plain boxes, or Liquid Glass panels. */
@@ -62,6 +83,8 @@ public final class Features {
 
         /** Accent colour, or 0 for the classic black/white look. */
         public int accentArgb() {
+            int la = launcherColour("accent");
+            if (la != -1 && accentPreset.is("Classic")) return la;       // follows the launcher unless you picked one here
             String p = accentPreset.get();
             if (p.equals("Custom")) return accent.argb() | 0xFF000000;
             for (int i = 0; i < PRESETS.length; i++) if (PRESETS[i].equals(p)) return PRESET_COLORS[i];
@@ -112,6 +135,16 @@ public final class Features {
             boolean s = !menus && start.code() >= 0 && Cobra.platform.rawKeyDown(start.code());
             boolean p = !menus && pause.code() >= 0 && Cobra.platform.rawKeyDown(pause.code());
             boolean x = !menus && stop.code() >= 0 && Cobra.platform.rawKeyDown(stop.code());
+            try {
+                tickKeys(s, p, x);
+            } finally {
+                sDown = s;
+                pDown = p;
+                xDown = x;
+            }
+        }
+
+        private void tickKeys(boolean s, boolean p, boolean x) {
             if (s && !sDown && !dev.cobra.client.core.ExternalCapture.running() && external()) {
                 problem = null;
                 try {
@@ -274,6 +307,140 @@ public final class Features {
         }
     }
 
+    /**
+     * 1.7 visuals: the old PvP look. Swords are held "blocking" while you right-click, no dip when
+     * switching items, and items sit where they did in 1.7/1.8.
+     */
+    public static final class OldVisuals extends Module {
+        public final Setting.Bool blockHit = add(new Setting.Bool("blockhit", "Sword blocking pose (right click)", true));
+        public final Setting.Bool noEquip = add(new Setting.Bool("noequip", "No item switch dip", true));
+        public final Setting.Bool oldPositions = add(new Setting.Bool("positions", "1.7 item positions", true));
+
+        public OldVisuals() { super("oldvisuals", "1.7 Visuals", "Old PvP animations: block-hitting, no switch dip, old item spots", Category.VISUAL, false); }
+    }
+
+    /** 1.7 sounds: the attack sounds added after 1.8 (sweep, crit, strong, weak, knockback) are muted. */
+    public static final class OldSounds extends Module {
+        public final Setting.Bool attack = add(new Setting.Bool("attack", "Mute new attack sounds", true));
+
+        public OldSounds() { super("oldsounds", "1.7 Sounds", "Mutes the combat sounds that 1.9+ added", Category.VISUAL, false); }
+
+        /** Should a sound with this id be muted? */
+        public boolean mute(String id) {
+            if (!isEnabled() || id == null) return false;
+            return attack.on() && id.contains("entity.player.attack.");
+        }
+    }
+
+    /** Menu blur: blurs the game behind every menu and inventory, as strong as you like. */
+    public static final class MenuBlur extends Module {
+        public final Setting.Number strength = add(new Setting.Number("strength", "Blur strength", 6, 1, 10, 1, ""));
+        public final Setting.Bool inventory = add(new Setting.Bool("inventory", "Also behind inventories", true));
+
+        public MenuBlur() { super("menublur", "Menu Blur", "Blurs the game behind menus and inventories", Category.VISUAL, false); }
+    }
+
+    /** Pack organizer: resource packs sorted A to Z, and a key to open the packs screen anywhere. */
+    public static final class PackOrganizer extends Module {
+        public final Setting.Bool sort = add(new Setting.Bool("sort", "Sort available packs A to Z", true));
+        public final Setting.Bind open = add(new Setting.Bind("open", "Open packs screen", -1, null));
+
+        public PackOrganizer() { super("packorganizer", "Pack Organizer", "Sorted pack list and a key to open your packs", Category.UTILITY, false); }
+    }
+
+    /** Wavy capes: capes ripple in the wind and swing more naturally. */
+    public static final class WavyCapes extends Module {
+        public final Setting.Number wind = add(new Setting.Number("wind", "Wind", 1, 0, 3, 0.1, "x"));
+
+        public WavyCapes() { super("wavycapes", "Wavy Capes", "Capes flutter and wave like cloth", Category.VISUAL, false); }
+    }
+
+    /**
+     * Cosmetics you wear in game: cat ears, wings (angel, red and more colours), a cat tail, a katana
+     * on your back, big feet, boxing gloves and a halo. Only people who also use Cobra see them
+     * (they're shared through the Cobra online list).
+     */
+    public static final class Cosmetics extends Module {
+        public final Setting.Mode wings = add(new Setting.Mode("wings", "Wings", "Off", "Off", "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan"));
+        public final Setting.Mode wingStyle = add(new Setting.Mode("wingstyle", "Wing style", "Feather", "Feather", "Dragon", "Butterfly"));
+        public final Setting.Mode halo = add(new Setting.Mode("halo", "Halo", "Off", "Off", "Angel", "Red"));
+        public final Setting.Mode hat = add(new Setting.Mode("hat", "Hat", "Off", "Off", "Crown", "Top hat", "Witch"));
+        public final Setting.Mode ears = add(new Setting.Mode("ears", "Cat ears", "Off", "Off", "Black", "White", "Ginger", "Pink"));
+        public final Setting.Mode bunny = add(new Setting.Mode("bunny", "Bunny ears", "Off", "Off", "White", "Pink", "Black", "Brown"));
+        public final Setting.Mode horns = add(new Setting.Mode("horns", "Horns", "Off", "Off", "Red", "Black", "White", "Gold"));
+        public final Setting.Mode glasses = add(new Setting.Mode("glasses", "Sunglasses", "Off", "Off", "Black", "Gold", "Pink"));
+        public final Setting.Mode headphones = add(new Setting.Mode("headphones", "Headphones", "Off", "Off", "Black", "White", "Pink", "Blue"));
+        public final Setting.Mode tail = add(new Setting.Mode("tailkind", "Tail", "Off", "Off", "Black", "White", "Ginger", "Pink", "Fox"));
+        public final Setting.Mode backpack = add(new Setting.Mode("backpack", "Backpack", "Off", "Off", "Brown", "Black", "Blue", "Red"));
+        public final Setting.Bool katana = add(new Setting.Bool("katana", "Katana on your back", false));
+        public final Setting.Mode gloves = add(new Setting.Mode("gloves", "Boxing gloves", "Off", "Off", "Red", "Blue", "Black"));
+        public final Setting.Bool feet = add(new Setting.Bool("feet", "Big feet", false));
+        public final Setting.Number size = add(new Setting.Number("size", "Size", 100, 70, 150, 5, "%"));
+        public final Setting.Bool glow = add(new Setting.Bool("glow", "Glow effects", true));
+        public final Setting.Bool showOwn = add(new Setting.Bool("showown", "Show mine in third person", true));
+
+        public Cosmetics() { super("cosmetics", "Cosmetics", "Wings, halos, hats, ears, tails and more (only Cobra players see them)", Category.VISUAL, false); }
+
+        private static String code(String v) {
+            return v.toLowerCase().replace(" ", "");
+        }
+
+        /** What you wear as a short code for the online list, e.g. "ears:black,wings:angel,tail:fox". */
+        public String serialize() {
+            if (!isEnabled()) return "";
+            StringBuilder b = new StringBuilder();
+            Setting.Mode[] modes = {wings, halo, hat, ears, bunny, horns, glasses, headphones, tail, backpack, gloves};
+            String[] keys = {"wings", "halo", "hat", "ears", "bunny", "horns", "glasses", "headphones", "tail", "backpack", "gloves"};
+            for (int i = 0; i < modes.length; i++) if (!modes[i].is("Off")) b.append(keys[i]).append(':').append(code(modes[i].get())).append(',');
+            if (!wings.is("Off") && !wingStyle.is("Feather")) b.append("wingstyle:").append(code(wingStyle.get())).append(',');
+            if (katana.on()) b.append("katana,");
+            if (feet.on()) b.append("feet,");
+            if (b.length() == 0) return "";
+            if (size.i() != 100) b.append("size:").append(size.i()).append(',');
+            if (glow.on()) b.append("glow,");
+            return b.substring(0, b.length() - 1);
+        }
+
+        /**
+         * Cosmetics chosen in the launcher (its Cosmetics page) arrive as -Dcobra.cosmetics=CODE and
+         * replace what's set here when the game starts (you can still change them in game).
+         */
+        public void applyFromLauncher() {
+            String code = System.getProperty("cobra.cosmetics");
+            if (code == null) return;
+            java.util.Map<String, String> m = new java.util.HashMap<String, String>();
+            for (String part : code.split(",")) {
+                if (part.isEmpty()) continue;
+                int i = part.indexOf(':');
+                m.put(i < 0 ? part : part.substring(0, i), i < 0 ? "" : part.substring(i + 1));
+            }
+            Setting.Mode[] modes = {wings, halo, hat, ears, bunny, horns, glasses, headphones, tail, backpack, gloves};
+            String[] keys = {"wings", "halo", "hat", "ears", "bunny", "horns", "glasses", "headphones", "tail", "backpack", "gloves"};
+            boolean any = false;
+            for (int i = 0; i < modes.length; i++) {
+                String v = m.get(keys[i]);
+                modes[i].set(pretty(modes[i], v));
+                any |= v != null;
+            }
+            wingStyle.set(pretty(wingStyle, m.containsKey("wingstyle") ? m.get("wingstyle") : "feather"));
+            katana.set(m.containsKey("katana"));
+            feet.set(m.containsKey("feet"));
+            glow.set(m.containsKey("glow"));
+            try {
+                size.set(m.containsKey("size") ? Double.parseDouble(m.get("size")) : 100.0);
+            } catch (NumberFormatException ignored) {}
+            any |= m.containsKey("katana") || m.containsKey("feet");
+            if (any != isEnabled()) toggle();
+        }
+
+        /** The option of {@code mode} whose short code is {@code v} ("tophat" → "Top hat"), or "Off". */
+        private static String pretty(Setting.Mode mode, String v) {
+            if (v == null || v.isEmpty()) return "Off";
+            for (String o : mode.modes) if (code(o).equals(v)) return o;
+            return "Off";
+        }
+    }
+
     /** A fading trail behind the mouse pointer in menus. */
     public static final class MouseTrail extends Module {
         public final Setting.Color color = add(new Setting.Color("color", "Color", 0xFFF8F5F2));
@@ -397,8 +564,11 @@ public final class Features {
      * empty hand) adds its own tweak on top. Also moves the fire overlay.
      */
     public static final class ViewModel extends Module {
-        public static final String[] TYPES = {"All items", "Swords", "Tools", "Blocks", "Bows", "Food", "Shield", "Other items", "Empty hand"};
-        private static final String[] KEYS = {"all", "sword", "tool", "block", "bow", "food", "shield", "item", "hand"};
+        public static final String[] TYPES = {"All items", "Selected items", "Swords", "Tools", "Blocks", "Bows", "Food", "Shield", "Other items", "Empty hand"};
+        private static final String[] KEYS = {"all", "group", "sword", "tool", "block", "bow", "food", "shield", "item", "hand"};
+        private static final int GROUP = 1;
+        /** "Selected items": which types share the Selected items values (e.g. shield, food and bow). */
+        private final Setting.Bool[] inGroup = new Setting.Bool[KEYS.length];
 
         public final Setting.Mode editing = add(new Setting.Mode("editing", "Editing", TYPES[0], TYPES));
         private final Setting.Number[][] values = new Setting.Number[KEYS.length][];
@@ -415,7 +585,7 @@ public final class Features {
         }));
 
         public ViewModel() {
-            super("viewmodel", "View Model", "Position, rotate and size every item type, plus fire height", Category.VISUAL, false);
+            super("viewmodel", "View Model", "Position, rotate and size each item type (or several at once), plus fire height", Category.VISUAL, false);
             // insert the per-type rows right after "Editing" so they read as its page
             List<Setting<?>> rows = new java.util.ArrayList<Setting<?>>();
             for (int t = 0; t < KEYS.length; t++) {
@@ -435,8 +605,19 @@ public final class Features {
                         n(p + "size", "Size", scaleDef, 0.2, 2, 0.02, "x", when)};
                 for (Setting.Number n : values[t]) rows.add(n);
             }
+            // "Selected items": tick the types first, then the sliders below move all of them together
+            List<Setting<?>> ticks = new java.util.ArrayList<Setting<?>>();
+            Setting.Cond groupPage = new Setting.Cond() {
+                public boolean ok() { return indexOf(editing.get()) == GROUP; }
+            };
+            for (int t = 2; t < KEYS.length; t++) {
+                inGroup[t] = add(new Setting.Bool("group_has_" + KEYS[t], "Include " + TYPES[t].toLowerCase(java.util.Locale.ROOT), false), groupPage);
+                ticks.add(inGroup[t]);
+            }
             settings.removeAll(rows);
+            settings.removeAll(ticks);
             settings.addAll(1, rows);
+            settings.addAll(1, ticks);
         }
 
         private Setting.Number n(String id, String name, double def, double min, double max, double step, String suffix, Setting.Cond when) {
@@ -474,7 +655,8 @@ public final class Features {
         public float[] transform(String type) {
             if (!isEnabled()) return null;
             int t = 0;
-            for (int i = 1; i < KEYS.length; i++) if (KEYS[i].equals(type)) t = i;
+            for (int i = 2; i < KEYS.length; i++) if (KEYS[i].equals(type)) t = i;
+            if (t > 0 && inGroup[t] != null && inGroup[t].on()) t = GROUP;   // this type follows "Selected items"
             float[] out = buf;                                   // reused: this runs for every hand, every frame
             for (int k = 0; k < 6; k++) out[k] = values[0][k].f() + (t == 0 ? 0 : values[t][k].f());
             out[6] = values[0][6].f() * (t == 0 ? 1 : values[t][6].f());
@@ -882,8 +1064,9 @@ public final class Features {
         public final Setting.Bool timestamps = add(new Setting.Bool("timestamps", "Timestamps", true));
         public final Setting.Bool seconds = add(new Setting.Bool("seconds", "Include seconds", false));
         public final Setting.Bool history = add(new Setting.Bool("history", "Longer chat history", true));
+        public final Setting.Bool stack = add(new Setting.Bool("stack", "Stack repeated messages (x2, x3...)", true));
 
-        public ChatMod() { super("chat", "Chat Mod", "Timestamps and a 1000-line chat history", Category.UTILITY, false); }
+        public ChatMod() { super("chat", "Better Chat", "Timestamps, stacked repeats and a 1000-line history", Category.UTILITY, false); }
 
         public String stamp() {
             return "\u00a78[\u00a77" + new SimpleDateFormat(seconds.on() ? "HH:mm:ss" : "HH:mm").format(new Date()) + "\u00a78]\u00a7r ";

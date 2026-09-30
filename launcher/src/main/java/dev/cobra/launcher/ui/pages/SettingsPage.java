@@ -86,6 +86,9 @@ public final class SettingsPage extends Page {
                 v -> MainWindow.get().setWallpaperDim(v.intValue()));
         stack.add(new Section("Wallpaper & colours", new Row[]{
                 wallpaperRow,
+                new ThemeRow(),
+                new Row("Use these colours in game", "Cobra Client's menus take the launcher's theme and accent (next launch).",
+                        new Components.Toggle(s.themeInGame, v -> { s.themeInGame = v; s.save(); }), 50),
                 new AccentRow(),
                 gradientRow(s),
                 gradientColorsRow(s),
@@ -97,6 +100,95 @@ public final class SettingsPage extends Page {
                 new Row("Wallpaper dim", "Darkens the wallpaper so text stays readable (lightens in Light mode).", dim, 300)}));
         Components.Segmented gui = new Components.Segmented(List.of("New", "Classic"), "classic".equals(s.launcherGui) ? 1 : 0,
                 i -> MainWindow.get().setLauncherGui(i == 1 ? "classic" : "new"));
+        // ---- Cosmetics (the same choices as the Cosmetics page; searchable here)
+        java.util.function.BiFunction<String, List<String>, Components.Button> picker = (key, opts) -> {
+            Components.Button b = new Components.Button(CosmeticsGallery.value(key), null, Components.Variant.GHOST, null);
+            b.onClick(() -> MainWindow.get().ask("Choose", "Pick one. It applies the next time you launch.", opts,
+                    opts.indexOf(CosmeticsGallery.value(key)), i -> {
+                        CosmeticsGallery.set(key, opts.get(i));
+                        b.setText(opts.get(i));
+                    }));
+            return b;
+        };
+        Components.Toggle cKatana = new Components.Toggle(s.cosKatana, v -> CosmeticsGallery.set("katana", v ? "On" : "Off"));
+        Components.Toggle cFeet = new Components.Toggle(s.cosFeet, v -> CosmeticsGallery.set("feet", v ? "On" : "Off"));
+        Components.Toggle cGlow = new Components.Toggle(s.cosGlow, v -> { s.cosGlow = v; s.save(); });
+        Components.Button openCos = new Components.Button("Open", "sparkle", Components.Variant.GHOST, () -> {
+            MainWindow mw = MainWindow.get();
+            for (int k = 0; k < mw.pageCount(); k++) if (mw.pageTitle(k).equals("Accessories")) mw.showPage(k);
+        });
+        stack.add(new Section("Cosmetics", new Row[]{
+                new Row("Cosmetics gallery", "Accessories page, below your capes: 3D previews of everything. Only other Cobra players see what you wear.", openCos, 120),
+                new Row("Wings", "Angel, red, black, gold, blue, purple, pink, green or cyan.", picker.apply("wings", List.of("Off", "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan")), 130),
+                new Row("Halo", "A glowing ring above your head.", picker.apply("halo", List.of("Off", "Angel", "Red")), 130),
+                new Row("Cat ears", "Black, white, ginger or pink.", picker.apply("ears", List.of("Off", "Black", "White", "Ginger", "Pink")), 130),
+                new Row("Boxing gloves", "Red, blue or black.", picker.apply("gloves", List.of("Off", "Red", "Blue", "Black")), 130),
+                new Row("Wing style", "Feathered, dragon or butterfly wings.", picker.apply("wingstyle", List.of("Feather", "Dragon", "Butterfly")), 130),
+                new Row("Hat", "A crown, a top hat or a witch hat.", picker.apply("hat", List.of("Off", "Crown", "Top hat", "Witch")), 130),
+                new Row("Bunny ears", "Tall ears that bob a little.", picker.apply("bunny", List.of("Off", "White", "Pink", "Black", "Brown")), 130),
+                new Row("Horns", "Devil horns.", picker.apply("horns", List.of("Off", "Red", "Black", "White", "Gold")), 130),
+                new Row("Sunglasses", "Cool shades.", picker.apply("glasses", List.of("Off", "Black", "Gold", "Pink")), 130),
+                new Row("Headphones", "Over your ears.", picker.apply("headphones", List.of("Off", "Black", "White", "Pink", "Blue")), 130),
+                new Row("Tail", "A cat tail in any colour, or a fluffy fox tail.", picker.apply("tail", List.of("Off", "Black", "White", "Ginger", "Pink", "Fox")), 130),
+                new Row("Backpack", "A little backpack.", picker.apply("backpack", List.of("Off", "Brown", "Black", "Blue", "Red")), 130),
+                new Row("Katana", "A katana across your back.", cKatana, 50),
+                new Row("Big feet", "Oversized bare feet.", cFeet, 50),
+                new Row("Glow effects", "Wings, halo and katana glow softly (they shine in the dark too).", cGlow, 50)}));
+
+        // ---- Customization
+        Components.Slider round = new Components.Slider(50, 150, 5, s.roundness, v -> Math.round(v) + "%", v -> {
+            s.roundness = (int) Math.round(v);
+            s.save();
+            Glass.invalidate();
+            MainWindow.get().frame.repaint();
+        });
+        Components.Slider tint = new Components.Slider(0, 200, 10, s.glassTint, v -> Math.round(v) + "%", v -> {
+            s.glassTint = (int) Math.round(v);
+            s.save();
+            Glass.invalidate();
+            MainWindow.get().frame.repaint();
+        });
+        Components.Slider border = new Components.Slider(0, 200, 10, s.glassBorder, v -> Math.round(v) + "%", v -> {
+            s.glassBorder = (int) Math.round(v);
+            s.save();
+            Glass.invalidate();
+            MainWindow.get().frame.repaint();
+        });
+        Components.Slider speed = new Components.Slider(50, 200, 10, s.animSpeed, v -> Math.round(v) + "%", v -> {
+            s.animSpeed = (int) Math.round(v);
+            s.save();
+        });
+        Components.Toggle c24 = new Components.Toggle(s.clock24, v -> { s.clock24 = v; s.save(); MainWindow.get().frame.repaint(); });
+        Components.Toggle cSec = new Components.Toggle(s.clockSeconds, v -> { s.clockSeconds = v; s.save(); MainWindow.get().frame.repaint(); });
+        Components.Toggle cDate = new Components.Toggle(s.clockDate, v -> { s.clockDate = v; s.save(); MainWindow.get().frame.repaint(); });
+        Components.Toggle heroWp = new Components.Toggle(s.heroWallpaper, v -> { s.heroWallpaper = v; s.save(); MainWindow.get().frame.repaint(); });
+        Components.Input title = new Components.Input(s.homeTitle, "COBRA", null);
+        title.onChange(() -> { s.homeTitle = title.getText(); s.save(); MainWindow.get().frame.repaint(); });
+        Components.Input greet = new Components.Input(s.homeGreeting, "Automatic (Welcome back, …)", null);
+        greet.onChange(() -> { s.homeGreeting = greet.getText(); s.save(); MainWindow.get().frame.repaint(); });
+        Components.Button resetLook = new Components.Button("Reset", "close", Components.Variant.GHOST, () -> {
+            s.roundness = 100;
+            s.glassTint = 100;
+            s.glassBorder = 100;
+            s.animSpeed = 100;
+            s.save();
+            Glass.invalidate();
+            MainWindow.get().frame.repaint();
+            MainWindow.get().toast("Customization reset. Reopen Settings to see the sliders back at 100%.");
+        });
+        stack.add(new Section("Customization", new Row[]{
+                new Row("Corner roundness", "How round every card, button and panel is.", round, 300),
+                new Row("Glass tint", "How dark (or light) the glass is. Lower shows more of your wallpaper.", tint, 300),
+                new Row("Glass borders", "How visible the thin edges of the glass are.", border, 300),
+                new Row("Animation speed", "Faster or slower motion everywhere (100% = normal).", speed, 300),
+                new Row("24-hour clock", "Off shows 7:30 PM style.", c24, 50),
+                new Row("Clock seconds", "Show seconds in the top-right clock.", cSec, 50),
+                new Row("Date under the clock", "Day and date below the time.", cDate, 50),
+                new Row("Wallpaper on Home", "Show your wallpaper in the big Home card (off: a calm dark card).", heroWp, 50),
+                new Row("Home title", "The big word on Home.", title, 240),
+                new Row("Home greeting", "Your own line under the title. Empty = automatic.", greet, 300),
+                new Row("Reset customization", "Roundness, glass and animation speed back to normal.", resetLook, 120)}));
+
         stack.add(new Section("Look", new Row[]{
                 new Row("Launcher GUI", "New: the dashboard with the round rail. Classic: the previous look with the wide side panel.", gui, 250),
                 new Row("Light mode", "Flips the palette: white surfaces, black text and buttons. Also used in game.", lightMode, 50),
@@ -115,8 +207,8 @@ public final class SettingsPage extends Page {
         // ------------------------------------------------------------ Launcher
         Components.Toggle keep = new Components.Toggle(s.keepOpen, v -> { s.keepOpen = v; s.save(); });
         // --------------------------------------------------------------- Developer (Swipecz only)
-        dev.cobra.launcher.auth.Account me = dev.cobra.launcher.auth.Account.load();
-        if (me != null && me.name != null && me.name.equalsIgnoreCase("Swipecz")) {
+        // Developer: only shown while you're signed in as Swipecz (updates when you sign in or out)
+        {
             Components.Button publish = new Components.Button("Publish update", "download", Components.Variant.PRIMARY, null);
             publish.onClick(() -> {
                 MainWindow.get().toast("Asking GitHub to build and publish…");
@@ -127,7 +219,8 @@ public final class SettingsPage extends Page {
             });
             stack.add(new Section("Developer", new Row[]{
                     new Row("Publish update to everyone", "Builds the code on GitHub and releases it. Everyone gets it (Linux and Windows) the next time they reopen the launcher. Build "
-                            + dev.cobra.launcher.core.Updater.BUILD + (dev.cobra.launcher.core.Updater.REPO.isEmpty() ? "" : " · " + dev.cobra.launcher.core.Updater.REPO) + ".", publish, 190)}));
+                            + dev.cobra.launcher.core.Updater.BUILD + (dev.cobra.launcher.core.Updater.REPO.isEmpty() ? "" : " · " + dev.cobra.launcher.core.Updater.REPO) + ".", publish, 190)
+                            .when(SettingsPage::isDeveloper)}));
         }
 
         Components.Button importBtn = new Components.Button("Import", "download", Components.Variant.GHOST, SettingsPage::importProfile);
@@ -263,7 +356,7 @@ public final class SettingsPage extends Page {
                 new Row("Game files", Paths.ROOT.toString(), open, 150)}));
 
         // order: what people change most first
-        String[] order = {"Account", "Performance", "Game", "Wallpaper & colours", "Look", "Discord", "Launcher", "Files", "Developer"};
+        String[] order = {"Account", "Performance", "Game", "Cosmetics", "Wallpaper & colours", "Look", "Customization", "Discord", "Launcher", "Files", "Developer"};
         List<Component> sections = new java.util.ArrayList<>(List.of(stack.getComponents()));
         stack.removeAll();
         for (String t : order) {
@@ -287,6 +380,11 @@ public final class SettingsPage extends Page {
     private static String query = "";
     private static SettingsPage instance;
 
+    private static boolean isDeveloper() {
+        MainWindow mw = MainWindow.get();
+        return mw != null && mw.account() != null && mw.account().name != null && mw.account().name.equalsIgnoreCase("Swipecz");
+    }
+
     /** Re-applies the search and the "only with…" conditions. */
     public static void refilter() {
         SettingsPage p = instance;
@@ -298,6 +396,36 @@ public final class SettingsPage extends Page {
         p.stack.repaint();
     }
 
+    private interface ModpackJob {
+        dev.cobra.launcher.core.Profiles.Profile run() throws Exception;
+    }
+
+    private static long lastProgress;
+
+    /** Status line while a modpack downloads (at most every 0.4 s so the toasts stay readable). */
+    private static void progress(String msg) {
+        long now = System.currentTimeMillis();
+        if (now - lastProgress < 400) return;
+        lastProgress = now;
+        SwingUtilities.invokeLater(() -> MainWindow.get().toast(msg));
+    }
+
+    private static void runModpackImport(ModpackJob job) {
+        MainWindow.get().toast("Importing the modpack…");
+        new Thread(() -> {
+            try {
+                var p = job.run();
+                SwingUtilities.invokeLater(() -> {
+                    dev.cobra.launcher.core.Profiles.select(p);
+                    MainWindow.get().frame.repaint();
+                    MainWindow.get().toast("Imported \"" + p.name + "\" as a new profile. Press Launch to play it.");
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> MainWindow.get().toast("Import failed: " + ex.getMessage()));
+            }
+        }, "cobra-modpack").start();
+    }
+
     /** For the Profiles page's Import button. */
     public static void importProfileNow() {
         importProfile();
@@ -306,14 +434,27 @@ public final class SettingsPage extends Page {
     /** Settings → Import a profile: pick the launcher, then the profile. */
     private static void importProfile() {
         List<dev.cobra.launcher.core.ProfileImport.Source> found = dev.cobra.launcher.core.ProfileImport.detect();
-        if (found.isEmpty()) {
-            MainWindow.get().toast("No other launchers found on this PC (Prism, MultiMC, Modrinth App, CurseForge, ATLauncher, Minecraft).");
-            return;
-        }
         List<String> names = new java.util.ArrayList<>();
+        names.add("Modrinth modpack (link)");
+        names.add("Modrinth modpack (.mrpack file)");
         for (var src : found) names.add(src.name() + "  (" + src.profiles().size() + ")");
-        MainWindow.get().ask("Import a profile", "Which launcher is your profile in?", names, -1, i -> {
-            var src = found.get(i);
+        MainWindow.get().ask("Import a profile", "From a Modrinth modpack, or from another launcher on this PC.", names, 0, i -> {
+            if (i == 0) {
+                SwingUtilities.invokeLater(() -> MainWindow.get().askText("Modrinth modpack",
+                        "Paste the modpack's Modrinth link (or its name). The newest Fabric version for Minecraft "
+                                + dev.cobra.launcher.game.GameVersion.MODERN.mc + " becomes a new profile.",
+                        "modrinth.com/modpack/…", "Import", link -> {
+                            if (link.isEmpty()) return;
+                            runModpackImport(() -> dev.cobra.launcher.core.ProfileImport.importModrinthLink(link, SettingsPage::progress));
+                        }));
+                return;
+            }
+            if (i == 1) {
+                java.nio.file.Path f = FilePicker.one("Choose a Modrinth modpack", "Modrinth modpacks", "mrpack");
+                if (f != null) runModpackImport(() -> dev.cobra.launcher.core.ProfileImport.importMrpack(f, SettingsPage::progress));
+                return;
+            }
+            var src = found.get(i - 2);
             List<String> profs = new java.util.ArrayList<>();
             for (var f : src.profiles()) profs.add(f.name());
             SwingUtilities.invokeLater(() -> MainWindow.get().ask("Import from " + src.name(),
@@ -341,6 +482,7 @@ public final class SettingsPage extends Page {
     private void updateAccount() {
         MainWindow mw = MainWindow.get();
         boolean in = mw != null && mw.account() != null;
+        SwingUtilities.invokeLater(SettingsPage::refilter);      // Developer section follows the account
         accountButton.setText(in ? "Sign out" : "Sign in");
         stack.repaint();
     }
@@ -572,6 +714,79 @@ public final class SettingsPage extends Page {
             g.fillOval(2, 2, getWidth() - 4, getHeight() - 4);
             g.setColor(Theme.alpha(Theme.TEXT, 0.35));
             g.drawOval(2, 2, getWidth() - 5, getHeight() - 5);
+            g.dispose();
+        }
+    }
+
+    /** Colour themes: a round preview of each (its background with its accent), click to use. */
+    private static final class ThemeRow extends Row {
+        private int hover = -1;
+
+        ThemeRow() {
+            super("Theme", "", new JPanel(null), 1);
+            ((JPanel) control).setOpaque(false);
+            addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+                @Override public void mouseMoved(java.awt.event.MouseEvent e) {
+                    int h = at(e.getX(), e.getY());
+                    if (h != hover) {
+                        hover = h;
+                        setCursor(Cursor.getPredefinedCursor(h >= 0 ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
+                        repaint();
+                    }
+                }
+            });
+            addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                    int i = at(e.getX(), e.getY());
+                    if (i >= 0) {
+                        MainWindow.get().setTheme(Theme.THEMES[i]);
+                        repaint();
+                    }
+                }
+
+                @Override public void mouseExited(java.awt.event.MouseEvent e) {
+                    hover = -1;
+                    repaint();
+                }
+            });
+        }
+
+        private Rectangle tile(int i) {
+            int w = getWidth() - 44, n = Theme.THEMES.length, gap = 10;
+            int tw = Math.max(70, Math.min(118, (w - gap * (n - 1)) / n));
+            return new Rectangle(22 + i * (tw + gap), 50, tw, 58);
+        }
+
+        private int at(int x, int y) {
+            for (int i = 0; i < Theme.THEMES.length; i++) if (tile(i).contains(x, y)) return i;
+            return -1;
+        }
+
+        @Override
+        public Dimension getPreferredSize() { return new Dimension(super.getPreferredSize().width, 126); }
+
+        @Override
+        int height() { return 126; }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            Theme.left(g, "Theme", Theme.font(Theme.MEDIUM, 14.5f), Theme.TEXT, 22, 8, 22);
+            Theme.left(g, "Recolours the whole launcher (and the game, if you like).", Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 22, 26, 16);
+            String cur = dev.cobra.launcher.core.Settings.get().theme;
+            for (int i = 0; i < Theme.THEMES.length; i++) {
+                Rectangle r = tile(i);
+                int[] p = Theme.palette(i);
+                boolean sel = Theme.THEMES[i].equals(cur), hov = i == hover;
+                // a tiny preview: the theme's background with a panel, a line of text and its accent
+                Theme.fill(g, r.x, r.y, r.width, r.height, 12, new GradientPaint(r.x, r.y, new Color(p[11]), r.x + r.width, r.y + r.height, new Color(p[0])));
+                Theme.fill(g, r.x + 8, r.y + 8, r.width - 16, 16, 6, new Color(p[3]));
+                Theme.fill(g, r.x + 12, r.y + 13, (r.width - 24) * 0.55, 6, 3, new Color(p[8]));
+                Theme.fill(g, r.x + 8, r.y + r.height - 24, 30, 14, 7, new Color(p[10]));
+                if (sel || hov) Theme.stroke(g, r.x - 2, r.y - 2, r.width + 4, r.height + 4, 14, sel ? Theme.ACCENT : Theme.alpha(Theme.TEXT, 0.35), sel ? 2f : 1f);
+                g.setFont(Theme.font(Theme.MEDIUM, 11f));
+                Theme.left(g, Theme.THEMES[i], Theme.font(Theme.MEDIUM, 11f), new Color(p[9]), r.x + 44, r.y + r.height - 26, 18);
+            }
             g.dispose();
         }
     }

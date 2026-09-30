@@ -62,6 +62,15 @@ public final class Cobra {
         MODULES.add(new Features.Tweaks());
         MODULES.add(new Features.MouseTrail());
         MODULES.add(new Features.Sky());
+        MODULES.add(new Features.Cosmetics());
+        MODULES.add(new Features.OldVisuals());
+        MODULES.add(new Features.OldSounds());
+        MODULES.add(new Features.MenuBlur());
+        MODULES.add(new Features.PackOrganizer());
+        MODULES.add(new Features.WavyCapes());
+        MODULES.add(new HudModules.Saturation());
+        MODULES.add(new HudModules.PackInfo());
+        MODULES.add(new HudModules.Watermark());
         MODULES.add(new Features.Recorder());
         MODULES.add(new Features.BlockOverlay());
         // Utility
@@ -92,7 +101,9 @@ public final class Cobra {
                 {"waypoints", "flag"}, {"chat", "chat"}, {"nickhider", "mask"}, {"screenshots", "camera"}, {"bedwars", "bed"}, {"client", "settings"},
                 {"memory", "gauge"}, {"stopwatch", "clock"}, {"serveraddress", "globe"}, {"itemcounter", "list"}, {"teamview", "user"},
                 {"chunkborders", "mods"}, {"hitboxes", "crosshair"}, {"glint", "sparkle"}, {"hypixel", "link"},
-                {"tweaks", "flame"}, {"mousetrail", "sparkle"}, {"sky", "sun"}, {"recorder", "camera"}, {"blockoverlay", "crosshair"}, {"blockinfo", "search"}};
+                {"tweaks", "flame"}, {"mousetrail", "sparkle"}, {"sky", "sun"}, {"cosmetics", "star"}, {"oldvisuals", "sword"}, {"oldsounds", "sliders"}, 
+                {"menublur", "eye"}, {"packorganizer", "packs"}, {"wavycapes", "flag"}, {"saturation", "drop"},
+                {"packinfo", "packs"}, {"watermark", "star"}, {"recorder", "camera"}, {"blockoverlay", "crosshair"}, {"blockinfo", "search"}};
         for (Module m : MODULES) {
             for (String[] ic : icons) if (ic[0].equals(m.id)) m.icon = ic[1];
             if (!m.hidden) {
@@ -103,6 +114,7 @@ public final class Cobra {
 
         configFile = new File(new File(p.gameDir(), "config"), "cobra.properties");
         load();
+        get(Features.Cosmetics.class).applyFromLauncher();   // cosmetics picked in the launcher
         // the launcher passes its Light mode / No account setting; it wins over the saved in-game choice
         String theme = System.getProperty("cobra.theme");
         Features.Client client = get(Features.Client.class);
@@ -144,9 +156,14 @@ public final class Cobra {
     private static int customBg, customFg;
 
     public static void syncClient() {
+        Features.Client cc = get(Features.Client.class);
+        dev.cobra.client.core.ui.Draw.speedK = cc.menuSpeed.f() / 100f;
+        dev.cobra.client.core.ui.Draw.glassK = cc.hudGlass.f() / 100f;
         Features.Client c = get(Features.Client.class);
-        if (c.theme.is("Custom")) {
-            int bg = c.themeBg.argb(), fg = c.themeText.argb();
+        int lbg = c.launcherColour("bg"), lfg = c.launcherColour("fg");
+        boolean fromLauncher = lbg != -1 && lfg != -1 && !c.theme.is("Custom");
+        if (c.theme.is("Custom") || fromLauncher) {
+            int bg = fromLauncher ? lbg : c.themeBg.argb(), fg = fromLauncher ? lfg : c.themeText.argb();
             if (bg != customBg || fg != customFg) {
                 dev.cobra.client.core.ui.Draw.setCustom(bg, fg);
                 customBg = bg;
@@ -165,9 +182,12 @@ public final class Cobra {
         ticks++;
         syncClient();
         if (ticks % 40 == 1) writePresence();
+        if (ticks % 20 == 0) CobraOnline.ownCosmetics = get(Features.Cosmetics.class).serialize();
         if (ticks % 20 == 0 && platform.inWorld()) {
             boolean tab = get(Features.Client.class).tabIcon.on();
-            CobraOnline.tick(platform.playerUuid(), tab, tab);
+            boolean wear = get(Features.Cosmetics.class).isEnabled();
+            // share yourself for the Tab icon / your cosmetics; always fetch so you see other Cobra players' cosmetics
+            CobraOnline.tick(platform.playerUuid(), tab || wear, true);
         }
         // per-module toggle keys (only while playing, not in menus)
         boolean menus = platform.screenOpen();

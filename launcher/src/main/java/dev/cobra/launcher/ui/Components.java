@@ -262,7 +262,12 @@ public final class Components {
     // ------------------------------------------------------------------ Input
 
     public static class Input extends JTextField {
-        private final String placeholder;
+        private String placeholder;
+
+        public void setPlaceholder(String p) {
+            placeholder = p == null ? "" : p;
+            repaint();
+        }
         private final String icon;
         private final Anim.Tween focus = new Anim.Tween(this, 0).rate(16);
 

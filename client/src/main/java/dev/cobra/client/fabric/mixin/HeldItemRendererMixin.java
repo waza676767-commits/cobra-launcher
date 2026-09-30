@@ -27,7 +27,9 @@ public abstract class HeldItemRendererMixin {
     private void cobra$viewModel(CallbackInfo ci, @Local(argsOnly = true) MatrixStack matrices,
                                  @Local(argsOnly = true) ItemStack item, @Local(argsOnly = true) Hand hand) {
         if (Cobra.platform == null) return;
+        cobra$oldVisuals(matrices, item, hand);
         Features.ViewModel vm = Cobra.get(Features.ViewModel.class);
+        cobra$size = 1f;
         if (!vm.isEnabled()) return;
         boolean empty = item == null || item.isEmpty();
         String type;
@@ -51,7 +53,55 @@ public abstract class HeldItemRendererMixin {
         if (t[3] != 0) matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(t[3]));
         if (t[4] != 0) matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(t[4] * side));
         if (t[5] != 0) matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(t[5] * side));
-        if (t[6] != 1) matrices.scale(t[6], t[6], t[6]);
+        cobra$size = t[6];                                   // applied right before the item itself (below)
+    }
+
+    @org.spongepowered.asm.mixin.Unique
+    private static float cobra$size = 1f;
+
+    /**
+     * View Model size: scaled around the item itself, just before it's drawn. (Scaling at the start
+     * scaled around your eye, which in first person looks exactly the same size, just further away.)
+     */
+    @Inject(method = "renderFirstPersonItem", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/render/item/HeldItemRenderer;renderItem(Lnet/minecraft/entity/LivingEntity;Lnet/minecraft/item/ItemStack;Lnet/minecraft/item/ItemDisplayContext;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;I)V"),
+            require = 0)
+    private void cobra$sizeItem(CallbackInfo ci, @Local(argsOnly = true) MatrixStack matrices) {
+        cobra$applySize(matrices);
+    }
+
+    @Inject(method = "renderFirstPersonItem", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/render/item/HeldItemRenderer;renderArmHoldingItem(Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;IFFLnet/minecraft/util/Arm;)V"),
+            require = 0)
+    private void cobra$sizeHand(CallbackInfo ci, @Local(argsOnly = true) MatrixStack matrices) {
+        cobra$applySize(matrices);
+    }
+
+    @org.spongepowered.asm.mixin.Unique
+    private static void cobra$applySize(MatrixStack matrices) {
+        float k = cobra$size;
+        cobra$size = 1f;                                     // once per hand
+        if (Cobra.platform == null || !Cobra.get(Features.ViewModel.class).isEnabled() || Math.abs(k - 1f) < 0.001f) return;
+        matrices.scale(k, k, k);
+    }
+
+    /**
+     * 1.7 Visuals: items sit a little lower and closer like in 1.7/1.8, and a sword held while you
+     * right-click takes the old "blocking" pose (block-hitting).
+     */
+    @org.spongepowered.asm.mixin.Unique
+    private static void cobra$oldVisuals(MatrixStack matrices, ItemStack item, Hand hand) {
+        Features.OldVisuals ov = Cobra.get(Features.OldVisuals.class);
+        if (!ov.isEnabled() || item == null || item.isEmpty()) return;
+        float side = hand == Hand.OFF_HAND ? -1 : 1;
+        if (ov.oldPositions.on()) matrices.translate(0.02f * side, -0.04f, 0.05f);
+        if (ov.blockHit.on() && hand == Hand.MAIN_HAND && net.minecraft.client.MinecraftClient.getInstance().options.useKey.isPressed()
+                && Registries.ITEM.getId(item.getItem()).getPath().endsWith("_sword")) {
+            matrices.translate(-0.12f, 0.08f, 0f);
+            matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(30f));
+            matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(-80f));
+            matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(60f));
+        }
     }
 
     /** View Model: no item-switch (equip) animation. */
@@ -59,6 +109,7 @@ public abstract class HeldItemRendererMixin {
     private float cobra$noEquip(float equipProgress) {
         if (Cobra.platform == null) return equipProgress;
         Features.ViewModel vm = Cobra.get(Features.ViewModel.class);
-        return vm.isEnabled() && vm.noEquip.on() ? 0f : equipProgress;
+        Features.OldVisuals ov = Cobra.get(Features.OldVisuals.class);
+        return vm.isEnabled() && vm.noEquip.on() || ov.isEnabled() && ov.noEquip.on() ? 0f : equipProgress;
     }
 }

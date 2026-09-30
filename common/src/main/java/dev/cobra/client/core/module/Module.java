@@ -69,4 +69,20 @@ public abstract class Module {
     public void onDisable() {}
 
     public void onTick() {}
+
+    /**
+     * Puts every setting of this module back to its default (and, for HUD elements, its default
+     * place and size). The module stays on or off as it is.
+     */
+    public void resetSettings() {
+        for (Setting<?> st : settings) st.reset();
+        if (this instanceof HudModule) {
+            try {
+                HudModule fresh = (HudModule) getClass().getDeclaredConstructor().newInstance();
+                ((HudModule) this).px = fresh.px;
+                ((HudModule) this).py = fresh.py;
+            } catch (Exception ignored) {}
+        }
+        problem = null;
+    }
 }

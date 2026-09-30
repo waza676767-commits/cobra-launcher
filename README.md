@@ -228,6 +228,17 @@ ssh root@65.109.88.105 'cp /tmp/cobra-online.py /opt/ && cp /tmp/cobra-online.se
 Clients send only their Minecraft UUID every 30 s. Players can turn it off in Cobra Settings →
 "Cobra icon in Tab".
 
+## Cosmetics (only Cobra players see them)
+
+Right Shift → Cosmetics: cat ears, wings (angel, red, black, gold, blue, purple, pink, green), halo
+(angel or red), cat tail, katana on your back, big feet and boxing gloves. What you wear is sent to
+the online list in `server/` together with your UUID, so other Cobra players see it; everyone else
+sees a normal player. Update the server when you update Cobra:
+
+```bash
+scp server/cobra-online.py root@65.109.88.105:/opt/ && ssh root@65.109.88.105 systemctl restart cobra-online
+```
+
 ## Updates for everyone
 
 Launchers built on GitHub know their repo and build number. While running they check the repo's

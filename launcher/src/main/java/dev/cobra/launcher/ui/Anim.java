@@ -25,6 +25,11 @@ public final class Anim {
      * The curve iOS uses for most of its transitions (a smooth, confident ease-out): fast at the
      * start, gently settling at the end. Approximates cubic-bezier(0.32, 0.72, 0, 1).
      */
+    /** Settings → Customization → Animation speed (1 = normal). */
+    static double speed() {
+        return Math.max(0.5, Math.min(2, dev.cobra.launcher.core.Settings.get().animSpeed / 100.0));
+    }
+
     public static double iosEase(double p) {
         if (p <= 0) return 0;
         if (p >= 1) return 1;
@@ -84,7 +89,7 @@ public final class Anim {
 
         /** Timed cubic ease from the current value. */
         public void over(double t, long millis, Runnable done) {
-            durationNs = millis * 1_000_000L;
+            durationNs = (long) (millis * 1_000_000L / speed());
             start(t, done);
         }
 
@@ -125,7 +130,7 @@ public final class Anim {
                 // iOS-style spring: a quick start, a soft landing with a hint of overshoot. Stiffness
                 // comes from the old rate so every animation keeps its speed; damping 0.82 of critical.
                 double dt = Math.min(0.05, (now - lastNs) / 1e9);
-                double omega = rate * 0.9, zeta = 0.82;
+                double omega = rate * 0.9 * speed(), zeta = 0.82;
                 int steps = Math.max(1, (int) Math.ceil(dt / 0.004));  // small steps: stable at any frame rate
                 double h = dt / steps;
                 for (int i = 0; i < steps; i++) {

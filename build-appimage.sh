@@ -171,6 +171,7 @@ chmod +x "$TARGET"
 if [ "${1:-}" != "--no-install" ]; then
     step "Installing to ~/Applications"
     mkdir -p "$HOME/Applications"
+    rm -f "$HOME/Applications/KitLauncher.AppImage"        # remove the Kit test build if it's there
     cp -f "$TARGET" "$HOME/Applications/CobraLauncher.AppImage"
     chmod +x "$HOME/Applications/CobraLauncher.AppImage"
     DATA="${XDG_DATA_HOME:-$HOME/.local/share}"

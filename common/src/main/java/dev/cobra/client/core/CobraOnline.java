@@ -18,6 +18,16 @@ import java.util.regex.Pattern;
 public final class CobraOnline {
     private static final String URL_BASE = System.getProperty("cobra.online", "http://65.109.88.105:25581");
     private static volatile Set<String> online = new HashSet<String>();
+    private static volatile java.util.Map<String, String> wearing = new java.util.HashMap<String, String>();
+    /** What you wear (comma list), sent with each ping. */
+    public static volatile String ownCosmetics = "";
+
+    /** The cosmetics another Cobra player wears (comma list), or "" if none / not a Cobra player. */
+    public static String cosmetics(String uuid) {
+        if (uuid == null) return "";
+        String c = wearing.get(uuid.toLowerCase());
+        return c == null ? "" : c;
+    }
     private static long next;
     private static volatile boolean busy;
 
@@ -31,13 +41,14 @@ public final class CobraOnline {
     public static void tick(final String ownUuid, boolean share, boolean show) {
         long now = System.currentTimeMillis();
         if (busy || now < next || ownUuid == null || !(share || show)) return;
-        next = now + 30_000;
+        next = now + 20_000;
         busy = true;
         final boolean doShare = share, doShow = show;
         Thread t = new Thread(new Runnable() {
             public void run() {
                 try {
-                    if (doShare) post("/ping", "{\"uuid\":\"" + ownUuid.toLowerCase() + "\"}");
+                    String cos = ownCosmetics == null ? "" : ownCosmetics.replaceAll("[^a-z0-9_,:]", "");
+                    if (doShare) post("/ping", "{\"uuid\":\"" + ownUuid.toLowerCase() + "\",\"cosmetics\":\"" + cos + "\"}");
                     if (doShow) {
                         String body = get("/online");
                         Set<String> s = new HashSet<String>();
@@ -45,6 +56,10 @@ public final class CobraOnline {
                         while (m.find()) s.add(m.group().toLowerCase());
                         if (doShare) s.add(ownUuid.toLowerCase());
                         online = s;
+                        java.util.Map<String, String> w = new java.util.HashMap<String, String>();
+                        Matcher cm = Pattern.compile("\"([0-9a-f-]{36})\"\\s*:\\s*\"([a-z0-9_,:]*)\"").matcher(body);
+                        while (cm.find()) w.put(cm.group(1), cm.group(2));
+                        wearing = w;
                     }
                 } catch (Exception ignored) {
                     // server not reachable: keep the last list

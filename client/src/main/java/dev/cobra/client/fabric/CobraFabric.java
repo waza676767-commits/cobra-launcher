@@ -38,6 +38,14 @@ public final class CobraFabric implements ClientModInitializer {
         MinecraftClient mc = MinecraftClient.getInstance();
         Cobra.init(new FabricPlatform());
 
+        // cosmetics (wings, halo, cat ears, …) drawn on every player model
+        net.fabricmc.fabric.api.client.rendering.v1.LivingEntityFeatureRendererRegistrationCallback.EVENT.register(
+                (entityType, renderer, helper, context) -> {
+                    if (renderer instanceof net.minecraft.client.render.entity.PlayerEntityRenderer player) {
+                        registerCosmetics(helper, player);
+                    }
+                });
+
         MENU = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.cobra.menu", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT, CATEGORY));
         ZOOM = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.cobra.zoom", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_C, CATEGORY));
         FREELOOK = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.cobra.freelook", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_LEFT_ALT, CATEGORY));
@@ -158,13 +166,43 @@ public final class CobraFabric implements ClientModInitializer {
         syncMotionBlur(mc);
         tickCount++;
         syncSky(mc);
+        syncMenuBlur(mc);
+        packKey(mc);
         if (mc.world != null || mc.currentScreen != null) syncGlint(mc);
         Cobra.tick();
     }
 
     // ------------------------------------------------------------------ sky packs
 
-    private static boolean tickErrorShown, hudErrorShown;
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void registerCosmetics(net.fabricmc.fabric.api.client.rendering.v1.LivingEntityFeatureRendererRegistrationCallback.RegistrationHelper helper,
+                                          net.minecraft.client.render.entity.PlayerEntityRenderer renderer) {
+        helper.register(new dev.cobra.client.fabric.cosmetics.CosmeticsFeature((net.minecraft.client.render.entity.feature.FeatureRendererContext) renderer));
+    }
+
+    private static boolean tickErrorShown, hudErrorShown, packKeyDown;
+
+    /** Menu Blur: keeps the game's menu blur at the chosen strength while the module is on. */
+    private static void syncMenuBlur(MinecraftClient mc) {
+        Features.MenuBlur b = Cobra.get(Features.MenuBlur.class);
+        if (!b.isEnabled()) return;
+        int want = Math.round(b.strength.f());
+        var opt = mc.options.getMenuBackgroundBlurriness();
+        if (opt.getValue() != want) opt.setValue(want);
+    }
+
+    /** Pack Organizer: its key opens the resource packs screen from anywhere. */
+    private static void packKey(MinecraftClient mc) {
+        Features.PackOrganizer po = Cobra.get(Features.PackOrganizer.class);
+        int code = po.open.code();
+        boolean down = po.isEnabled() && code >= 0 && mc.currentScreen == null && Cobra.platform.rawKeyDown(code);
+        if (down && !packKeyDown) {
+            mc.setScreen(new net.minecraft.client.gui.screen.pack.PackScreen(mc.getResourcePackManager(),
+                    manager -> mc.options.refreshResourcePacks(manager), mc.getResourcePackDir(),
+                    net.minecraft.text.Text.translatable("resourcePack.title")));
+        }
+        packKeyDown = down;
+    }
     private static String skyApplied;
     private static int tickCount, skyRetries;
 

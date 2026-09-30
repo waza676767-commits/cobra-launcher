@@ -26,6 +26,31 @@ public final class Theme {
     public static Color GLOW = new Color(0x1e1f22);    // centre of the background gradient
     public static Color EDGE = new Color(0x0a0a0b);    // outer ring of the background gradient
 
+    /**
+     * Colour themes for the whole launcher (and, if you want, the game). Each is a set of carefully
+     * matched shades: a deep tinted black, panels a step lighter, lines, muted and soft text, near-white
+     * text, and an accent that belongs to it. Values: base, panel, panel2, raised, line, line2, mid,
+     * muted, soft, text, accent, glow (soft light in the background).
+     */
+    public static final String[] THEMES = {"Midnight", "Ocean", "Forest", "Sunset", "Rose", "Violet", "Graphite"};
+    private static final int[][] PALETTES = {
+            {0x000000, 0x171717, 0x0A0A0A, 0x262626, 0x262626, 0x373737, 0x525252, 0x8A8A8A, 0xD4D4D4, 0xFAFAFA, 0xFAFAFA, 0x3A3A3A},
+            {0x050D17, 0x0E1B2C, 0x08121F, 0x15263C, 0x19304B, 0x24405F, 0x395A80, 0x7F97B5, 0xC9D6E6, 0xF2F7FC, 0x4DA3FF, 0x173A63},
+            {0x04100A, 0x0C1D14, 0x07150E, 0x13291D, 0x183426, 0x234733, 0x3A6650, 0x83A593, 0xCFE0D6, 0xF1F8F4, 0x3DDC84, 0x14402A},
+            {0x120806, 0x22120E, 0x180C09, 0x301A14, 0x3A2018, 0x502C22, 0x7A4535, 0xB48C80, 0xEAD6CF, 0xFFF6F2, 0xFF8A4C, 0x4A2012},
+            {0x12060C, 0x221019, 0x180A11, 0x311724, 0x3B1C2C, 0x52283D, 0x7B3F5B, 0xB98AA0, 0xEFD5E1, 0xFFF4F8, 0xFF5C9A, 0x4A1430},
+            {0x0A0714, 0x150F26, 0x0F0A1D, 0x1E1636, 0x251B42, 0x33265B, 0x4E3E86, 0x9A8FC2, 0xDDD7F2, 0xF7F5FF, 0x8B6CFF, 0x2C1E5E},
+            {0x0B0C0E, 0x1A1C20, 0x121417, 0x24272C, 0x2A2D33, 0x3A3E45, 0x575C66, 0x8E949E, 0xD5D9DF, 0xF5F7FA, 0x9EC1E8, 0x2A3140}};
+
+    /** The current theme's colours (index into THEMES). */
+    public static int[] palette() {
+        String t = dev.cobra.launcher.core.Settings.get().theme;
+        for (int i = 0; i < THEMES.length; i++) if (THEMES[i].equals(t)) return PALETTES[i];
+        return PALETTES[0];
+    }
+
+    public static int[] palette(int i) { return PALETTES[i]; }
+
     /** Accent (Launch button, selection pill, switches, sliders) and the ink drawn on top of it. */
     public static Color ACCENT = TEXT, ON_ACCENT = BLACK;
 
@@ -66,12 +91,17 @@ public final class Theme {
     public static void applyAccent() {
         dev.cobra.launcher.core.Settings s = dev.cobra.launcher.core.Settings.get();
         int rgb = 0;
+        if ("Kit green".equals(s.accent)) s.accent = "Cobra green";     // back from the Kit test build
         for (int i = 0; i < ACCENTS.length; i++) if (ACCENTS[i].equals(s.accent)) rgb = ACCENT_RGB[i];
         if ("Custom".equals(s.accent)) rgb = s.accentCustom & 0xFFFFFF;
-        if (rgb == 0) {
-            ACCENT = TEXT;
-            ON_ACCENT = BLACK;
-            return;
+        if (rgb == 0) {                         // Classic: the theme's own accent
+            int ta = palette()[10];
+            if (light || ta == palette()[9]) {
+                ACCENT = TEXT;
+                ON_ACCENT = BLACK;
+                return;
+            }
+            rgb = ta;
         }
         ACCENT = new Color(rgb);
         int lum = ((rgb >> 16 & 255) * 299 + (rgb >> 8 & 255) * 587 + (rgb & 255) * 114) / 1000;
@@ -120,20 +150,21 @@ public final class Theme {
             GLOW = new Color(0xFFFFFF);
             EDGE = new Color(0xF5F5F5);
         } else {
-            BLACK = new Color(0x000000);    // base
-            PANEL = new Color(0x171717);    // 100
-            PANEL_2 = new Color(0x0A0A0A);  // 50
-            RAISED = new Color(0x262626);   // 200
-            LINE = new Color(0x262626);     // 200
-            LINE_2 = new Color(0x373737);   // 300
-            MID = new Color(0x525252);      // 400
-            STEEL = new Color(0x525252);
-            MUTED = new Color(0x8A8A8A);    // 500
-            SOFT = new Color(0xD4D4D4);     // 700
-            TEXT = new Color(0xFAFAFA);     // 950
+            int[] p = palette();                // Midnight = the neutral scale; others are tinted to match
+            BLACK = new Color(p[0]);
+            PANEL = new Color(p[1]);
+            PANEL_2 = new Color(p[2]);
+            RAISED = new Color(p[3]);
+            LINE = new Color(p[4]);
+            LINE_2 = new Color(p[5]);
+            MID = new Color(p[6]);
+            STEEL = new Color(p[6]);
+            MUTED = new Color(p[7]);
+            SOFT = new Color(p[8]);
+            TEXT = new Color(p[9]);
             DANGER = new Color(0xFF6B6B);
-            GLOW = new Color(0x262626);
-            EDGE = new Color(0x0A0A0A);
+            GLOW = new Color(p[11]);
+            EDGE = new Color(p[2]);
         }
         TINTED.clear();
         LOGOS.clear();
@@ -201,9 +232,16 @@ public final class Theme {
         return Math.max(0, Math.min(1, v));
     }
 
+    /** Settings → Customization → Corner roundness: every rounded corner is scaled by this. */
+    public static double round(double r) {
+        double k = dev.cobra.launcher.core.Settings.get().roundness / 100.0;
+        return Math.max(0, Math.min(Math.max(0, r * k), r * 3));
+    }
+
     public static void fill(Graphics2D g, double x, double y, double w, double h, double r, Paint p) {
         g.setPaint(p);
-        g.fill(new RoundRectangle2D.Double(x, y, w, h, r * 2, r * 2));
+        double rr = Math.min(round(r), Math.min(w, h) / 2);
+        g.fill(new RoundRectangle2D.Double(x, y, w, h, rr * 2, rr * 2));
     }
 
     /** Standard card/row/chip surface: solid charcoal, or liquid glass when that style is on. */
@@ -246,6 +284,7 @@ public final class Theme {
         g.setColor(c);
         g.setStroke(new BasicStroke(width));
         double o = width / 2.0;
+        r = Math.min(round(r), Math.min(w, h) / 2);
         g.draw(new RoundRectangle2D.Double(x + o, y + o, w - width, h - width, Math.max(0, r * 2 - width), Math.max(0, r * 2 - width)));
     }
 

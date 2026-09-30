@@ -161,6 +161,15 @@ public interface Platform {
 
     void closeScreen();
 
+    /** Saturation (the hidden food bar), or -1 outside a world. */
+    default float saturation() { return -1; }
+
+    /** Food level 0-20. */
+    default int food() { return 20; }
+
+    /** Names of the resource packs you have on (not the built-in / mod ones), top pack first. */
+    default java.util.List<String> activePacks() { return java.util.Collections.emptyList(); }
+
     /** Your UUID while in a world (for the Cobra online list), or null. */
     default String playerUuid() { return null; }
 

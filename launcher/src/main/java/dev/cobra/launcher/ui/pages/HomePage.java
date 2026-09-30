@@ -259,8 +259,11 @@ public final class HomePage extends Page {
         lw = lw + HX;                                        // centre the title on the hero itself
         Theme.logo(g, lw / 2.0, cy - 10, 96, 1);
         Color shade = new Color(0, 0, 0, 90);
-        Theme.center(g, "COBRA", Theme.tracked(Theme.BOLD, 40f, 0.3f), shade, 0, cy + 50, lw, 52);
-        Theme.center(g, "COBRA", Theme.tracked(Theme.BOLD, 40f, 0.3f), Color.WHITE, 0, cy + 48, lw, 52);
+        var cs = dev.cobra.launcher.core.Settings.get();
+        String title = cs.homeTitle == null || cs.homeTitle.isBlank() || cs.homeTitle.trim().equals("KIT") ? "COBRA" : cs.homeTitle.trim();
+        Font tfont = Theme.tracked(Theme.BOLD, title.length() > 10 ? 30f : 40f, 0.3f);
+        Theme.center(g, title, tfont, shade, 0, cy + 50, lw, 52);
+        Theme.center(g, title, tfont, Color.WHITE, 0, cy + 48, lw, 52);
         MainWindow mw = MainWindow.get();
         String sub;
         if (mw != null && mw.running()) sub = "Minecraft is running";
@@ -268,6 +271,7 @@ public final class HomePage extends Page {
             long week = Playtime.totalSeconds(null, System.currentTimeMillis() - 7L * 86_400_000L);
             sub = "Welcome back, " + mw.account().name + (week > 0 ? "  —  " + Playtime.format(week) + " played this week" : "");
         } else sub = "Sign in to play";
+        if (cs.homeGreeting != null && !cs.homeGreeting.isBlank()) sub = cs.homeGreeting.trim();
         Theme.center(g, sub, Theme.font(Theme.REGULAR, 14f), new Color(255, 255, 255, 200), 0, cy + 100, lw, 22);
         Theme.left(g, BuildInfo.NAME + " " + BuildInfo.VERSION, Theme.font(Theme.REGULAR, 11.5f), new Color(255, 255, 255, 140), HX + 22, 16, 20);
         g.dispose();
@@ -308,7 +312,7 @@ public final class HomePage extends Page {
         b.setColor(Color.WHITE);
         b.fill(hero);                                       // smooth mask
         b.setComposite(AlphaComposite.SrcIn);
-        if (Wallpaper.active() && !Glass.lite()) {
+        if (Wallpaper.active() && !Glass.lite() && dev.cobra.launcher.core.Settings.get().heroWallpaper) {
             Wallpaper.paint(b, lw, h);
         } else {
             b.setPaint(new GradientPaint(0, 0, new Color(0x373737), lw, h, new Color(0x0A0A0A)));
@@ -411,6 +415,28 @@ public final class HomePage extends Page {
         }
 
         private static final int STEP = 54;
+        private int[] statsCache;
+        private String statsFor = "";
+        private long statsAt;
+
+        /** {mods, packs} in a profile (counted at most every 3 s). */
+        private int[] stats(dev.cobra.launcher.core.Profiles.Profile p) {
+            long now = System.currentTimeMillis();
+            if (statsCache != null && p.id.equals(statsFor) && now - statsAt < 3000) return statsCache;
+            java.nio.file.Path dir = dev.cobra.launcher.core.Profiles.gameDir(p, GameVersion.MODERN);
+            statsCache = new int[]{count(dir.resolve("mods"), ".jar"), count(dir.resolve("resourcepacks"), ".zip")};
+            statsFor = p.id;
+            statsAt = now;
+            return statsCache;
+        }
+
+        private int count(java.nio.file.Path d, String ext) {
+            try (var s = java.nio.file.Files.list(d)) {
+                return (int) s.filter(f -> f.getFileName().toString().endsWith(ext) && !f.getFileName().toString().startsWith("cobra-sky-")).count();
+            } catch (Exception e) {
+                return 0;
+            }
+        }
 
         private int at(int y) {
             int n = shown().size();
@@ -439,6 +465,18 @@ public final class HomePage extends Page {
                 Theme.left(g, Theme.ellipsize(p.name, g.getFontMetrics(), w - 150), Theme.font(Theme.MEDIUM, 14.5f), ink, 44, y + 12, 30);
                 Theme.left(g, p.gameVersion().id, Theme.font(Theme.REGULAR, 12f), Theme.alpha(ink, 0.6), w - 70, y + 12, 30);
                 if (front) {
+                    // a few facts about the profile, as small pills
+                    int[] st = stats(p);
+                    String[] facts = {st[0] + (st[0] == 1 ? " mod" : " mods"), st[1] + (st[1] == 1 ? " pack" : " packs"),
+                            dev.cobra.launcher.game.Playtime.format(dev.cobra.launcher.game.Playtime.totalSeconds(null, 0)) + " played"};
+                    int fx = 18;
+                    for (String f : facts) {
+                        int fw = Theme.width(g, f, Theme.font(Theme.MEDIUM, 11.5f)) + 20;
+                        if (fx + fw > w - 18) break;
+                        Theme.fill(g, fx, y + 128, fw, 26, 13, Theme.alpha(ink, 0.08));
+                        Theme.center(g, f, Theme.font(Theme.MEDIUM, 11.5f), Theme.alpha(ink, 0.75), fx, y + 128, fw, 26);
+                        fx += fw + 6;
+                    }
                     ProfileArt.draw(g, dev.cobra.launcher.core.Profiles.icon(p), p.name, 18, y + 58, 56, true);
                     Theme.left(g, "Playing this profile", Theme.font(Theme.REGULAR, 12.5f), Theme.alpha(ink, 0.6), 88, y + 60, 22);
                     Theme.left(g, p.locked() ? "FPS Boost · mods set up for you" : "Fabric · Cobra Client", Theme.font(Theme.MEDIUM, 13.5f), ink, 88, y + 82, 22);
@@ -575,8 +613,12 @@ public final class HomePage extends Page {
         }
 
         private Rectangle chip(int i) {
-            int w = getWidth(), cols = 3, cw = (w - 32 - (cols - 1) * 8) / cols, ch = 30;
-            int top = 54, rowGap = Math.max(8, (getHeight() - top - 20 - 3 * ch) / 3);
+            int w = getWidth(), cols = 3, cw = (w - 32 - (cols - 1) * 8) / cols;
+            int ch = getHeight() > 260 ? 34 : 30;
+            int rows = (chips.size() + cols - 1) / cols;
+            int rowGap = Math.max(8, Math.min(14, (getHeight() - 54 - 16 - rows * ch) / Math.max(1, rows - 1)));
+            int block = rows * ch + (rows - 1) * rowGap;
+            int top = 54 + Math.max(0, (getHeight() - 54 - 16 - block) / 2);   // chips centred in the card
             return new Rectangle(16 + (i % cols) * (cw + 8), top + (i / cols) * (ch + rowGap), cw, ch);
         }
 

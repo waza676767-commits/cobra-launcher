@@ -186,4 +186,92 @@ public final class ProfileImport {
             }
         });
     }
+
+    // ------------------------------------------------------------------ Modrinth modpacks
+
+    /**
+     * Imports a Modrinth modpack (.mrpack): a new profile with every mod, pack and config it lists
+     * (downloaded from Modrinth and checked), plus its overrides. {@code progress} gets a status line.
+     */
+    public static Profiles.Profile importMrpack(Path mrpack, java.util.function.Consumer<String> progress) throws Exception {
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(mrpack.toFile())) {
+            var entry = zip.getEntry("modrinth.index.json");
+            if (entry == null) throw new IOException("That isn't a Modrinth modpack (.mrpack).");
+            com.google.gson.JsonObject index;
+            try (var in = zip.getInputStream(entry)) {
+                index = com.google.gson.JsonParser.parseString(new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+            }
+            String name = index.has("name") ? index.get("name").getAsString() : mrpack.getFileName().toString().replace(".mrpack", "");
+            Profiles.Profile p = Profiles.create(name, GameVersion.MODERN);
+            Path game = Profiles.gameDir(p, GameVersion.MODERN);
+            Files.createDirectories(game);
+            var files = index.getAsJsonArray("files");
+            int n = 0, total = files == null ? 0 : files.size();
+            if (files != null) {
+                for (var el : files) {
+                    var f = el.getAsJsonObject();
+                    n++;
+                    if (f.has("env") && f.getAsJsonObject("env").has("client")
+                            && "unsupported".equals(f.getAsJsonObject("env").get("client").getAsString())) continue;
+                    String rel = f.get("path").getAsString();
+                    Path dest = game.resolve(rel).normalize();
+                    if (!dest.startsWith(game)) continue;                       // never outside the profile
+                    String url = f.getAsJsonArray("downloads").get(0).getAsString();
+                    String sha1 = f.has("hashes") && f.getAsJsonObject("hashes").has("sha1") ? f.getAsJsonObject("hashes").get("sha1").getAsString() : null;
+                    progress.accept("Downloading " + n + " / " + total + ": " + dest.getFileName());
+                    Files.createDirectories(dest.getParent());
+                    Http.download(url, dest, sha1);
+                }
+            }
+            // overrides/ and client-overrides/ go straight into the game folder
+            var en = zip.entries();
+            while (en.hasMoreElements()) {
+                var ze = en.nextElement();
+                String nm = ze.getName();
+                String rel = nm.startsWith("overrides/") ? nm.substring(10) : nm.startsWith("client-overrides/") ? nm.substring(17) : null;
+                if (rel == null || rel.isEmpty() || ze.isDirectory()) continue;
+                Path dest = game.resolve(rel).normalize();
+                if (!dest.startsWith(game)) continue;
+                Files.createDirectories(dest.getParent());
+                try (var in = zip.getInputStream(ze)) {
+                    Files.copy(in, dest, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+            return p;
+        }
+    }
+
+    /**
+     * A modpack from a Modrinth link (modrinth.com/modpack/NAME) or just its name: the newest Fabric
+     * version for this Minecraft version is downloaded and imported.
+     */
+    public static Profiles.Profile importModrinthLink(String link, java.util.function.Consumer<String> progress) throws Exception {
+        String slug = link.trim().replaceAll("[?#].*$", "");
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("modrinth\\.com/(?:modpack|project)/([^/]+)").matcher(slug);
+        if (m.find()) slug = m.group(1);
+        if (!slug.matches("[A-Za-z0-9_.-]{2,64}")) throw new IOException("Paste a Modrinth modpack link, e.g. modrinth.com/modpack/fabulously-optimized");
+        progress.accept("Looking up " + slug + " on Modrinth…");
+        String q = "https://api.modrinth.com/v2/project/" + slug + "/version?loaders=" + java.net.URLEncoder.encode("[\"fabric\"]", "UTF-8")
+                + "&game_versions=" + java.net.URLEncoder.encode("[\"" + GameVersion.MODERN.mc + "\"]", "UTF-8");
+        Http.Response r = Http.get(q);
+        if (r.code() == 404) throw new IOException("No modpack called " + slug + " on Modrinth.");
+        if (!r.ok()) throw new IOException("Modrinth answered " + r.code());
+        var versions = com.google.gson.JsonParser.parseString(r.body()).getAsJsonArray();
+        if (versions.isEmpty()) throw new IOException(slug + " has no Fabric version for Minecraft " + GameVersion.MODERN.mc + ".");
+        var files = versions.get(0).getAsJsonObject().getAsJsonArray("files");
+        com.google.gson.JsonObject file = null;
+        for (var f : files) {
+            var fo = f.getAsJsonObject();
+            if (fo.get("filename").getAsString().endsWith(".mrpack") && (file == null || fo.get("primary").getAsBoolean())) file = fo;
+        }
+        if (file == null) throw new IOException("That project has no .mrpack file.");
+        Path tmp = Files.createTempFile("cobra-modpack", ".mrpack");
+        try {
+            progress.accept("Downloading the modpack…");
+            Http.download(file.get("url").getAsString(), tmp, file.getAsJsonObject("hashes").get("sha1").getAsString());
+            return importMrpack(tmp, progress);
+        } finally {
+            Files.deleteIfExists(tmp);
+        }
+    }
 }

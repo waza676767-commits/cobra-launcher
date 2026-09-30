@@ -17,6 +17,13 @@ public abstract class ResourcePackOrganizerMixin {
 
     @ModifyReturnValue(method = "getDisabledPacks", at = @At("RETURN"), require = 0)
     private Stream<ResourcePackOrganizer.Pack> cobra$hideDisabled(Stream<ResourcePackOrganizer.Pack> packs) {
-        return packs.filter(p -> !p.getName().contains("cobra-sky-"));
+        Stream<ResourcePackOrganizer.Pack> out = packs.filter(p -> !p.getName().contains("cobra-sky-"));
+        // Pack Organizer: available packs A to Z
+        if (dev.cobra.client.core.Cobra.platform != null
+                && dev.cobra.client.core.Cobra.get(dev.cobra.client.core.module.Features.PackOrganizer.class).isEnabled()
+                && dev.cobra.client.core.Cobra.get(dev.cobra.client.core.module.Features.PackOrganizer.class).sort.on()) {
+            out = out.sorted(java.util.Comparator.comparing((ResourcePackOrganizer.Pack p) -> p.getDisplayName().getString().replaceAll("\\u00a7.", "").toLowerCase()));
+        }
+        return out;
     }
 }

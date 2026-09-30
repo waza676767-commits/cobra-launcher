@@ -53,6 +53,14 @@ public final class Draw {
         HOVER = (0x14 << 24) | (fg & 0xFFFFFF);
     }
 
+    /** HUD glass strength (Cobra Settings → HUD glass strength), 1 = normal. */
+    public static float glassK = 1f;
+
+    private static int scaleAlpha(int argb, float k) {
+        int a = Math.max(0, Math.min(255, Math.round((argb >>> 24) * k)));
+        return a << 24 | (argb & 0xFFFFFF);
+    }
+
     private Draw() {}
 
     public static void round(Render r, int x, int y, int w, int h, int rad, int c) {
@@ -175,11 +183,14 @@ public final class Draw {
         }
     }
 
+    /** Menu animation speed (Cobra Settings → Menu animation speed), kept here so it's cheap to read. */
+    public static float speedK = 1f;
+
     public static float approach(float cur, float target, float speed) {
         if (!dev.cobra.client.core.Cobra.animations) return target;
         float d = target - cur;
         if (Math.abs(d) < 0.01f) return target;
-        return cur + d * speed;
+        return cur + d * Math.min(1f, speed * speedK);
     }
 
     /**
@@ -193,15 +204,16 @@ public final class Draw {
         for (int i = 3; i >= 1; i--) {
             round(r, x - i + 1, y - i + 3, w + 2 * i - 2, h + 2 * i - 2, radius + i, (0x10 + 4 * (3 - i)) << 24);
         }
+        float k = glassK;
         int a = tint >>> 24;
-        int base = (Math.max(0x30, Math.min(0xB0, a)) << 24) | (tint & 0xFFFFFF);
+        int base = (Math.max(0x18, Math.min(0xE0, Math.round(Math.max(0x30, Math.min(0xB0, a)) * Math.max(0.3f, k)))) << 24) | (tint & 0xFFFFFF);
         round(r, x, y, w, h, radius, base);
         // depth: the top half a touch lighter, the bottom edge a touch darker
         int top = Math.max(1, h / 2);
-        round(r, x, y, w, top, radius, 0x14FFFFFF);
-        r.rect(x + radius, y + h - 1, Math.max(0, w - 2 * radius), 1, 0x33000000);
+        round(r, x, y, w, top, radius, scaleAlpha(0x14FFFFFF, k));
+        r.rect(x + radius, y + h - 1, Math.max(0, w - 2 * radius), 1, scaleAlpha(0x33000000, k));
         // specular edge
-        r.rect(x + radius, y, Math.max(0, w - 2 * radius), 1, light ? 0xBFFFFFFF : 0x40FFFFFF);
-        r.rect(x, y + radius, 1, Math.max(0, h / 2 - radius), light ? 0x80FFFFFF : 0x26FFFFFF);
+        r.rect(x + radius, y, Math.max(0, w - 2 * radius), 1, scaleAlpha(light ? 0xBFFFFFFF : 0x40FFFFFF, k));
+        r.rect(x, y + radius, 1, Math.max(0, h / 2 - radius), scaleAlpha(light ? 0x80FFFFFF : 0x26FFFFFF, k));
     }
 }

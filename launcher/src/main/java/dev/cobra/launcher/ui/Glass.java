@@ -111,6 +111,10 @@ public final class Glass {
         return !"glass".equals(dev.cobra.launcher.core.Settings.get().style);
     }
 
+    private static int a255(double v) {
+        return (int) Math.max(0, Math.min(255, Math.round(v)));
+    }
+
     /** Page cards are separate pieces of frosted glass (not with Solid / Clear). */
     public static boolean frostedCards() {
         return !solidLook() && !"liquid".equals(dev.cobra.launcher.core.Settings.get().glassLook);
@@ -145,7 +149,8 @@ public final class Glass {
         int frost = dev.cobra.launcher.core.Settings.get().frost;
         int wp = Wallpaper.version();
         boolean light = Theme.isLight();
-        String grad = Theme.gradientKey() + "|" + dev.cobra.launcher.core.Settings.get().glassLook + "|" + dev.cobra.launcher.core.Settings.get().style;
+        var cs = dev.cobra.launcher.core.Settings.get();
+        String grad = Theme.gradientKey() + "|" + cs.glassLook + "|" + cs.style + "|" + cs.roundness + "|" + cs.glassTint + "|" + cs.glassBorder + "|" + cs.theme;
         if (backdrop != null && w == builtW && h == builtH && frost == builtFrost && light == builtLight && wp == builtWallpaper
                 && grad.equals(builtGradient)) return;
         builtGradient = grad;
@@ -304,15 +309,18 @@ public final class Glass {
     private static void paintDefault(Graphics2D g, int w, int h, boolean light) {
         Theme.aa(g);
         if (Theme.paintGradient(g, w, h)) return;
-        g.setColor(light ? new Color(0xF8F5F2) : new Color(0x101012));
+        int[] p = Theme.palette();
+        Color base = light ? new Color(0xF5F5F5) : new Color(p[2]);
+        g.setColor(base);
         g.fillRect(0, 0, w, h);
+        // two soft pools of the theme's own light, top right and bottom left
+        Color glow = light ? Color.WHITE : new Color(p[11]);
         g.setPaint(new RadialGradientPaint(new Point2D.Double(w * 0.68, h * 0.26), (float) (h * 0.85), new float[]{0f, 1f},
-                light ? new Color[]{new Color(255, 255, 255, 255), new Color(236, 231, 225, 0)}
-                        : new Color[]{new Color(70, 70, 74, 170), new Color(18, 18, 18, 0)}));
+                new Color[]{new Color(glow.getRed(), glow.getGreen(), glow.getBlue(), light ? 255 : 200), new Color(base.getRed(), base.getGreen(), base.getBlue(), 0)}));
         g.fillRect(0, 0, w, h);
+        Color glow2 = light ? new Color(0xE5E5E5) : Theme.mix(new Color(p[11]), new Color(p[3]), 0.5);
         g.setPaint(new RadialGradientPaint(new Point2D.Double(w * 0.18, h * 0.9), (float) (h * 0.7), new float[]{0f, 1f},
-                light ? new Color[]{new Color(225, 220, 212, 200), new Color(236, 231, 225, 0)}
-                        : new Color[]{new Color(44, 44, 48, 150), new Color(18, 18, 18, 0)}));
+                new Color[]{new Color(glow2.getRed(), glow2.getGreen(), glow2.getBlue(), light ? 200 : 170), new Color(base.getRed(), base.getGreen(), base.getBlue(), 0)}));
         g.fillRect(0, 0, w, h);
     }
 
@@ -347,10 +355,11 @@ public final class Glass {
      * @param emphasis 0 = quiet card, 1 = raised element (chips, focused inputs)
      */
     public static void surface(Graphics2D g, Component c, double x, double y, double w, double h, double r, double emphasis) {
+        r = Math.min(Theme.round(r), Math.min(w, h) / 2);
         if (lite()) {                         // plain panel: one fill and a hairline, nothing else
             Graphics2D f = (Graphics2D) g.create();
             f.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            f.setColor(Theme.isLight() ? new Color(255, 255, 255, 235) : new Color(26, 26, 31, 245));
+            f.setColor(Theme.isLight() ? new Color(255, 255, 255, 235) : Theme.alpha(Theme.PANEL, 0.96));
             f.fill(new RoundRectangle2D.Double(x, y, w, h, r * 2, r * 2));
             f.setColor(Theme.isLight() ? new Color(0, 0, 0, 28) : new Color(255, 255, 255, 22));
             f.draw(new RoundRectangle2D.Double(x + 0.5, y + 0.5, w - 1, h - 1, r * 2, r * 2));
@@ -522,8 +531,10 @@ public final class Glass {
         // every layer is an anti-aliased fill of the rounded shape (a clip would give jagged corners)
         Shape shape = new RoundRectangle2D.Double(0, 0, w, h, r * 2, r * 2);
         boolean frost = frosted(), solid = solidLook();
-        g.setColor(light ? new Color(255, 255, 255, (int) ((solid ? 150 : frost ? 125 : 60) + 50 * q))
-                : new Color(10, 10, 10, (int) ((solid ? 150 : frost ? 120 : 46) + 30 * q)));
+        double tintK = dev.cobra.launcher.core.Settings.get().glassTint / 100.0;
+        double borderK = dev.cobra.launcher.core.Settings.get().glassBorder / 100.0;
+        g.setColor(light ? new Color(255, 255, 255, a255(((solid ? 150 : frost ? 125 : 60) + 50 * q) * tintK))
+                : new Color(Theme.PANEL_2.getRed(), Theme.PANEL_2.getGreen(), Theme.PANEL_2.getBlue(), a255(((solid ? 150 : frost ? 120 : 46) + 30 * q) * tintK)));
         g.fill(shape);
         if (solid) {                   // plain: just a quiet hairline border, no glass shine
             g.setStroke(new BasicStroke(1f));
@@ -537,7 +548,7 @@ public final class Glass {
             g.setPaint(new GradientPaint(0, 0, new Color(255, 255, 255, light ? 60 : 14), 0, (float) Math.min(h, 80), new Color(255, 255, 255, 0)));
             g.fill(shape);
             g.setStroke(new BasicStroke(1f));
-            g.setColor(light ? new Color(255, 255, 255, 190) : new Color(255, 255, 255, (int) (54 + 30 * q)));
+            g.setColor(light ? new Color(255, 255, 255, a255(190 * borderK)) : new Color(255, 255, 255, a255((54 + 30 * q) * borderK)));
             g.draw(new RoundRectangle2D.Double(0.5, 0.5, w - 1, h - 1, Math.max(0, r * 2 - 1), Math.max(0, r * 2 - 1)));
             g.dispose();
             return img;

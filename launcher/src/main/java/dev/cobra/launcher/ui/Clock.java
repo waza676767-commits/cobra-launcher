@@ -51,8 +51,15 @@ public final class Clock extends JComponent {
         ZonedDateTime now = ZonedDateTime.now(zone);
         int w = getWidth();
         Font tf = Theme.font(Theme.BOLD, 16f), df = Theme.font(Theme.REGULAR, 11.5f);
-        String time = now.format(TIME);
-        String date = now.format(DATE) + (place.isEmpty() ? "" : "  " + place);
+        var cs = dev.cobra.launcher.core.Settings.get();
+        String pattern = (cs.clock24 ? "HH:mm" : "h:mm") + (cs.clockSeconds ? ":ss" : "") + (cs.clock24 ? "" : " a");
+        String time = now.format(DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH));
+        String date = cs.clockDate ? now.format(DATE) + (place.isEmpty() ? "" : "  " + place) : "";
+        if (date.isEmpty()) {                                  // time only: centre it vertically
+            Theme.left(g, time, tf, Theme.TEXT, w - Theme.width(g, time, tf), 0, 40);
+            g.dispose();
+            return;
+        }
         g.setFont(df);
         date = Theme.ellipsize(date, g.getFontMetrics(), w);
         Theme.left(g, time, tf, Theme.TEXT, w - Theme.width(g, time, tf), 0, 22);

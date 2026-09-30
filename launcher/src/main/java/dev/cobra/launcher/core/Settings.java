@@ -54,6 +54,50 @@ public final class Settings {
     public boolean passwordAsked = false;
     /** "new" (dashboard with the rail) or "classic" (the previous look with the wide side panel). */
     public String launcherGui = "new";
+    /** Colour theme for the whole launcher (see Theme.THEMES); with themeInGame the game uses it too. */
+    public String theme = "Midnight";
+    public boolean themeInGame = true;
+    // ---- cosmetics (sent to Cobra Client at launch; only Cobra players see them)
+    public String cosEars = "Off", cosWings = "Off", cosHalo = "Off", cosGloves = "Off";
+    public String cosWingStyle = "Feather", cosHat = "Off", cosBunny = "Off", cosHorns = "Off", cosGlasses = "Off",
+            cosHeadphones = "Off", cosTailKind = "Off", cosBackpack = "Off";
+    public boolean cosTail = false, cosKatana = false, cosFeet = false, cosGlow = true;
+    public int cosSize = 100;
+
+    private static String c(String v) {
+        return v.toLowerCase().replace(" ", "");
+    }
+
+    /** The cosmetics as the short code the game and the online list use. */
+    public String cosmeticsCode() {
+        if (cosTail && "Off".equals(cosTailKind)) cosTailKind = "Black";      // the old on/off tail
+        String[][] modes = {{"wings", cosWings}, {"halo", cosHalo}, {"hat", cosHat}, {"ears", cosEars}, {"bunny", cosBunny},
+                {"horns", cosHorns}, {"glasses", cosGlasses}, {"headphones", cosHeadphones}, {"tail", cosTailKind},
+                {"backpack", cosBackpack}, {"gloves", cosGloves}};
+        StringBuilder b = new StringBuilder();
+        for (String[] m : modes) if (m[1] != null && !"Off".equals(m[1])) b.append(m[0]).append(':').append(c(m[1])).append(',');
+        if (!"Off".equals(cosWings) && cosWingStyle != null && !"Feather".equals(cosWingStyle)) b.append("wingstyle:").append(c(cosWingStyle)).append(',');
+        if (cosKatana) b.append("katana,");
+        if (cosFeet) b.append("feet,");
+        if (b.length() == 0) return "";
+        if (cosSize != 100) b.append("size:").append(cosSize).append(',');
+        if (cosGlow) b.append("glow,");
+        return b.substring(0, b.length() - 1);
+    }
+
+    // ---- customization
+    /** Corner roundness, 50–150 % (100 = normal). */
+    public int roundness = 100;
+    /** How dark/light the glass tint is and how visible the glass borders are, 0–200 % (100 = normal). */
+    public int glassTint = 100, glassBorder = 100;
+    /** Animation speed, 50–200 % (100 = normal). */
+    public int animSpeed = 100;
+    /** Clock: 24-hour or 12-hour, with seconds, and whether the date shows. */
+    public boolean clock24 = true, clockSeconds = false, clockDate = true;
+    /** Home: the big title (default COBRA) and your own line under it (empty = automatic). */
+    public String homeTitle = "COBRA", homeGreeting = "";
+    /** Home: show your wallpaper in the big card (off = a calm dark gradient). */
+    public boolean heroWallpaper = true;
     /** Home cards you hid ("profiles", "skins", "quick"). */
     public java.util.Set<String> homeHidden = new java.util.HashSet<>();
     /** Profile categories (e.g. "PvP"), in the order they're shown. */

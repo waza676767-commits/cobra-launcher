@@ -33,6 +33,10 @@ public final class GameLauncher {
         return Paths.LOGS.resolve(gv.id + "-latest.log");
     }
 
+    private static String hex(int rgb) {
+        return String.format("%06X", rgb & 0xFFFFFF);
+    }
+
     public static Process start(GameVersion gv, Installer.Prepared prep, Account acc, Settings s) throws IOException {
         JsonObject v = prep.version;
         boolean customRes = !s.fullscreen && s.width > 0 && s.height > 0;
@@ -79,6 +83,15 @@ public final class GameLauncher {
         if (acc.offline()) cmd.add("-Dcobra.offline=true");
         // Screen Recorder: where videos go (shown in the launcher's Recordings page) and which ffmpeg to use
         cmd.add("-Dcobra.recordings=" + dev.cobra.launcher.ui.pages.RecordingsPage.DIR.toAbsolutePath());
+        // cosmetics picked on the launcher's Cosmetics page
+        cmd.add("-Dcobra.cosmetics=" + s.cosmeticsCode());
+        // the launcher's colour theme, for Cobra Client to use too (Settings → Theme → Use in game)
+        if (s.themeInGame) {
+            cmd.add("-Dcobra.theme.name=" + s.theme);
+            cmd.add("-Dcobra.theme.bg=" + hex(dev.cobra.launcher.ui.Theme.isLight() ? 0xF5F5F5 : dev.cobra.launcher.ui.Theme.PANEL.getRGB()));
+            cmd.add("-Dcobra.theme.fg=" + hex(dev.cobra.launcher.ui.Theme.TEXT.getRGB()));
+            cmd.add("-Dcobra.theme.accent=" + hex(dev.cobra.launcher.ui.Theme.ACCENT.getRGB()));
+        }
         // in-game "Update to the newest": where releases come from and where the launcher picks them up
         cmd.add("-Dcobra.repo=" + dev.cobra.launcher.core.Updater.REPO);
         cmd.add("-Dcobra.build=" + dev.cobra.launcher.core.Updater.BUILD);

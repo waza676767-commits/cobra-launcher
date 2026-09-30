@@ -27,6 +27,16 @@ application {
 
 // Bundle the Cobra Client mod (built separately by client/gradlew build; build-appimage.sh does
 // it for you) so the launcher can install it into each profile.
+// The cosmetics' 3D models are shared with Cobra Client (common/): copied in so the launcher can
+// show real previews of them.
+def cosmeticsSrc = layout.buildDirectory.dir('generated/cosmetics')
+tasks.register('copyCosmetics', Copy) {
+    from(rootProject.file('common/src/main/java')) { include 'dev/cobra/client/core/cosmetics/**' }
+    into(cosmeticsSrc)
+}
+sourceSets.main.java.srcDir(cosmeticsSrc)
+tasks.named('compileJava') { dependsOn 'copyCosmetics' }
+
 // Sky packs for the Sky module: put .zip packs in packaging/skies/ (only ones you may share) and
 // they're bundled; an index lists them for the launcher.
 def skyDir = rootProject.file('packaging/skies')

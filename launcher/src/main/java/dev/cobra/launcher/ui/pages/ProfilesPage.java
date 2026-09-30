@@ -27,7 +27,7 @@ public final class ProfilesPage extends Page {
     }
 
     @Override public String title() { return "Profiles"; }
-    @Override public String icon() { return "star"; }
+    @Override public String icon() { return "sliders"; }
 
     private static java.util.List<String> categories() {
         java.util.List<String> cats = new java.util.ArrayList<>(dev.cobra.launcher.core.Settings.get().profileCategories);

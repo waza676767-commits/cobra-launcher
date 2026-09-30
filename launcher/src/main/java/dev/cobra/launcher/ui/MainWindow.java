@@ -256,6 +256,16 @@ public final class MainWindow {
         });
     }
 
+    /** Settings → Theme: recolours the whole launcher at once. */
+    public void setTheme(String name) {
+        settings.theme = name;
+        settings.save();
+        Theme.setLight(settings.lightMode);      // re-reads the palette and the accent
+        Glass.invalidate();
+        Wallpaper.touch();
+        frame.repaint();
+    }
+
     /** Settings → Launcher GUI: the new dashboard or the previous look. */
     public void setLauncherGui(String gui) {
         settings.launcherGui = gui;
@@ -446,6 +456,11 @@ public final class MainWindow {
                 java.util.List.of("Set a password", "No thanks"), 0, i -> {
                     if (i == 0) LockScreen.showSetup(frame.getRootPane(), null);
                 }));
+    }
+
+    /** Asks for some text (a link, a name…) with one button. */
+    public void askText(String title, String body, String placeholder, String button, java.util.function.Consumer<String> onText) {
+        choice.askText(title, body, placeholder, button, onText);
     }
 
     /** Asks a question with one button per option; {@code onPick} gets the option's index. */

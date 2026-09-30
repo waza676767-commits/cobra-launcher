@@ -6,8 +6,9 @@ Run on your VPS (the one with the Minecraft server):
 Open the port:  sudo ufw allow 25581/tcp   (or your firewall's equivalent)
 Keep it running: see cobra-online.service next to this file.
 
-Clients POST /ping {"uuid": "..."} every 30 s and GET /online for the UUIDs seen in the last
-90 s. Nothing else is stored, and it's all in memory.
+Clients POST /ping {"uuid": "...", "cosmetics": "catears,halo"} every 30 s and GET /online for the
+UUIDs seen in the last 90 s and the cosmetics each one wears (so only Cobra players see them).
+Nothing else is stored, and it's all in memory.
 """
 import json, re, time, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,7 +16,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PORT = 25581
 TTL = 90
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+COSMETICS = re.compile(r"^[a-z0-9_,:]{0,300}$")
 seen = {}
+wearing = {}
 lock = threading.Lock()
 
 
@@ -32,14 +35,19 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != "/ping":
             return self._send(404, {"error": "not found"})
         try:
-            n = min(int(self.headers.get("Content-Length", "0")), 512)
-            uuid = json.loads(self.rfile.read(n) or b"{}").get("uuid", "").lower()
+            n = min(int(self.headers.get("Content-Length", "0")), 1024)
+            body = json.loads(self.rfile.read(n) or b"{}")
+            uuid = body.get("uuid", "").lower()
+            cos = str(body.get("cosmetics", ""))
         except Exception:
             return self._send(400, {"error": "bad request"})
         if not UUID.match(uuid):
             return self._send(400, {"error": "bad uuid"})
+        if not COSMETICS.match(cos):
+            cos = ""
         with lock:
             seen[uuid] = time.time()
+            wearing[uuid] = cos
         self._send(200, {"ok": True})
 
     def do_GET(self):
@@ -49,8 +57,10 @@ class Handler(BaseHTTPRequestHandler):
         with lock:
             for u in [u for u, t in seen.items() if now - t > TTL]:
                 del seen[u]
+                wearing.pop(u, None)
             uuids = list(seen)
-        self._send(200, {"uuids": uuids})
+            cos = {u: wearing.get(u, "") for u in uuids}
+        self._send(200, {"uuids": uuids, "cosmetics": cos})
 
     def log_message(self, *args):
         pass

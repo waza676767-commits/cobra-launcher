@@ -16,14 +16,17 @@ public abstract class ScreenMixin {
     @Inject(method = "applyBlur", at = @At("HEAD"), cancellable = true, require = 0)
     private void cobra$noBlur(net.minecraft.client.gui.DrawContext context, CallbackInfo ci) {
         if (Cobra.platform == null || (Object) this instanceof dev.cobra.client.fabric.CobraMenuScreen) return;
-        if (Cobra.get(dev.cobra.client.core.module.Features.Client.class).screenBlur.is("Off")) ci.cancel();
+        if (Cobra.get(dev.cobra.client.core.module.Features.Client.class).screenBlur.is("Off")
+                && !Cobra.get(dev.cobra.client.core.module.Features.MenuBlur.class).isEnabled()) ci.cancel();
     }
 
     /** "Menus + inventory": blur the world behind inventories and other in-game screens too. */
     @Inject(method = "renderInGameBackground", at = @At("HEAD"), require = 0)
     private void cobra$inventoryBlur(net.minecraft.client.gui.DrawContext context, CallbackInfo ci) {
         if (Cobra.platform == null || (Object) this instanceof dev.cobra.client.fabric.CobraMenuScreen) return;
-        if (!Cobra.get(dev.cobra.client.core.module.Features.Client.class).screenBlur.is("Menus + inventory")) return;
+        boolean menuBlur = Cobra.get(dev.cobra.client.core.module.Features.MenuBlur.class).isEnabled()
+                && Cobra.get(dev.cobra.client.core.module.Features.MenuBlur.class).inventory.on();
+        if (!menuBlur && !Cobra.get(dev.cobra.client.core.module.Features.Client.class).screenBlur.is("Menus + inventory")) return;
         try {
             applyBlur(context);
         } catch (Throwable ignored) {

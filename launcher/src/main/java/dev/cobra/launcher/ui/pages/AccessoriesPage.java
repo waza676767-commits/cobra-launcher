@@ -22,6 +22,7 @@ public final class AccessoriesPage extends Page {
     private final Components.Stack stack = new Components.Stack(18);
     private final JScrollPane scroll = Components.scroll(stack);
     private final Card skinCard = new Card(true), capeCard = new Card(false);
+    private final CosmeticsGallery gallery = new CosmeticsGallery();
     private final Components.Button upload;
 
     public AccessoriesPage() {
@@ -29,6 +30,7 @@ public final class AccessoriesPage extends Page {
         skinCard.extra(upload);
         stack.add(skinCard);
         stack.add(capeCard);
+        stack.add(gallery);                       // cosmetics, right below: just scroll down
         add(scroll);
     }
 
@@ -53,7 +55,7 @@ public final class AccessoriesPage extends Page {
     protected void paintComponent(Graphics g0) {
         Graphics2D g = Theme.aa(g0.create());
         Theme.left(g, "Accessories", Theme.font(Theme.REGULAR, 34f), Theme.TEXT, 0, 0, 42);
-        Theme.left(g, "Your skins and capes. Click one to wear it in Cobra Client; add more from files, player names or NameMC.",
+        Theme.left(g, "Your skins, capes and cosmetics. Scroll down for wings, hats, halos and more.",
                 Theme.font(Theme.REGULAR, 13.5f), Theme.SOFT, 0, 44, 22);
         g.dispose();
     }

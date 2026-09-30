@@ -90,15 +90,17 @@ public final class CobraMenu {
     // ------------------------------------------------------------------ palette
 
     // Black glass over the blurred game (light mode: white glass). Only ENABLED/DISABLED keep colour.
-    private static int backdrop() { return Draw.light ? 0x38FFFFFF : 0x48000000; }
-    private static int panel() { return Draw.light ? 0x9EF7F7F8 : 0x70101012; }
-    private static int panelLine() { return Draw.light ? 0x40FFFFFF : 0x40FFFFFF; }
+    // colours follow the theme (the launcher's, when "Use the launcher's colours" is on)
+    private static int tintOf(int a, int rgb) { return a << 24 | (rgb & 0xFFFFFF); }
+    private static int backdrop() { return Draw.light ? 0x38FFFFFF : tintOf(0x48, Draw.BG == 0 ? 0 : Draw.mix(Draw.BG, 0xFF000000, 0.5f)); }
+    private static int panel() { return Draw.light ? 0x9EF7F7F8 : tintOf(0x78, Draw.BG); }
+    private static int panelLine() { return tintOf(0x40, Draw.light ? 0xFFFFFF : Draw.FG); }
     private static int side() { return Draw.light ? 0x66FFFFFF : 0x55000000; }
-    private static int card() { return Draw.light ? 0x94FFFFFF : 0x40000000; }
-    private static int cardHov() { return Draw.light ? 0xD9FFFFFF : 0x1CFFFFFF; }
-    private static int line() { return Draw.light ? 0x22000000 : 0x24FFFFFF; }
-    private static int soft() { return Draw.light ? 0xFF505257 : 0xFFA8AAB0; }
-    private static int muted() { return Draw.light ? 0xFF8C8E94 : 0xFF6C6E75; }
+    private static int card() { return Draw.light ? 0x94FFFFFF : tintOf(0x50, Draw.mix(Draw.BG, 0xFF000000, 0.35f)); }
+    private static int cardHov() { return Draw.light ? 0xD9FFFFFF : tintOf(0x1C, Draw.FG); }
+    private static int line() { return Draw.light ? 0x22000000 : tintOf(0x24, Draw.FG); }
+    private static int soft() { return Draw.light ? 0xFF505257 : Draw.SOFT; }
+    private static int muted() { return Draw.light ? 0xFF8C8E94 : Draw.MUTED; }
     /** Selection colour: white on dark, black on light. */
     private static int accent() {
         int a = Cobra.platform == null ? 0 : Cobra.get(dev.cobra.client.core.module.Features.Client.class).accentArgb();
@@ -141,8 +143,12 @@ public final class CobraMenu {
     private float fit = 1;
 
     public void render(Render r, int mx, int my) {
-        fit = editing ? 1 : Math.max(0.45f, Math.min(1f, Math.min((r.width() - 16) / 520f, (r.height() - 16) / 300f)));
-        if (fit >= 0.999f) {
+        float user = Cobra.platform == null ? 1f : Cobra.get(dev.cobra.client.core.module.Features.Client.class).menuScale.f() / 100f;
+        float want = editing ? 1 : Math.max(0.45f, Math.min(user, Math.min((r.width() - 16) / 520f, (r.height() - 16) / 300f)));
+        // while you drag a slider (e.g. Menu size itself) the menu keeps its size, so the slider
+        // doesn't run away from the mouse; the new size applies when you let go
+        if (sliding == null && drag == null && resizing == null) fit = want;
+        if (Math.abs(fit - 1f) < 0.001f) {
             fit = 1;
             renderScaled(r, mx, my);
             return;
@@ -368,6 +374,11 @@ public final class CobraMenu {
             Draw.scaledText(r, st, cx0 + cw0 - 24 - r.textWidth(st) * 0.75f, cy0 + 5, 0.75f, m.isEnabled() ? Draw.FG : muted(), false);
             Draw.toggle(r, cx0 + cw0 - 20, cy0 + 3, on, panel() | 0xFF000000);
         }
+        // Reset: every setting of this module back to normal (confirm with a second click)
+        boolean confirm = resetArmed == m && System.currentTimeMillis() - resetAt < 3000;
+        String rl = confirm ? "SURE?" : "RESET";
+        int rw = Draw.spacedWidth(r, rl, 0.6f) + 14;
+        wideButton(r, resetX(m, rw), cy0, rw, 15, rl, mx, my, confirm);
         String sub = m.problem != null ? m.problem : (client ? "Theme, animations, blur and the menu key" : m.description);
         Draw.scaledText(r, sub, cx0, cy0 + 20, 0.72f, m.problem != null ? 0xFFE0676F : soft(), false);
 
@@ -723,8 +734,29 @@ public final class CobraMenu {
         return true;
     }
 
+    private Module resetArmed;
+    private long resetAt;
+
+    /** Where the Reset button sits: left of the On/Off switch (right edge for Client settings). */
+    private int resetX(Module m, int rw) {
+        return m instanceof Features.Client ? cx0 + cw0 - rw : cx0 + cw0 - 72 - rw;
+    }
+
     private boolean clickSettings(Render r, int mx, int my, Module m) {
         boolean client = m instanceof Features.Client;
+        int rw = (r == null ? 40 : Draw.spacedWidth(r, resetArmed == m ? "SURE?" : "RESET", 0.6f) + 14);
+        if (in(mx, my, resetX(m, rw), cy0, rw, 15)) {
+            if (resetArmed == m && System.currentTimeMillis() - resetAt < 3000) {
+                m.resetSettings();
+                Cobra.save();
+                resetArmed = null;
+                if (Cobra.platform != null) Cobra.platform.chat(m.name + ": settings reset to default");
+            } else {
+                resetArmed = m;
+                resetAt = System.currentTimeMillis();
+            }
+            return true;
+        }
         if (!client && in(mx, my, cx0, cy0, 44, 15)) {
             restartReveal();
             open = null;

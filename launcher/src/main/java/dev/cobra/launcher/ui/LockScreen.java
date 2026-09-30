@@ -104,18 +104,20 @@ public final class LockScreen extends JComponent {
     private static void show(JRootPane root, boolean setup, Runnable after) {
         JLayeredPane lp = root.getLayeredPane();
         LockScreen[] ref = new LockScreen[1];
+        java.awt.event.ComponentAdapter resize = new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) {
+                ref[0].setBounds(0, 0, lp.getWidth(), lp.getHeight());
+            }
+        };
         ref[0] = new LockScreen(setup, () -> {
+            lp.removeComponentListener(resize);           // no leftover listener once it's closed
             lp.remove(ref[0]);
             lp.repaint();
             if (after != null) after.run();
         });
         ref[0].setBounds(0, 0, lp.getWidth(), lp.getHeight());
         lp.add(ref[0], Integer.valueOf(JLayeredPane.DRAG_LAYER + 10));
-        lp.addComponentListener(new java.awt.event.ComponentAdapter() {
-            @Override public void componentResized(java.awt.event.ComponentEvent e) {
-                ref[0].setBounds(0, 0, lp.getWidth(), lp.getHeight());
-            }
-        });
+        lp.addComponentListener(resize);
         lp.revalidate();
         lp.repaint();
         SwingUtilities.invokeLater(ref[0].pass::requestFocusInWindow);

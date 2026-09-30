@@ -414,4 +414,27 @@ public final class FabricPlatform implements Platform {
     public String playerUuid() {
         return mc.player == null ? null : mc.player.getUuid().toString();
     }
+
+    @Override
+    public float saturation() {
+        return mc.player == null ? -1 : mc.player.getHungerManager().getSaturationLevel();
+    }
+
+    @Override
+    public int food() {
+        return mc.player == null ? 20 : mc.player.getHungerManager().getFoodLevel();
+    }
+
+    @Override
+    public java.util.List<String> activePacks() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        try {
+            for (var p : mc.getResourcePackManager().getEnabledProfiles()) {
+                String id = p.getId();
+                if (!id.startsWith("file/") || id.contains("cobra-sky-")) continue;   // only your own packs
+                out.add(0, p.getDisplayName().getString().replaceAll("\\.zip$", ""));
+            }
+        } catch (Throwable ignored) {}
+        return out;
+    }
 }

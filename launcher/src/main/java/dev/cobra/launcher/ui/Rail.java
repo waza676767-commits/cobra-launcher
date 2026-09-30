@@ -32,6 +32,7 @@ public final class Rail extends JComponent {
 
             @Override
             public void mouseClicked(MouseEvent e) {
+                tip().hideTip();
                 int h = hit(e.getPoint());
                 if (h >= 0) onSelect.accept(h);
                 else if (h == -2) onSelect.accept(0);
