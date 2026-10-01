@@ -63,6 +63,8 @@ public final class Settings {
             cosHeadphones = "Off", cosTailKind = "Off", cosBackpack = "Off";
     public boolean cosTail = false, cosKatana = false, cosFeet = false, cosGlow = true;
     public int cosSize = 100;
+    public String cosParticles = "Off";
+    public boolean cosTrail = false;
 
     private static String c(String v) {
         return v.toLowerCase().replace(" ", "");
@@ -79,6 +81,10 @@ public final class Settings {
         if (!"Off".equals(cosWings) && cosWingStyle != null && !"Feather".equals(cosWingStyle)) b.append("wingstyle:").append(c(cosWingStyle)).append(',');
         if (cosKatana) b.append("katana,");
         if (cosFeet) b.append("feet,");
+        if (cosParticles != null && !"Off".equals(cosParticles)) {
+            b.append("fx:").append(c(cosParticles)).append(',');
+            if (cosTrail) b.append("trail,");
+        }
         if (b.length() == 0) return "";
         if (cosSize != 100) b.append("size:").append(cosSize).append(',');
         if (cosGlow) b.append("glow,");

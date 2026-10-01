@@ -86,6 +86,16 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
             part(matrices, queue, m.body, k, (e, vc) -> CosmeticModels.katana(e, vc, light));
             if (glow) glowPart(matrices, queue, m.body, k, (e, vc) -> CosmeticModels.katanaGlow(e, vc, pulse));
         }
+        // ---- your imported cape (Cobra players only)
+        if (wear.containsKey("cape")) {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            Entity ent = mc.world == null ? null : mc.world.getEntityById(state.id);
+            if (ent != null) {
+                boolean self = mc.player != null && ent.getUuid().equals(mc.player.getUuid());
+                Identifier tex = CobraCapes.get(ent.getUuid().toString(), wear.get("cape"), self);
+                if (tex != null) cape(matrices, queue, m.body, light, tex, limbDistance, t);
+            }
+        }
         // ---- hands and feet
         if (wear.containsKey("gloves")) {
             int c = CosmeticModels.colour(wear.get("gloves"));
@@ -107,12 +117,19 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
         String code;
         if (mc.player != null && e.getUuid().equals(mc.player.getUuid())) {
             Features.Cosmetics c = Cobra.get(Features.Cosmetics.class);
-            if (!c.showOwn.on()) return Map.of();
-            code = c.serialize();
+            code = Cobra.ownCode();                                  // your cosmetics + your cape
+            if (!c.showOwn.on()) code = code.contains("cape:") ? code.substring(code.indexOf("cape:")) : "";
         } else {
             code = CobraOnline.cosmetics(e.getUuid().toString());   // "" unless they use Cobra
         }
         return parse(code);
+    }
+
+    /** Cosmetics code for a player entity (yours from the settings, others' from the online list). */
+    public static Map<String, String> wearingOf(net.minecraft.entity.player.PlayerEntity e) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.player != null && e.getUuid().equals(mc.player.getUuid())) return parse(Cobra.ownCode());
+        return parse(CobraOnline.cosmetics(e.getUuid().toString()));
     }
 
     private static final Map<String, Map<String, String>> PARSED = new HashMap<>();
@@ -131,6 +148,46 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
     }
 
     // ------------------------------------------------------------------ drawing helpers
+
+    /**
+     * A cape from the shoulders: 10 x 16 x 1 pixels like the real one, with the standard cape
+     * texture layout (outside at 1,1 and inside at 12,1 on a 64 x 32 image; HD sizes work too).
+     * It leans back as you walk and sways a little.
+     */
+    private static void cape(MatrixStack matrices, OrderedRenderCommandQueue queue, ModelPart body, int light,
+                             Identifier tex, float limbDistance, float age) {
+        matrices.push();
+        body.applyTransform(matrices);
+        matrices.scale(1 / 16f, 1 / 16f, 1 / 16f);
+        matrices.translate(0, 0, 2.05f);
+        float lean = 0.12f + Math.min(1f, limbDistance) * 0.7f + (float) Math.sin(age * 0.09) * 0.04f;
+        matrices.multiply(RotationAxis.POSITIVE_X.rotation(lean));
+        queue.submitCustom(matrices, RenderLayers.entityCutoutNoCull(tex), (e, vc) -> {
+            float x0 = -5, x1 = 5, y0 = 0, y1 = 16, z0 = 0, z1 = 1;
+            // outside (seen from behind you)
+            face(e, vc, light, x1, y0, z1, x0, y0, z1, x0, y1, z1, x1, y1, z1, 1, 1, 11, 17, 0, 0, 1);
+            // inside (against your back)
+            face(e, vc, light, x0, y0, z0, x1, y0, z0, x1, y1, z0, x0, y1, z0, 12, 1, 22, 17, 0, 0, -1);
+            // edges
+            face(e, vc, light, x0, y0, z1, x0, y0, z0, x0, y1, z0, x0, y1, z1, 0, 1, 1, 17, -1, 0, 0);
+            face(e, vc, light, x1, y0, z0, x1, y0, z1, x1, y1, z1, x1, y1, z0, 11, 1, 12, 17, 1, 0, 0);
+            face(e, vc, light, x0, y0, z0, x0, y0, z1, x1, y0, z1, x1, y0, z0, 1, 0, 11, 1, 0, -1, 0);
+            face(e, vc, light, x0, y1, z1, x0, y1, z0, x1, y1, z0, x1, y1, z1, 11, 0, 21, 1, 0, 1, 0);
+        });
+        matrices.pop();
+    }
+
+    /** One textured face; u/v in pixels of a 64 x 32 cape image. */
+    private static void face(MatrixStack.Entry e, VertexConsumer vc, int light,
+                             float ax, float ay, float az, float bx, float by, float bz,
+                             float cx, float cy, float cz, float dx, float dy, float dz,
+                             float u0, float v0, float u1, float v1, float nx, float ny, float nz) {
+        float U0 = u0 / 64f, V0 = v0 / 32f, U1 = u1 / 64f, V1 = v1 / 32f;
+        vc.vertex(e, ax, ay, az).color(0xFFFFFFFF).texture(U0, V0).overlay(OverlayTexture.DEFAULT_UV).light(light).normal(e, nx, ny, nz);
+        vc.vertex(e, bx, by, bz).color(0xFFFFFFFF).texture(U1, V0).overlay(OverlayTexture.DEFAULT_UV).light(light).normal(e, nx, ny, nz);
+        vc.vertex(e, cx, cy, cz).color(0xFFFFFFFF).texture(U1, V1).overlay(OverlayTexture.DEFAULT_UV).light(light).normal(e, nx, ny, nz);
+        vc.vertex(e, dx, dy, dz).color(0xFFFFFFFF).texture(U0, V1).overlay(OverlayTexture.DEFAULT_UV).light(light).normal(e, nx, ny, nz);
+    }
 
     private interface Draw {
         void draw(CosmeticModels.M m, CosmeticModels.Out out);

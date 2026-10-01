@@ -377,6 +377,8 @@ public final class Features {
         public final Setting.Bool feet = add(new Setting.Bool("feet", "Big feet", false));
         public final Setting.Number size = add(new Setting.Number("size", "Size", 100, 70, 150, 5, "%"));
         public final Setting.Bool glow = add(new Setting.Bool("glow", "Glow effects", true));
+        public final Setting.Mode particles = add(new Setting.Mode("particles", "Particles", "Off", "Off", "Sparkles", "Hearts", "Flames", "Soul fire", "Snow", "Magic", "Petals", "Notes"));
+        public final Setting.Bool trail = add(new Setting.Bool("trail", "Particle trail when moving", false));
         public final Setting.Bool showOwn = add(new Setting.Bool("showown", "Show mine in third person", true));
 
         public Cosmetics() { super("cosmetics", "Cosmetics", "Wings, halos, hats, ears, tails and more (only Cobra players see them)", Category.VISUAL, false); }
@@ -395,6 +397,8 @@ public final class Features {
             if (!wings.is("Off") && !wingStyle.is("Feather")) b.append("wingstyle:").append(code(wingStyle.get())).append(',');
             if (katana.on()) b.append("katana,");
             if (feet.on()) b.append("feet,");
+            if (!particles.is("Off")) b.append("fx:").append(code(particles.get())).append(',');
+            if (!particles.is("Off") && trail.on()) b.append("trail,");
             if (b.length() == 0) return "";
             if (size.i() != 100) b.append("size:").append(size.i()).append(',');
             if (glow.on()) b.append("glow,");
@@ -426,6 +430,9 @@ public final class Features {
             katana.set(m.containsKey("katana"));
             feet.set(m.containsKey("feet"));
             glow.set(m.containsKey("glow"));
+            particles.set(pretty(particles, m.get("fx")));
+            trail.set(m.containsKey("trail"));
+            any |= m.containsKey("fx");
             try {
                 size.set(m.containsKey("size") ? Double.parseDouble(m.get("size")) : 100.0);
             } catch (NumberFormatException ignored) {}

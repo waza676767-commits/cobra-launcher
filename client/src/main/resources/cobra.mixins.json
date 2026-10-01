@@ -10,6 +10,7 @@
     "BossBarHudAccessor",
     "BossBarHudMixin",
     "CameraMixin",
+    "CapeFeatureRendererMixin",
     "ChatHudMixin",
     "ClientWorldPropertiesMixin",
     "DarknessFogMixin",

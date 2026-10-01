@@ -147,19 +147,44 @@ public final class Updater {
      * (the "Build" workflow with publish=true). Uses the GitHub CLI that's logged in on this PC.
      * @return a message for the user
      */
+    /**
+     * Settings → Developer → Publish update (only shown to Swipecz): uploads the code in your
+     * project folder to GitHub (commit + push) and asks GitHub to build and release it, with the
+     * AppImage and the Windows .exe. Same as running ~/cobra-publish.sh.
+     */
     public static String publish() {
         if (REPO.isEmpty()) return "This build doesn't know its GitHub repo yet. Build it once on GitHub (git push), then use that version.";
+        java.nio.file.Path project = java.nio.file.Path.of(System.getProperty("user.home"), "CobraLauncher-new", "CobraLauncher");
         try {
-            Process p = new ProcessBuilder("gh", "workflow", "run", "build.yml", "-R", REPO, "-f", "publish=true")
-                    .redirectErrorStream(true).start();
-            String out = new String(p.getInputStream().readAllBytes()).trim();
-            int code = p.waitFor();
-            if (code != 0) return "GitHub said: " + (out.isEmpty() ? "error " + code : out);
-            return "Publishing: GitHub is building it now (about 10–15 min). Everyone gets it the next time they reopen the launcher.";
+            if (java.nio.file.Files.isDirectory(project.resolve(".git"))) {
+                run(project, "git", "add", ".");
+                run(project, "git", "commit", "-qm", "Cobra update " + java.time.LocalDateTime.now().withNano(0));   // "nothing to commit" is fine
+                String[] push = run(project, "git", "push", "-q", "origin", "main");
+                if (!"0".equals(push[0])) {
+                    return "Couldn't upload the code: " + push[1] + " (in a terminal: gh auth setup-git, then try again)";
+                }
+            }
+            String[] r = run(null, "gh", "workflow", "run", "build.yml", "-R", REPO, "-f", "publish=true");
+            if (!"0".equals(r[0])) return "GitHub said: " + (r[1].isEmpty() ? "error " + r[0] : r[1]);
+            return "Publishing: GitHub is building the AppImage and the .exe (10–15 min). It appears on the Releases page and "
+                    + "everyone gets it the next time they reopen the launcher.";
         } catch (java.io.IOException e) {
-            return "Needs the GitHub CLI: sudo dnf install gh, then gh auth login.";
+            return "Needs git and the GitHub CLI: sudo dnf install git gh, then gh auth login.";
         } catch (InterruptedException e) {
             return "Interrupted.";
         }
+    }
+
+    /** Runs a command; {exit code, output}. */
+    private static String[] run(java.nio.file.Path dir, String... cmd) throws java.io.IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
+        if (dir != null) pb.directory(dir.toFile());
+        Process p = pb.start();
+        String out = new String(p.getInputStream().readAllBytes()).trim();
+        if (!p.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)) {
+            p.destroyForcibly();
+            return new String[]{"timeout", "took too long"};
+        }
+        return new String[]{String.valueOf(p.exitValue()), out.length() > 200 ? out.substring(out.length() - 200) : out};
     }
 }

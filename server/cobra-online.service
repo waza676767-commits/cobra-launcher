@@ -8,6 +8,8 @@ After=network.target
 ExecStart=/usr/bin/python3 /opt/cobra-online.py
 Restart=always
 DynamicUser=yes
+# where uploaded capes are kept (/var/lib/cobra-online)
+StateDirectory=cobra-online
 
 [Install]
 WantedBy=multi-user.target

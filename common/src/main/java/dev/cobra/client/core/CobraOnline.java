@@ -22,6 +22,43 @@ public final class CobraOnline {
     /** What you wear (comma list), sent with each ping. */
     public static volatile String ownCosmetics = "";
 
+    // ------------------------------------------------------------------ custom capes
+
+    /** Uploads your cape PNG so other Cobra players can see it (background thread). */
+    public static void uploadCape(final String uuid, final byte[] png) {
+        if (uuid == null || png == null || png.length == 0 || png.length > 256 * 1024) return;
+        Thread t = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    String b64 = java.util.Base64.getEncoder().encodeToString(png);
+                    post("/cape", "{\"uuid\":\"" + uuid.toLowerCase() + "\",\"png\":\"" + b64 + "\"}");
+                } catch (Exception ignored) {}
+            }
+        }, "cobra-cape-upload");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Downloads another Cobra player's cape PNG (blocking: call from a background thread), or null. */
+    public static byte[] downloadCape(String uuid) {
+        try {
+            HttpURLConnection c = open("/cape/" + uuid.toLowerCase());
+            if (c.getResponseCode() != 200) return null;
+            InputStream in = c.getInputStream();
+            try {
+                java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0 && b.size() < 256 * 1024) b.write(buf, 0, n);
+                return b.toByteArray();
+            } finally {
+                in.close();
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /** The cosmetics another Cobra player wears (comma list), or "" if none / not a Cobra player. */
     public static String cosmetics(String uuid) {
         if (uuid == null) return "";

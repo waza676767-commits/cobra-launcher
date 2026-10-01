@@ -154,6 +154,42 @@ public final class Cobra {
 
     /** Applies the Client settings (theme, animations). Cheap; runs every tick. */
     private static int customBg, customFg;
+    private static String capeHash;
+    private static long capeChecked;
+    private static String capeUploadedFor;
+
+    /**
+     * What you wear for everyone else: your cosmetics plus "cape:HASH" when you imported a cape in
+     * Cobra Launcher (others download it from the online list). The cape is uploaded once per
+     * change.
+     */
+    public static String ownCode() {
+        String cos = get(Features.Cosmetics.class).serialize();
+        long now = System.currentTimeMillis();
+        if (now - capeChecked > 10_000) {                      // re-check the file every 10 s
+            capeChecked = now;
+            try {
+                java.io.File f = new java.io.File(new java.io.File(new java.io.File(platform.gameDir(), "config"), "cobra"), "cape.png");
+                if (f.isFile() && f.length() > 0 && f.length() <= 256 * 1024) {
+                    byte[] png = java.nio.file.Files.readAllBytes(f.toPath());
+                    java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
+                    byte[] d = md.digest(png);
+                    StringBuilder h = new StringBuilder();
+                    for (int i = 0; i < 4; i++) h.append(String.format("%02x", d[i]));
+                    capeHash = h.toString();
+                    String uuid = platform.playerUuid();
+                    if (uuid != null && !(capeHash + uuid).equals(capeUploadedFor)) {
+                        CobraOnline.uploadCape(uuid, png);
+                        capeUploadedFor = capeHash + uuid;
+                    }
+                } else {
+                    capeHash = null;
+                }
+            } catch (Exception ignored) {}
+        }
+        if (capeHash == null) return cos;
+        return cos.isEmpty() ? "cape:" + capeHash : cos + ",cape:" + capeHash;
+    }
 
     public static void syncClient() {
         Features.Client cc = get(Features.Client.class);
@@ -182,7 +218,7 @@ public final class Cobra {
         ticks++;
         syncClient();
         if (ticks % 40 == 1) writePresence();
-        if (ticks % 20 == 0) CobraOnline.ownCosmetics = get(Features.Cosmetics.class).serialize();
+        if (ticks % 20 == 0) CobraOnline.ownCosmetics = ownCode();
         if (ticks % 20 == 0 && platform.inWorld()) {
             boolean tab = get(Features.Client.class).tabIcon.on();
             boolean wear = get(Features.Cosmetics.class).isEnabled();

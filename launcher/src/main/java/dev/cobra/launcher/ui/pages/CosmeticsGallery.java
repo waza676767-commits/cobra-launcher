@@ -20,8 +20,21 @@ import java.util.Map;
 final class CosmeticsGallery extends JPanel {
     private static final int HEADER = 330, CARD_H = 250, GAP = 14;
 
-    /** One wearable: key in the code, card name, choices, and which way the preview looks at it. */
-    private record Item(String key, String name, List<String> options, double yaw) {}
+    /** One wearable: key in the code, card name, choices, which way the preview looks, and its group. */
+    private record Item(String key, String name, List<String> options, double yaw, String group) {
+        Item(String key, String name, List<String> options, double yaw) {
+            this(key, name, options, yaw, switch (key) {
+                case "wings", "wingstyle", "tail", "backpack", "katana" -> "Back";
+                case "gloves", "feet" -> "Hands & feet";
+                case "particles", "trail" -> "Effects";
+                default -> "Head";
+            });
+        }
+    }
+
+    private static final String[] GROUPS = {"All", "Back", "Head", "Hands & feet", "Effects"};
+    private String group = "All";
+    private final Components.Segmented groups;
 
     static final List<Item> ITEMS = List.of(
             new Item("wings", "Wings", List.of("Off", "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan"), 200),
@@ -37,7 +50,9 @@ final class CosmeticsGallery extends JPanel {
             new Item("backpack", "Backpack", List.of("Off", "Brown", "Black", "Blue", "Red"), 205),
             new Item("katana", "Katana", List.of("Off", "On"), 205),
             new Item("gloves", "Boxing gloves", List.of("Off", "Red", "Blue", "Black"), 30),
-            new Item("feet", "Big feet", List.of("Off", "On"), 30));
+            new Item("feet", "Big feet", List.of("Off", "On"), 30),
+            new Item("particles", "Particles", List.of("Off", "Sparkles", "Hearts", "Flames", "Soul fire", "Snow", "Magic", "Petals", "Notes"), 200),
+            new Item("trail", "Trail", List.of("Off", "On"), 120));
 
     private final Turntable turntable = new Turntable();
     private final Components.Toggle glow;
@@ -70,6 +85,27 @@ final class CosmeticsGallery extends JPanel {
         cards.setOpaque(false);
         for (Item it : ITEMS) cards.add(new Card(it));
         add(cards);
+        groups = new Components.Segmented(List.of(GROUPS), 0, i -> {
+            group = GROUPS[i];
+            revalidate();
+            doLayout();
+            repaint();
+            Container p = getParent();
+            while (p != null && !(p instanceof JScrollPane)) p = p.getParent();
+            if (p != null) p.revalidate();
+        });
+        add(groups);
+    }
+
+    private List<Component> visibleCards() {
+        List<Component> out = new java.util.ArrayList<>();
+        for (Component c : cards.getComponents()) {
+            Card k = (Card) c;
+            boolean show = group.equals("All") || k.it.group().equals(group);
+            k.setVisible(show);
+            if (show) out.add(k);
+        }
+        return out;
     }
 
     void changed() {
@@ -84,8 +120,9 @@ final class CosmeticsGallery extends JPanel {
     public Dimension getPreferredSize() {
         int w = getParent() == null ? 900 : getParent().getWidth();
         int cols = Math.max(2, Math.min(5, (w - 40) / 200));
-        int rows = (ITEMS.size() + cols - 1) / cols;
-        return new Dimension(100, 56 + HEADER + rows * (CARD_H + GAP) + 10);
+        int n = (int) ITEMS.stream().filter(it -> group.equals("All") || it.group().equals(group)).count();
+        int rows = Math.max(1, (n + cols - 1) / cols);
+        return new Dimension(100, 56 + HEADER + 52 + rows * (CARD_H + GAP) + 10);
     }
 
     @Override
@@ -96,10 +133,13 @@ final class CosmeticsGallery extends JPanel {
         glow.setBounds(rx + rw - 50, 80, 50, 30);
         size.setBounds(rx, 150, Math.min(360, rw), 30);
         clear.setBounds(rx, 216, 200, 40);
+        Dimension gd = groups.getPreferredSize();
+        groups.setBounds(20, 56 + HEADER, gd.width, 38);
         int cols = columns(), cw = (w - 40 - GAP * (cols - 1)) / cols;
-        int rows = (ITEMS.size() + cols - 1) / cols;
-        cards.setBounds(20, 56 + HEADER, w - 40, rows * (CARD_H + GAP));
-        for (int i = 0; i < cards.getComponentCount(); i++) cards.getComponent(i).setBounds((i % cols) * (cw + GAP), (i / cols) * (CARD_H + GAP), cw, CARD_H);
+        List<Component> shown = visibleCards();
+        int rows = Math.max(1, (shown.size() + cols - 1) / cols);
+        cards.setBounds(20, 56 + HEADER + 52, w - 40, rows * (CARD_H + GAP));
+        for (int i = 0; i < shown.size(); i++) shown.get(i).setBounds((i % cols) * (cw + GAP), (i / cols) * (CARD_H + GAP), cw, CARD_H);
     }
 
     @Override
@@ -111,7 +151,7 @@ final class CosmeticsGallery extends JPanel {
         Theme.left(g, "Only other Cobra players see them · applies when you launch", Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 118, 16, 22);
         int rx = 320;
         Theme.left(g, "Glow effects", Theme.font(Theme.MEDIUM, 14f), Theme.TEXT, rx, 76, 22);
-        Theme.left(g, "Wings, halo and katana glow softly and shine in the dark.", Theme.font(Theme.REGULAR, 12f), Theme.MUTED, rx, 96, 18);
+        Theme.left(g, "Wings, halo, horns and katana glow softly and shine in the dark.", Theme.font(Theme.REGULAR, 12f), Theme.MUTED, rx, 96, 18);
         Theme.left(g, "Size", Theme.font(Theme.MEDIUM, 14f), Theme.TEXT, rx, 126, 22);
         String worn = Settings.get().cosmeticsCode();
         int count = worn.isEmpty() ? 0 : (int) worn.chars().filter(ch -> ch == ',').count() + 1;
@@ -139,6 +179,8 @@ final class CosmeticsGallery extends JPanel {
             case "gloves" -> s.cosGloves;
             case "katana" -> s.cosKatana ? "On" : "Off";
             case "feet" -> s.cosFeet ? "On" : "Off";
+            case "particles" -> s.cosParticles == null ? "Off" : s.cosParticles;
+            case "trail" -> s.cosTrail ? "On" : "Off";
             default -> "Off";
         };
     }
@@ -163,6 +205,8 @@ final class CosmeticsGallery extends JPanel {
             case "gloves" -> s.cosGloves = v;
             case "katana" -> s.cosKatana = !"Off".equals(v);
             case "feet" -> s.cosFeet = !"Off".equals(v);
+            case "particles" -> s.cosParticles = v;
+            case "trail" -> s.cosTrail = !"Off".equals(v);
             default -> { }
         }
         s.save();
@@ -171,6 +215,7 @@ final class CosmeticsGallery extends JPanel {
     /** Short code to preview one item with value {@code v} (an example when it's Off). */
     private static String sample(Item it, String v) {
         String key = it.key(), code;
+        if (key.equals("particles") || key.equals("trail")) return "wings:" + ("Off".equals(value("wings")) ? "angel" : value("wings").toLowerCase());
         if (key.equals("wingstyle")) return "wings:" + ("Off".equals(value("wings")) ? "angel" : value("wings").toLowerCase()) + ",wingstyle:" + v.toLowerCase();
         if ("Off".equals(v)) v = it.options().get(Math.min(1, it.options().size() - 1));
         if (v.equals("On")) code = key;
@@ -194,6 +239,69 @@ final class CosmeticsGallery extends JPanel {
             case "Brown" -> new Color(0x7A5234);
             default -> null;                                          // a word, not a colour
         };
+    }
+
+    /**
+     * The little stage behind a preview: the theme's own colours (a soft glow up top fading into the
+     * dark base), a spotlight, and a floor ellipse.
+     */
+    private static void stage(Graphics2D g, double x, double y, double w, double h, double r) {
+        int[] p = Theme.palette();
+        Color top = Theme.isLight() ? new Color(0xE9E9EE) : Theme.mix(new Color(p[11]), new Color(p[3]), 0.35);
+        Color bottom = Theme.isLight() ? new Color(0xD7D7DE) : new Color(p[2]);
+        Theme.fill(g, x, y, w, h, r, new GradientPaint(0, (float) y, top, 0, (float) (y + h), bottom));
+        Graphics2D s = (Graphics2D) g.create();
+        s.clip(new RoundRectangle2D.Double(x, y, w, h, r * 2, r * 2));
+        s.setPaint(new RadialGradientPaint(new Point2D.Double(x + w / 2, y + h * 0.35), (float) (h * 0.7), new float[]{0f, 1f},
+                new Color[]{new Color(255, 255, 255, Theme.isLight() ? 120 : 46), new Color(255, 255, 255, 0)}));
+        s.fill(new Rectangle2D.Double(x, y, w, h));
+        s.setColor(new Color(0, 0, 0, 55));
+        s.fill(new Ellipse2D.Double(x + w / 2 - w * 0.22, y + h - 22, w * 0.44, 12));
+        s.dispose();
+    }
+
+    /** A few particles drawn over a preview, in the effect's colours (fixed spots, so they don't jump). */
+    private static void sparkle(Graphics2D g, double x, double y, double w, double h, String fx, boolean trail) {
+        Color c = switch (fx == null ? "" : fx) {
+            case "Hearts" -> new Color(0xFF5577);
+            case "Flames" -> new Color(0xFFA53A);
+            case "Soul fire" -> new Color(0x5FD8F0);
+            case "Snow" -> new Color(0xF4F8FF);
+            case "Magic" -> new Color(0xB565FF);
+            case "Petals" -> new Color(0xFFB7D5);
+            case "Notes" -> new Color(0x66E08A);
+            default -> new Color(0xFFF6C9);
+        };
+        java.util.Random r = new java.util.Random(7);
+        for (int i = 0; i < 16; i++) {
+            double px = x + w * (0.15 + r.nextDouble() * 0.7), py = y + h * (trail ? 0.75 + r.nextDouble() * 0.2 : 0.1 + r.nextDouble() * 0.6);
+            double s = 2 + r.nextDouble() * 4;
+            g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), 60));
+            g.fill(new Ellipse2D.Double(px - s, py - s, s * 2, s * 2));
+            g.setColor(c);
+            if ("Hearts".equals(fx)) {
+                g.fill(new Ellipse2D.Double(px - s * 0.5, py - s * 0.4, s * 0.55, s * 0.55));
+                g.fill(new Ellipse2D.Double(px - s * 0.05, py - s * 0.4, s * 0.55, s * 0.55));
+                Path2D v = new Path2D.Double();
+                v.moveTo(px - s * 0.5, py - s * 0.1);
+                v.lineTo(px + s * 0.5, py - s * 0.1);
+                v.lineTo(px, py + s * 0.5);
+                v.closePath();
+                g.fill(v);
+            } else {
+                Path2D st = new Path2D.Double();                       // a tiny four-point sparkle
+                st.moveTo(px, py - s);
+                st.lineTo(px + s * 0.25, py - s * 0.25);
+                st.lineTo(px + s, py);
+                st.lineTo(px + s * 0.25, py + s * 0.25);
+                st.lineTo(px, py + s);
+                st.lineTo(px - s * 0.25, py + s * 0.25);
+                st.lineTo(px - s, py);
+                st.lineTo(px - s * 0.25, py - s * 0.25);
+                st.closePath();
+                g.fill(st);
+            }
+        }
     }
 
     private static final Map<String, BufferedImage> CACHE = new HashMap<>();
@@ -265,11 +373,7 @@ final class CosmeticsGallery extends JPanel {
             if (!isShowing()) return;
             Graphics2D g = Theme.aa(g0.create());
             int w = getWidth(), h = getHeight();
-            Color a = Theme.mix(Theme.ACCENT, Theme.BLACK, 0.55), b = Theme.mix(Theme.ACCENT, Theme.BLACK, 0.85);
-            Theme.fill(g, 0, 0, w, h, 18, new GradientPaint(0, 0, a, 0, h, b));
-            g.setPaint(new RadialGradientPaint(new Point2D.Double(w / 2.0, h * 0.42), (float) (h * 0.6), new float[]{0f, 1f},
-                    new Color[]{new Color(255, 255, 255, 70), new Color(255, 255, 255, 0)}));
-            g.fill(new RoundRectangle2D.Double(0, 0, w, h, 36, 36));
+            stage(g, 0, 0, w, h, 18);
             g.setColor(new Color(0, 0, 0, 60));                           // floor shadow
             g.fill(new Ellipse2D.Double(w / 2.0 - 60, h - 44, 120, 18));
             long now = System.currentTimeMillis();
@@ -279,6 +383,8 @@ final class CosmeticsGallery extends JPanel {
             }
             BufferedImage img = CosmeticPreview.render(Settings.get().cosmeticsCode(), w - 20, h - 30, yaw, true, skin);
             g.drawImage(img, 10, 10, null);
+            String fx = Settings.get().cosParticles;
+            if (fx != null && !"Off".equals(fx)) sparkle(g, 10, 10, w - 20, h - 30, fx, Settings.get().cosTrail);
             g.dispose();
         }
     }
@@ -286,7 +392,7 @@ final class CosmeticsGallery extends JPanel {
     // ------------------------------------------------------------------ a card
 
     private final class Card extends JComponent {
-        private final Item it;
+        final Item it;
         private int hoverChip = -1;
         private boolean hover;
 
@@ -352,15 +458,15 @@ final class CosmeticsGallery extends JPanel {
             int w = getWidth(), h = CARD_H;
             String cur = value(it.key());
             boolean on = !"Off".equals(cur) && !(it.key().equals("wingstyle") && "Off".equals(value("wings")));
-            Theme.fill(g, 0, 0, w, h, 16, Theme.alpha(Theme.TEXT, hover ? 0.09 : 0.05));
+            Theme.surface(g, this, 0, 0, w, h, 16, hover ? 1 : 0, 0.2);
             if (on) Theme.stroke(g, 0.5, 0.5, w - 1, h - 1, 15.5, Theme.alpha(Theme.ACCENT, 0.7), 1.2f);
             int ph = h - 90;
-            Color a = Theme.mix(Theme.ACCENT, Theme.BLACK, 0.6), b = Theme.mix(Theme.ACCENT, Theme.BLACK, 0.86);
-            Theme.fill(g, 8, 8, w - 16, ph, 12, new GradientPaint(0, 8, a, 0, 8 + ph, b));
+            stage(g, 8, 8, w - 16, ph, 12);
             BufferedImage img = preview(sample(it, cur), w - 24, ph - 8, it.yaw());
             Composite old = g.getComposite();
             if (!on) g.setComposite(AlphaComposite.SrcOver.derive(0.45f));
             g.drawImage(img, 12, 12, null);
+            if (it.group().equals("Effects")) sparkle(g, 12, 12, w - 24, ph - 8, on ? value("particles") : "Sparkles", it.key().equals("trail"));
             g.setComposite(old);
             if (on) {
                 Theme.fill(g, w - 16 - 66, 14, 60, 20, 10, Theme.ACCENT);

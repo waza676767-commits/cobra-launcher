@@ -228,7 +228,13 @@ ssh root@65.109.88.105 'cp /tmp/cobra-online.py /opt/ && cp /tmp/cobra-online.se
 Clients send only their Minecraft UUID every 30 s. Players can turn it off in Cobra Settings →
 "Cobra icon in Tab".
 
-## Cosmetics (only Cobra players see them)
+## Custom capes and cosmetics (only Cobra players see them)
+
+A cape imported in Accessories is uploaded to the online-list server (`server/cobra-online.py`,
+`POST /cape`) and other Cobra players download it from there; everyone else sees your normal cape.
+Capes are kept in `/var/lib/cobra-online` (the service's state directory).
+
+### Cosmetics
 
 Right Shift → Cosmetics: cat ears, wings (angel, red, black, gold, blue, purple, pink, green), halo
 (angel or red), cat tail, katana on your back, big feet and boxing gloves. What you wear is sent to

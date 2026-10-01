@@ -168,6 +168,7 @@ public final class CobraFabric implements ClientModInitializer {
         syncSky(mc);
         syncMenuBlur(mc);
         packKey(mc);
+        cosmeticParticles(mc);
         if (mc.world != null || mc.currentScreen != null) syncGlint(mc);
         Cobra.tick();
     }
@@ -181,6 +182,62 @@ public final class CobraFabric implements ClientModInitializer {
     }
 
     private static boolean tickErrorShown, hudErrorShown, packKeyDown;
+
+    /**
+     * Cosmetic particle effects: sparkles, hearts, flames, snow… drifting off the wings (or around
+     * the halo / body), and an optional trail at your feet while you move. For you and for other
+     * Cobra players close by.
+     */
+    private static void cosmeticParticles(MinecraftClient mc) {
+        if (mc.world == null || mc.player == null || mc.isPaused() || tickCount % 2 != 0) return;
+        java.util.Random rnd = java.util.concurrent.ThreadLocalRandom.current();
+        for (net.minecraft.entity.player.PlayerEntity pl : mc.world.getPlayers()) {
+            if (pl.isInvisible() || pl.squaredDistanceTo(mc.player) > 48 * 48) continue;
+            if (pl == mc.player && mc.options.getPerspective().isFirstPerson()) continue;   // not in your own face
+            java.util.Map<String, String> wear = dev.cobra.client.fabric.cosmetics.CosmeticsFeature.wearingOf(pl);
+            String fx = wear.get("fx");
+            if (fx == null) continue;
+            net.minecraft.particle.ParticleEffect effect = switch (fx) {
+                case "hearts" -> net.minecraft.particle.ParticleTypes.HEART;
+                case "flames" -> net.minecraft.particle.ParticleTypes.FLAME;
+                case "soulfire" -> net.minecraft.particle.ParticleTypes.SOUL_FIRE_FLAME;
+                case "snow" -> net.minecraft.particle.ParticleTypes.SNOWFLAKE;
+                case "magic" -> net.minecraft.particle.ParticleTypes.WITCH;
+                case "petals" -> net.minecraft.particle.ParticleTypes.CHERRY_LEAVES;
+                case "notes" -> net.minecraft.particle.ParticleTypes.NOTE;
+                default -> net.minecraft.particle.ParticleTypes.END_ROD;
+            };
+            boolean slowOnes = fx.equals("hearts") || fx.equals("notes");
+            if (slowOnes && tickCount % 8 != 0) continue;
+            double yaw = Math.toRadians(pl.bodyYaw);
+            double bx = -Math.sin(yaw), bz = Math.cos(yaw);              // facing direction
+            double sx = Math.cos(yaw), sz = Math.sin(yaw);               // to the side
+            double x = pl.getX(), y = pl.getY(), z = pl.getZ();
+            double px, py, pz;
+            if (wear.containsKey("wings")) {                             // off a wing tip
+                double side = rnd.nextBoolean() ? 1 : -1, out = 0.5 + rnd.nextDouble() * 0.8;
+                px = x - bx * 0.45 + sx * side * out;
+                py = y + 1.1 + rnd.nextDouble() * 0.9;
+                pz = z - bz * 0.45 + sz * side * out;
+            } else if (wear.containsKey("halo")) {                       // round the halo
+                double a = rnd.nextDouble() * Math.PI * 2;
+                px = x + Math.cos(a) * 0.35;
+                py = y + 2.15;
+                pz = z + Math.sin(a) * 0.35;
+            } else {                                                     // around the body
+                double a = rnd.nextDouble() * Math.PI * 2;
+                px = x + Math.cos(a) * 0.55;
+                py = y + 0.3 + rnd.nextDouble() * 1.6;
+                pz = z + Math.sin(a) * 0.55;
+            }
+            double vy = fx.equals("snow") || fx.equals("petals") ? -0.02 : 0.02;
+            mc.world.addParticleClient(effect, false, false, px, py, pz, (rnd.nextDouble() - 0.5) * 0.02, vy, (rnd.nextDouble() - 0.5) * 0.02);
+            // the trail: a few at your feet while you move
+            if (wear.containsKey("trail") && pl.getVelocity().horizontalLengthSquared() > 0.002) {
+                mc.world.addParticleClient(effect, false, false, x + (rnd.nextDouble() - 0.5) * 0.4, y + 0.1, z + (rnd.nextDouble() - 0.5) * 0.4, 0, 0.01, 0);
+            }
+        }
+    }
 
     /** Menu Blur: keeps the game's menu blur at the chosen strength while the module is on. */
     private static void syncMenuBlur(MinecraftClient mc) {
