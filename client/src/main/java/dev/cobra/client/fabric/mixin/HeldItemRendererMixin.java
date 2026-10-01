@@ -66,8 +66,17 @@ public abstract class HeldItemRendererMixin {
     @Inject(method = "renderFirstPersonItem", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/render/item/HeldItemRenderer;renderItem(Lnet/minecraft/entity/LivingEntity;Lnet/minecraft/item/ItemStack;Lnet/minecraft/item/ItemDisplayContext;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;I)V"),
             require = 0)
-    private void cobra$sizeItem(CallbackInfo ci, @Local(argsOnly = true) MatrixStack matrices) {
+    private void cobra$sizeItem(CallbackInfo ci, @Local(argsOnly = true) MatrixStack matrices, @Local(argsOnly = true) ItemStack item) {
         cobra$applySize(matrices);
+        // Totem module: the totem in your hand gets its own size and place
+        if (item != null && !item.isEmpty() && Cobra.platform != null) {
+            Features.Totem tm = Cobra.get(Features.Totem.class);
+            if (tm.isEnabled() && Registries.ITEM.getId(item.getItem()).getPath().equals("totem_of_undying")) {
+                matrices.translate(tm.heldX.f() * 0.5f, tm.heldY.f() * 0.5f, tm.heldZ.f() * 0.5f);
+                float k = tm.heldSize.f();
+                matrices.scale(k, k, k);
+            }
+        }
     }
 
     @Inject(method = "renderFirstPersonItem", at = @At(value = "INVOKE",

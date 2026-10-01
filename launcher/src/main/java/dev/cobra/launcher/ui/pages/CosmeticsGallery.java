@@ -325,7 +325,7 @@ final class CosmeticsGallery extends JPanel {
         private int lastX = -1;
         private BufferedImage skin;
         private long skinAt;
-        private final Timer spin = new Timer(33, e -> {
+        private final Timer spin = new Timer(50, e -> {          // 20 fps is plenty for a slow spin
             if (lastX < 0) {
                 yaw += velocity;
                 velocity += (0.6 - velocity) * 0.04;                   // settles back to a slow spin
@@ -359,7 +359,7 @@ final class CosmeticsGallery extends JPanel {
         @Override
         public void addNotify() {
             super.addNotify();
-            if (Anim.enabled) spin.start();
+            if (Anim.enabled && !Glass.lite()) spin.start();          // still on slow PCs (More optimization)
         }
 
         @Override

@@ -39,6 +39,7 @@
     "SoundManagerMixin",
     "TextVisitFactoryMixin",
     "TitleScreenMixin",
+    "TotemParticleMixin",
     "WaterFogMixin",
     "WorldRendererMixin",
     "WorldWeatherMixin"

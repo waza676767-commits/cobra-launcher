@@ -68,6 +68,7 @@ public final class Cobra {
         MODULES.add(new Features.MenuBlur());
         MODULES.add(new Features.PackOrganizer());
         MODULES.add(new Features.WavyCapes());
+        MODULES.add(new Features.Totem());
         MODULES.add(new HudModules.Saturation());
         MODULES.add(new HudModules.PackInfo());
         MODULES.add(new HudModules.Watermark());
@@ -102,7 +103,7 @@ public final class Cobra {
                 {"memory", "gauge"}, {"stopwatch", "clock"}, {"serveraddress", "globe"}, {"itemcounter", "list"}, {"teamview", "user"},
                 {"chunkborders", "mods"}, {"hitboxes", "crosshair"}, {"glint", "sparkle"}, {"hypixel", "link"},
                 {"tweaks", "flame"}, {"mousetrail", "sparkle"}, {"sky", "sun"}, {"cosmetics", "star"}, {"oldvisuals", "sword"}, {"oldsounds", "sliders"}, 
-                {"menublur", "eye"}, {"packorganizer", "packs"}, {"wavycapes", "flag"}, {"saturation", "drop"},
+                {"menublur", "eye"}, {"packorganizer", "packs"}, {"wavycapes", "flag"}, {"totem", "shield"}, {"saturation", "drop"},
                 {"packinfo", "packs"}, {"watermark", "star"}, {"recorder", "camera"}, {"blockoverlay", "crosshair"}, {"blockinfo", "search"}};
         for (Module m : MODULES) {
             for (String[] ic : icons) if (ic[0].equals(m.id)) m.icon = ic[1];
@@ -154,6 +155,27 @@ public final class Cobra {
 
     /** Applies the Client settings (theme, animations). Cheap; runs every tick. */
     private static int customBg, customFg;
+    private static String cosmeticsWritten;
+
+    /**
+     * Writes what you wear (cosmetics + their size/glow/particles) to config/cobra/cosmetics.txt when
+     * it changes in game, so the launcher's Cosmetics shows the same next time (both ways in sync).
+     */
+    private static void saveCosmeticsForLauncher() {
+        Features.Cosmetics c = get(Features.Cosmetics.class);
+        String code = c.isEnabled() ? c.serialize() : "off";
+        if (code.equals(cosmeticsWritten)) return;
+        if (cosmeticsWritten == null) {                        // first check after start: just remember
+            cosmeticsWritten = code;
+            return;
+        }
+        cosmeticsWritten = code;
+        try {
+            java.io.File dir = new java.io.File(new java.io.File(platform.gameDir(), "config"), "cobra");
+            dir.mkdirs();
+            java.nio.file.Files.write(new java.io.File(dir, "cosmetics.txt").toPath(), code.getBytes("UTF-8"));
+        } catch (Exception ignored) {}
+    }
     private static String capeHash;
     private static long capeChecked;
     private static String capeUploadedFor;
@@ -218,7 +240,10 @@ public final class Cobra {
         ticks++;
         syncClient();
         if (ticks % 40 == 1) writePresence();
-        if (ticks % 20 == 0) CobraOnline.ownCosmetics = ownCode();
+        if (ticks % 20 == 0) {
+            CobraOnline.ownCosmetics = ownCode();
+            saveCosmeticsForLauncher();
+        }
         if (ticks % 20 == 0 && platform.inWorld()) {
             boolean tab = get(Features.Client.class).tabIcon.on();
             boolean wear = get(Features.Cosmetics.class).isEnabled();

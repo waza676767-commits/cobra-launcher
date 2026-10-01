@@ -348,6 +348,38 @@ public final class Features {
         public PackOrganizer() { super("packorganizer", "Pack Organizer", "Sorted pack list and a key to open your packs", Category.UTILITY, false); }
     }
 
+    /**
+     * Totem: the totem in your hand (size and place), the big totem that pops on screen when it saves
+     * you (size, where it shows, or hide it), and the colour of its particles.
+     */
+    public static final class Totem extends Module {
+        public final Setting.Number heldSize = add(new Setting.Number("heldsize", "Held totem size", 1, 0.3, 2, 0.05, "x"));
+        public final Setting.Number heldX = add(new Setting.Number("heldx", "Held totem X", 0, -1, 1, 0.02, ""));
+        public final Setting.Number heldY = add(new Setting.Number("heldy", "Held totem Y", 0, -1, 1, 0.02, ""));
+        public final Setting.Number heldZ = add(new Setting.Number("heldz", "Held totem Z", 0, -1, 1, 0.02, ""));
+        public final Setting.Bool hidePop = add(new Setting.Bool("hidepop", "Hide the totem pop animation", false));
+        public final Setting.Number popSize = add(new Setting.Number("popsize", "Pop animation size", 1, 0.2, 2, 0.05, "x"),
+                new Setting.Cond() { public boolean ok() { return !hidePop.on(); } });
+        public final Setting.Mode popPlace = add(new Setting.Mode("popplace", "Pop animation place", "Random", "Random", "Center", "Left", "Right", "Top", "Bottom"),
+                new Setting.Cond() { public boolean ok() { return !hidePop.on(); } });
+        public final Setting.Mode particles = add(new Setting.Mode("particles", "Particle colour", "Default", "Default", "Custom", "Rainbow"));
+        public final Setting.Color colour = add(new Setting.Color("colour", "Particle colour", 0xFFB565FF),
+                new Setting.Cond() { public boolean ok() { return particles.is("Custom"); } });
+
+        public Totem() { super("totem", "Totem", "Totem size and place in your hand, the pop animation and its particle colour", Category.VISUAL, false); }
+
+        /** Where the pop animation shows, as vanilla's offset (-1..1 each way), or null for random. */
+        public float[] popOffset() {
+            String p = popPlace.get();
+            if (p.equals("Center")) return new float[]{0, 0};
+            if (p.equals("Left")) return new float[]{-0.75f, 0};
+            if (p.equals("Right")) return new float[]{0.75f, 0};
+            if (p.equals("Top")) return new float[]{0, -0.7f};
+            if (p.equals("Bottom")) return new float[]{0, 0.7f};
+            return null;
+        }
+    }
+
     /** Wavy capes: capes ripple in the wind and swing more naturally. */
     public static final class WavyCapes extends Module {
         public final Setting.Number wind = add(new Setting.Number("wind", "Wind", 1, 0, 3, 0.1, "x"));

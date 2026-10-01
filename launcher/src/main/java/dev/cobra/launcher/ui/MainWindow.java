@@ -147,6 +147,8 @@ public final class MainWindow {
         applyShape();
         LockScreen.showIfLocked(frame.getRootPane(), () -> new Timer(500, e -> {   // password first (if set)
             ((Timer) e.getSource()).stop();
+            speedCheck();
+            syncCosmeticsFromGame();
             betaNotice();
         }).start());
     }
@@ -432,6 +434,49 @@ public final class MainWindow {
         toast(on ? "More optimization on: plain colours, no blur, no animations." : "More optimization off: your look is back.");
     }
 
+    /**
+     * First start on a slower PC: times a few full redraws of the window; if they're slow (or the
+     * PC has few cores), More optimization is turned on so the launcher stays smooth. Once only.
+     */
+    private void speedCheck() {
+        if (settings.speedChecked || settings.moreOptimization) return;
+        settings.speedChecked = true;
+        settings.save();
+        int cores = Runtime.getRuntime().availableProcessors();
+        long ms;
+        try {
+            java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(Math.max(1, frame.getWidth()), Math.max(1, frame.getHeight()),
+                    java.awt.image.BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = img.createGraphics();
+            frame.getRootPane().paint(g);                         // warm-up
+            long t0 = System.nanoTime();
+            for (int i = 0; i < 4; i++) frame.getRootPane().paint(g);
+            ms = (System.nanoTime() - t0) / 4_000_000;
+            g.dispose();
+        } catch (Exception e) {
+            return;
+        }
+        if (ms > 70 || cores <= 2) {
+            setMoreOptimization(true);
+            toast("Your PC is on the slower side, so More optimization is on for a smoother launcher (Settings → Performance).");
+        }
+    }
+
+    /** Cosmetics changed in game (Right Shift) are written to config/cobra/cosmetics.txt: take them over. */
+    public void syncCosmeticsFromGame() {
+        try {
+            java.nio.file.Path f = dev.cobra.launcher.core.Profiles.gameDir(dev.cobra.launcher.core.Profiles.current(), GameVersion.MODERN)
+                    .resolve("config").resolve("cobra").resolve("cosmetics.txt");
+            if (!java.nio.file.Files.isRegularFile(f)) return;
+            long t = java.nio.file.Files.getLastModifiedTime(f).toMillis();
+            if (t <= settings.cosSyncedAt) return;
+            settings.applyCosmeticsCode(java.nio.file.Files.readString(f).trim());
+            settings.cosSyncedAt = t;
+            settings.save();
+            for (Page p : pages) if (p.isVisible()) p.onShow();
+        } catch (Exception ignored) {}
+    }
+
     /** First start: the beta notice (shown once). */
     private void betaNotice() {
         if (settings.betaNoticeSeen) return;
@@ -656,6 +701,7 @@ public final class MainWindow {
                     fireState();
                     Timer hold = new Timer(700, e -> launchOverlay.hide(() -> {
                         if (!prep.cobraBundled && !gv.vanilla()) toast("Cobra Client isn't available for " + gv.id + " yet. Launched Fabric with your mods.");
+                        if (prep.notice != null) toast(prep.notice);
                         if (!settings.keepOpen) frame.setState(Frame.ICONIFIED);
                     }));
                     hold.setRepeats(false);
@@ -671,6 +717,7 @@ public final class MainWindow {
                     SwingUtilities.invokeLater(() -> {
                         frame.setState(Frame.NORMAL);
                         frame.toFront();
+                        syncCosmeticsFromGame();            // what you changed in game shows here too
                         fireState();
                         if (code != 0 && code != 130 && code != 143) {
                             toast("Minecraft closed with error " + code + (secs < 60 ? " right after starting." : "."),
@@ -772,6 +819,24 @@ public final class MainWindow {
             host.doLayout();
         }
 
+        private String frameKey;
+        private java.awt.image.BufferedImage frameImage;
+
+        /** Background, scrim and the glass frame (or the classic sheet). */
+        private void paintFrame(Graphics2D g, int w, int h) {
+            Glass.paintBackground(g, w, h);
+            if (Wallpaper.active() && !Glass.lite()) g.drawImage(scrim(w, h), 0, 0, null);
+            if (classic()) {
+                if (!pages.get(0).isVisible() && host.getWidth() > 0) {
+                    int sx = classicBar.getX() + classicBar.getWidth() + 10;
+                    Glass.surface(g, this, sx, 62, w - 16 - sx, h - 16 - 62, 26, 0);
+                }
+            } else {
+                Glass.surface(g, this, FRAME, FRAME, w - 2 * FRAME, h - 2 * FRAME, 30, 0);
+            }
+            Theme.stroke(g, 0, 0, w, h, translucent ? 14 : 0, Theme.alpha(Theme.TEXT, 0.12), 1f);
+        }
+
         @Override
         protected void paintComponent(Graphics g0) {
             Graphics2D g = Theme.aa(g0.create());
@@ -785,6 +850,38 @@ public final class MainWindow {
                 return;
             }
             if (Glass.on()) {
+                // the background + frame only change with the window size, the wallpaper or the look:
+                // draw them once into an image and reuse it (most repaints are just a hover)
+                boolean live = Wallpaper.active() && Wallpaper.animated() && !Glass.lite();
+                var cs = settings;
+                String fk = w + "x" + h + "|" + Wallpaper.version() + "|" + Theme.isLight() + "|" + cs.theme + "|" + cs.style + "|" + cs.glassLook
+                        + "|" + cs.frost + "|" + cs.glassTint + "|" + cs.glassBorder + "|" + cs.roundness + "|" + Glass.lite() + "|" + classic()
+                        + "|" + pages.get(0).isVisible() + "|" + classicBar.getWidth() + "|" + Theme.gradientKey() + "|" + cs.wallpaperDim;
+                if (!live && fk.equals(frameKey) && frameImage != null) {
+                    g.drawImage(frameImage, 0, 0, null);
+                    g.dispose();
+                    return;
+                }
+                Graphics2D target = g;
+                if (!live) {
+                    if (frameImage == null || frameImage.getWidth() != w || frameImage.getHeight() != h) {
+                        frameImage = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                    }
+                    target = Theme.aa(frameImage.createGraphics());
+                    target.setComposite(AlphaComposite.Clear);
+                    target.fillRect(0, 0, w, h);
+                    target.setComposite(AlphaComposite.SrcOver);
+                }
+                paintFrame(target, w, h);
+                if (!live) {
+                    target.dispose();
+                    frameKey = fk;
+                    g.drawImage(frameImage, 0, 0, null);
+                }
+                g.dispose();
+                return;
+            }
+            if (false) {
                 Glass.paintBackground(g, w, h);
                 if (Wallpaper.active() && !Glass.lite()) g.drawImage(scrim(w, h), 0, 0, null);
                 if (classic()) {

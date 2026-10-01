@@ -251,9 +251,19 @@ public final class HomePage extends Page {
             return;
         }
         int lw = leftW(), h = getHeight();
-        java.awt.geom.Area hero = heroShape();
-        // the hero shows your wallpaper, cut to its shape with smooth edges
-        paintHero(g, hero, lw, h);
+        // the hero shows your wallpaper, cut to its shape with smooth edges; the result is cached
+        // and only rebuilt when something it depends on changes (big win on slower PCs)
+        String key = lw + "|" + h + "|" + Math.round(quick.vis() * 200) + "|" + Math.round(stack.vis() * 200) + "|" + Math.round(skins.vis() * 200)
+                + "|" + Wallpaper.version() + "|" + Theme.isLight() + "|" + dev.cobra.launcher.core.Settings.get().theme
+                + "|" + dev.cobra.launcher.core.Settings.get().heroWallpaper + "|" + Glass.lite() + "|" + dev.cobra.launcher.core.Settings.get().roundness;
+        boolean live = Wallpaper.active() && Wallpaper.animated() && !Glass.lite();
+        java.awt.geom.Area hero = key.equals(heroKey) && heroShapeCache != null ? heroShapeCache : heroShape();
+        heroShapeCache = hero;
+        if (live || !key.equals(heroKey) || heroImage == null) {
+            paintHero(null, hero, lw, h);
+            heroKey = key;
+        }
+        g.drawImage(heroImage, 0, 0, null);
         // title: logo, wordmark and a line about you
         double cy = h * 0.3;
         lw = lw + HX;                                        // centre the title on the hero itself
@@ -302,7 +312,12 @@ public final class HomePage extends Page {
 
     private BufferedImageCache heroCache = new BufferedImageCache();
 
-    private void paintHero(Graphics2D g, java.awt.geom.Area hero, int lw, int h) {
+    private String heroKey;
+    private java.awt.geom.Area heroShapeCache;
+    private java.awt.image.BufferedImage heroImage;
+
+    /** Renders the hero (wallpaper cut to shape, shading, edge) into {@link #heroImage}. */
+    private void paintHero(Graphics2D unused, java.awt.geom.Area hero, int lw, int h) {
         java.awt.image.BufferedImage buf = heroCache.get(lw, h);
         Graphics2D b = buf.createGraphics();
         b.setComposite(AlphaComposite.Clear);
@@ -324,14 +339,13 @@ public final class HomePage extends Page {
         b.fillRect(0, 0, lw, h);
         b.setPaint(new GradientPaint(0, 0, new Color(0, 0, 0, 70), 0, (float) (h * 0.35), new Color(0, 0, 0, 0)));
         b.fillRect(0, 0, lw, h);
-        b.dispose();
-        g.drawImage(buf, 0, 0, null);
         // a hairline of light along the edge, like the frame
-        Graphics2D e = (Graphics2D) g.create();
-        e.setColor(new Color(255, 255, 255, 26));
-        e.setStroke(new BasicStroke(1f));
-        e.draw(hero);
-        e.dispose();
+        b.setComposite(AlphaComposite.SrcOver);
+        b.setColor(new Color(255, 255, 255, 26));
+        b.setStroke(new BasicStroke(1f));
+        b.draw(hero);
+        b.dispose();
+        heroImage = buf;
     }
 
     /** Reused offscreen buffer for the hero (one per size). */
@@ -491,6 +505,8 @@ public final class HomePage extends Page {
     // ----------------------------------------------------------------- skins: a fan of cards
 
     private final class SkinsCard extends Card {
+        private String fanKey;
+        private java.awt.image.BufferedImage fanImage;
         private final java.util.List<java.awt.image.BufferedImage> skins = new java.util.ArrayList<>();
         private boolean hover;
 
@@ -512,6 +528,7 @@ public final class HomePage extends Page {
         }
 
         void reload() {
+            fanKey = null;
             skins.clear();
             for (var p : dev.cobra.launcher.core.Accessories.library(true)) {
                 if (skins.size() >= 3) break;
@@ -534,20 +551,32 @@ public final class HomePage extends Page {
             g.setStroke(new BasicStroke(1.5f));
             g.draw(new Ellipse2D.Double(w - 44, 14, 28, 28));
             Icons.paint(g, "chevron-right", w - 38, 20, 16, Theme.TEXT);
-            // the fan
-            int n = Math.max(3, skins.size());
-            for (int i = 0; i < n; i++) {
-                Graphics2D c = (Graphics2D) g.create();
-                double cx = w * 0.62, cy = h + 40;
-                c.rotate(Math.toRadians(-28 + i * 14), cx, cy);
-                int cw = (int) (w * 0.5), ch = (int) (h * 0.95);
-                int x = (int) (cx - cw / 2.0), y = (int) (cy - ch);
-                Theme.fill(c, x, y, cw, ch, 24, Theme.mix(Theme.RAISED, Theme.SOFT, 0.18 + 0.2 * i));
-                if (i < skins.size()) {
-                    AccessoriesPage.drawSkin(c, skins.get(skins.size() - 1 - i), false, new Rectangle(x + 10, y + 12, cw - 20, (int) (ch * 0.62)));
+            // the fan (cached: drawing skins pixel by pixel is the slowest part of Home)
+            String fk = w + "x" + h + "|" + skins.size() + "|" + System.identityHashCode(skins.isEmpty() ? null : skins.get(0)) + "|" + Theme.isLight() + "|" + dev.cobra.launcher.core.Settings.get().theme;
+            if (!fk.equals(fanKey) || fanImage == null) {
+                fanImage = new java.awt.image.BufferedImage(Math.max(1, w), Math.max(1, h), java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                Graphics2D fg = Theme.aa(fanImage.createGraphics());
+                fg.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                int n = Math.max(3, skins.size());
+                for (int i = 0; i < n; i++) {
+                    Graphics2D c = (Graphics2D) fg.create();
+                    double cx = w * 0.62, cy = h + 40;
+                    c.rotate(Math.toRadians(-28 + i * 14), cx, cy);
+                    int cw = (int) (w * 0.5), ch = (int) (h * 0.95);
+                    int x = (int) (cx - cw / 2.0), y = (int) (cy - ch);
+                    Theme.fill(c, x, y, cw, ch, 24, Theme.mix(Theme.RAISED, Theme.SOFT, 0.18 + 0.2 * i));
+                    if (i < skins.size()) {
+                        AccessoriesPage.drawSkin(c, skins.get(skins.size() - 1 - i), false, new Rectangle(x + 10, y + 12, cw - 20, (int) (ch * 0.62)));
+                    }
+                    c.dispose();
                 }
-                c.dispose();
+                fg.dispose();
+                fanKey = fk;
             }
+            Graphics2D clip = (Graphics2D) g.create();
+            clip.clip(new java.awt.geom.RoundRectangle2D.Double(0, 0, w, h, R * 2, R * 2));
+            clip.drawImage(fanImage, 0, 0, null);
+            clip.dispose();
             if (skins.isEmpty()) {
                 Theme.left(g, "Add your skins in Accessories", Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 16, 52, 20);
             }

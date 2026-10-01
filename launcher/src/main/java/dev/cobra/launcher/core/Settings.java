@@ -52,6 +52,8 @@ public final class Settings {
     public boolean betaNoticeSeen = false;
     /** The first-start "set a password?" question was asked. */
     public boolean passwordAsked = false;
+    /** The first-start speed check ran (it may have turned on More optimization). */
+    public boolean speedChecked = false;
     /** "new" (dashboard with the rail) or "classic" (the previous look with the wide side panel). */
     public String launcherGui = "new";
     /** Colour theme for the whole launcher (see Theme.THEMES); with themeInGame the game uses it too. */
@@ -68,6 +70,49 @@ public final class Settings {
 
     private static String c(String v) {
         return v.toLowerCase().replace(" ", "");
+    }
+
+    /** When cosmetics.txt from the game was last taken over (so it's only applied once per change). */
+    public long cosSyncedAt = 0;
+
+    private static String pretty(String v, String... options) {
+        if (v == null || v.isEmpty()) return "Off";
+        for (String o : options) if (c(o).equals(v)) return o;
+        return "Off";
+    }
+
+    /** Takes over a cosmetics code written by the game (changes made in game with Right Shift). */
+    public void applyCosmeticsCode(String code) {
+        java.util.Map<String, String> m = new java.util.HashMap<>();
+        if (code != null && !code.equals("off")) {
+            for (String part : code.split(",")) {
+                if (part.isEmpty()) continue;
+                int i = part.indexOf(':');
+                m.put(i < 0 ? part : part.substring(0, i), i < 0 ? "" : part.substring(i + 1));
+            }
+        }
+        cosWings = pretty(m.get("wings"), "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan");
+        cosWingStyle = m.containsKey("wingstyle") ? pretty(m.get("wingstyle"), "Feather", "Dragon", "Butterfly") : "Feather";
+        if ("Off".equals(cosWingStyle)) cosWingStyle = "Feather";
+        cosHalo = pretty(m.get("halo"), "Angel", "Red");
+        cosHat = pretty(m.get("hat"), "Crown", "Top hat", "Witch");
+        cosEars = pretty(m.get("ears"), "Black", "White", "Ginger", "Pink");
+        cosBunny = pretty(m.get("bunny"), "White", "Pink", "Black", "Brown");
+        cosHorns = pretty(m.get("horns"), "Red", "Black", "White", "Gold");
+        cosGlasses = pretty(m.get("glasses"), "Black", "Gold", "Pink");
+        cosHeadphones = pretty(m.get("headphones"), "Black", "White", "Pink", "Blue");
+        cosTailKind = pretty(m.get("tail"), "Black", "White", "Ginger", "Pink", "Fox");
+        cosTail = false;
+        cosBackpack = pretty(m.get("backpack"), "Brown", "Black", "Blue", "Red");
+        cosGloves = pretty(m.get("gloves"), "Red", "Blue", "Black");
+        cosKatana = m.containsKey("katana");
+        cosFeet = m.containsKey("feet");
+        cosParticles = pretty(m.get("fx"), "Sparkles", "Hearts", "Flames", "Soul fire", "Snow", "Magic", "Petals", "Notes");
+        cosTrail = m.containsKey("trail");
+        if (!m.isEmpty()) cosGlow = m.containsKey("glow");
+        try {
+            cosSize = m.containsKey("size") ? Integer.parseInt(m.get("size")) : 100;
+        } catch (NumberFormatException ignored) {}
     }
 
     /** The cosmetics as the short code the game and the online list use. */

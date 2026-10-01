@@ -44,6 +44,8 @@ public final class Installer {
         public String assetIndex;
         public String logArgument;
         public boolean cobraBundled;
+        /** Something to tell you after launching (e.g. VulkanMod isn't out for this version yet). */
+        public String notice;
     }
 
     public static Prepared prepare(GameVersion gv, Downloader.Progress p) throws IOException {
@@ -93,13 +95,23 @@ public final class Installer {
         p.update("Installing Cobra Client", 1);
         out.cobraBundled = installBundledMods(gv, out.gameDir);
         boolean fpsProfile = dev.cobra.launcher.core.Profiles.current().locked();
+        boolean vulkan = dev.cobra.launcher.core.Settings.get().superOptimization;
         if (fpsProfile) installFpsMods(gv, out.gameDir, p);
-        // Settings → Super optimization (Vulkan): its mods come and go with the switch
+        // Settings → Super optimization (Vulkan): in every profile. Its mods come and go with the
+        // switch, and renderers that can't run with VulkanMod (Sodium, Iris…) are set aside meanwhile.
         Path modsDir = out.gameDir.resolve("mods");
-        if (!fpsProfile && dev.cobra.launcher.core.Settings.get().superOptimization) {
+        if (vulkan) {
+            p.update("Setting up Super optimization (Vulkan)", 1);
             syncManagedMods(gv, modsDir, VULKAN_MODS, ".cobra-vulkan.json");
+            if (!hasModId(modsDir, "vulkanmod")) {
+                out.notice = "Super optimization: VulkanMod isn't available for Minecraft " + gv.mc + " yet, so the game runs normally.";
+                restoreConflicting(modsDir);
+            } else {
+                setAsideConflicting(modsDir);
+            }
         } else {
             removeManagedMods(modsDir, ".cobra-vulkan.json");
+            restoreConflicting(modsDir);
         }
         removeDuplicateMods(modsDir, managedMods(gv));
         return out;
@@ -486,7 +498,14 @@ public final class Installer {
             }
         } catch (Exception ignored) {}
         java.util.Set<String> keep = new java.util.HashSet<>();
+        boolean vulkan = dev.cobra.launcher.core.Settings.get().superOptimization;
         for (String slug : dev.cobra.launcher.core.Profiles.FPS_MODS) {
+            // with Super optimization the Sodium family is set aside anyway: don't download it again
+            if (vulkan && (slug.startsWith("sodium") || slug.startsWith("reeses"))) {
+                String had = owned.get(slug);
+                if (had != null) keep.add(had);
+                continue;
+            }
             String have = owned.get(slug);
             if (have != null && Files.exists(mods.resolve(have))) {
                 keep.add(have);
@@ -622,6 +641,47 @@ public final class Installer {
                 }
             } catch (IOException ignored) {}
         }
+    }
+
+    /** Mods that can't run together with VulkanMod (their own renderers / shaders). */
+    private static final java.util.Set<String> VULKAN_CONFLICTS = java.util.Set.of(
+            "sodium", "sodium-extra", "reeses-sodium-options", "iris", "indium", "embeddium", "rubidium",
+            "optifabric", "nvidium", "distanthorizons", "continuity", "canvas", "immersive_portals", "replaymod");
+    private static final String OFF = ".cobra-off";
+
+    private static boolean hasModId(Path mods, String id) {
+        try (var s = Files.list(mods)) {
+            for (Path f : s.toList()) {
+                if (!f.getFileName().toString().endsWith(".jar")) continue;
+                String[] iv = modIdAndVersion(f);
+                if (iv != null && iv[0].equals(id)) return true;
+            }
+        } catch (IOException ignored) {}
+        return false;
+    }
+
+    /** Super optimization on: renames conflicting mods to *.jar.cobra-off so the game skips them. */
+    private static void setAsideConflicting(Path mods) {
+        try (var s = Files.list(mods)) {
+            for (Path f : s.toList()) {
+                if (!f.getFileName().toString().endsWith(".jar")) continue;
+                String[] iv = modIdAndVersion(f);
+                if (iv != null && VULKAN_CONFLICTS.contains(iv[0])) {
+                    Files.move(f, f.resolveSibling(f.getFileName() + OFF), StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        } catch (IOException ignored) {}
+    }
+
+    /** Super optimization off: puts those mods back. */
+    private static void restoreConflicting(Path mods) {
+        if (!Files.isDirectory(mods)) return;
+        try (var s = Files.list(mods)) {
+            for (Path f : s.toList()) {
+                String n = f.getFileName().toString();
+                if (n.endsWith(".jar" + OFF)) Files.move(f, f.resolveSibling(n.substring(0, n.length() - OFF.length())), StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException ignored) {}
     }
 
     /** {id, version} from a Fabric mod jar, or null if it isn't one. */
