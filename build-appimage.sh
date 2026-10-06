@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds CobraLauncher-x86_64.AppImage:
-#   1. client/   -> cobra-client-1.21.11 jar  (the Cobra Client mod, Fabric 1.21.11)
+#   1. client/   -> cobra-client-1.21.11 jar  (the Abyss Client mod, Fabric 1.21.11)
 #   2. launcher fat jar with the client jar bundled inside
 #   3. a trimmed Java 21 runtime (jlink) + AppDir + appimagetool
 #
@@ -44,37 +44,35 @@ else
     ERRORS="$ROOT/build/client-errors.txt"
     LOG="$ROOT/build/client-build.log"
     : > "$ERRORS"
-    rm -f client/build/libs/cobra-client-1.21.11-*.jar
+    rm -f client/build/libs/cobra-client-*.jar
+    BUILT=""; SKIPPED=""
     if [[ -z "${SKIP_CLIENTS:-}" ]]; then
-        step "Building Cobra Client (Minecraft 1.21.11, Fabric)"
-        # newest yarn / loader / Fabric API for 1.21.11, looked up live so they're always valid
-        PROPS=$(python3 - << 'PYV'
-import json, urllib.request, urllib.parse
-v = "1.21.11"
-def get(u):
-    req = urllib.request.Request(u, headers={"User-Agent": "cobra-launcher-build"})
-    return json.load(urllib.request.urlopen(req, timeout=30))
-try:
-    yarn = get("https://meta.fabricmc.net/v2/versions/yarn/" + v)[0]["version"]
-    loader = next(l["version"] for l in get("https://meta.fabricmc.net/v2/versions/loader") if l.get("stable"))
-    q = urllib.parse.urlencode({"game_versions": json.dumps([v]), "loaders": json.dumps(["fabric"])})
-    api = get("https://api.modrinth.com/v2/project/fabric-api/version?" + q)[0]["version_number"]
-    print(f"-Pyarn_mappings={yarn} -Ploader_version={loader} -Pfabric_version={api}")
-except Exception:
-    print("")
-PYV
-)
-        if (cd client && chmod +x gradlew && ./gradlew --no-daemon build $PROPS 2>&1 | tee "$LOG"; exit "${PIPESTATUS[0]}"); then
-            CLIENT_OK=1
-        else
-            grep -E "error:|warning: \[|Mixin|What went wrong|> Could not|FAILED" -A3 "$LOG" | head -n 150 > "$ERRORS"
-            rm -f client/build/libs/cobra-client-1.21.11-*.jar
-            printf '\n\033[1;31m==> Cobra Client failed to build. The errors:\033[0m\n'
-            grep -E "error:" -A2 "$LOG" | head -n 40 || tail -n 40 "$LOG"
-            if command -v wl-copy >/dev/null; then wl-copy < "$LOG" && echo "(the whole log is copied to your clipboard: paste it to get it fixed)"
-            elif command -v xclip >/dev/null; then xclip -selection clipboard < "$LOG" && echo "(the whole log is copied to your clipboard: paste it to get it fixed)"; fi
-            die "Cobra Client build failed. Send $LOG to get it fixed. No AppImage was packaged."
-        fi
+        chmod +x client/gradlew
+        FIRST=1
+        # one Abyss Client per Minecraft version in client/versions.txt
+        while read -r MCV; do
+            [[ -z "$MCV" || "$MCV" == \#* ]] && continue
+            step "Building Abyss Client for Minecraft $MCV"
+            if (cd client && ./gradlew --no-daemon build -Pmc="$MCV" 2>&1 | tee "$LOG.$MCV"; exit "${PIPESTATUS[0]}"); then
+                BUILT="$BUILT $MCV"
+            else
+                rm -f client/build/libs/cobra-client-"$MCV"-*.jar
+                if [[ -n "$FIRST" ]]; then
+                    cp "$LOG.$MCV" "$LOG"
+                    grep -E "error:|warning: \[|Mixin|What went wrong|> Could not|FAILED" -A3 "$LOG" | head -n 150 > "$ERRORS"
+                    printf '\n\033[1;31m==> Abyss Client for %s failed to build. The errors:\033[0m\n' "$MCV"
+                    grep -E "error:" -A2 "$LOG" | head -n 40 || tail -n 40 "$LOG"
+                    if command -v wl-copy >/dev/null; then wl-copy < "$LOG" && echo "(the whole log is copied to your clipboard: paste it to get it fixed)"
+                    elif command -v xclip >/dev/null; then xclip -selection clipboard < "$LOG" && echo "(the whole log is copied to your clipboard: paste it to get it fixed)"; fi
+                    die "Abyss Client build failed. Send $LOG to get it fixed. No AppImage was packaged."
+                fi
+                SKIPPED="$SKIPPED $MCV"
+                printf '\033[1;33m==> Abyss Client for %s did not build: that version runs without Cobra (log: %s)\033[0m\n' "$MCV" "$LOG.$MCV"
+            fi
+            FIRST=""
+        done < client/versions.txt
+        # gradle "build" cleans nothing between versions, but make sure only real mod jars are bundled
+        rm -f client/build/libs/*-sources.jar client/build/libs/*-dev.jar
     fi
     step "Building the launcher"
     chmod +x gradlew
@@ -84,10 +82,12 @@ fi
 [[ -f "$JAR" ]] || die "Launcher jar not found at $JAR"
 
 # ---------------------------------------------------------------- report
-if unzip -l "$JAR" 2>/dev/null | grep "bundled/cobra-client-1.21.11.jar" >/dev/null; then   # no -q: an early exit would SIGPIPE unzip and pipefail would call it a failure
-    printf '\n\033[1;32m==> Cobra Client for 1.21.11: OK\033[0m (bundled in the launcher)\n'
+LISTED=$(unzip -l "$JAR" 2>/dev/null | grep -oE "bundled/cobra-client-[0-9.]+\.jar" | sed -E 's#bundled/cobra-client-(.*)\.jar#\1#' | sort -Vr | tr '\n' ' ' || true)
+if [[ -n "$LISTED" ]]; then
+    printf '\n\033[1;32m==> Abyss Client built in for: %s\033[0m\n' "$LISTED"
+    [[ -n "${SKIPPED:-}" ]] && printf '\033[1;33m==> Without Abyss Client (did not build):%s\033[0m\n' "$SKIPPED"
 else
-    printf '\n\033[1;31m==> Cobra Client for 1.21.11: FAILED to build\033[0m (the launcher still works, the game runs without Cobra)\n'
+    printf '\n\033[1;31m==> Abyss Client: FAILED to build\033[0m (the launcher still works, the game runs without Cobra)\n'
     if [[ -s "${ERRORS:-/nonexistent}" ]]; then
         printf '    Send this file so it can be fixed:  %s\n' "$ERRORS"
         command -v wl-copy >/dev/null && wl-copy < "$ERRORS" && echo "    (it's copied to your clipboard: just paste it)"
@@ -114,8 +114,8 @@ ln -sf cobra-launcher.png "$APPDIR/.DirIcon"
 cat > "$APPDIR/cobra-launcher.desktop" << 'DESKTOP'
 [Desktop Entry]
 Type=Application
-Name=Cobra Launcher
-Comment=Minecraft launcher for Cobra Client
+Name=Abyss Launcher
+Comment=Minecraft launcher for Abyss Client
 Exec=cobra-launcher
 Icon=cobra-launcher
 Categories=Game;
@@ -183,9 +183,9 @@ if [ "${1:-}" != "--no-install" ]; then
     cat > "$DATA/applications/cobra-launcher.desktop" << EOF
 [Desktop Entry]
 Type=Application
-Name=Cobra Launcher
+Name=Abyss Launcher
 GenericName=Minecraft Launcher
-Comment=Minecraft launcher for Cobra Client
+Comment=Minecraft launcher for Abyss Client
 Exec="$HOME/Applications/CobraLauncher.AppImage" %U
 TryExec=$HOME/Applications/CobraLauncher.AppImage
 Icon=cobra-launcher
@@ -202,7 +202,7 @@ fi
 step "Done"
 echo "  $TARGET ($(du -h "$TARGET" | cut -f1))"
 if [ "${1:-}" != "--no-install" ]; then
-    echo "  Installed: search \"Cobra\" in your app menu, or run ~/Applications/CobraLauncher.AppImage"
+    echo "  Installed: search \"Abyss\" in your app menu, or run ~/Applications/CobraLauncher.AppImage"
 else
     echo "  Run it with: ./CobraLauncher-x86_64.AppImage"
 fi

@@ -94,47 +94,14 @@ public final class Profiles {
         return list;
     }
 
-    /**
-     * Cobra only runs 1.21.11 now. Profiles on other versions switch to it, and their worlds,
-     * resource packs and server list move into the 1.21.11 folder (plus options and Cobra's
-     * settings when coming from another 1.21 version). Mods stay behind in the old folder:
-     * they're built for the old version and would crash 1.21.11.
-     */
+    /** Every profile keeps its own version now (all Minecraft releases are available again). */
     private static void migrateVersions() {
         boolean changed = false;
-        String now = GameVersion.MODERN.id;
         for (Profile p : list) {
-            if (now.equals(p.version)) continue;
-            String old = p.version == null ? "" : p.version;
-            p.version = now;
-            changed = true;
-            try {
-                Path from = Paths.instance(p.id.equals("default") ? old : "profiles/" + p.id + "/" + old);
-                Path to = gameDir(p, GameVersion.MODERN);
-                if (old.isEmpty() || !Files.isDirectory(from) || Files.exists(to.resolve("saves"))) continue;
-                Files.createDirectories(to);
-                java.util.List<String> keep = new ArrayList<>(java.util.List.of("saves", "resourcepacks", "servers.dat", "screenshots"));
-                if (old.startsWith("1.21")) {
-                    keep.add("options.txt");
-                    keep.add("config");
-                }
-                for (String name : keep) {
-                    Path a = from.resolve(name), b = to.resolve(name);
-                    if (Files.exists(a) && !Files.exists(b)) {
-                        try {
-                            Files.move(a, b);
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
+            if (p.version == null || p.version.isBlank()) {
+                p.version = GameVersion.MODERN.id;
+                changed = true;
             }
-        }
-        if (!now.equals(Settings.get().lastVersion)) {
-            Settings.get().lastVersion = now;
-            Settings.get().save();
         }
         if (changed) save();
     }
@@ -175,7 +142,9 @@ public final class Profiles {
     public static synchronized void save() {
         try {
             Files.createDirectories(FILE.getParent());
-            Files.writeString(FILE, Http.GSON.toJson(list));
+            Path tmp = FILE.resolveSibling(FILE.getFileName() + ".tmp");           // never a half-written file
+            Files.writeString(tmp, Http.GSON.toJson(list));
+            Files.move(tmp, FILE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             e.printStackTrace();
         }

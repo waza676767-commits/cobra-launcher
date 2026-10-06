@@ -36,13 +36,14 @@ public final class Features {
                 new Setting.Cond() { public boolean ok() { return theme.is("Custom"); } });
         public final Setting.Bool animations = add(new Setting.Bool("animations", "Animations", true));
         public final Setting.Bool particles = add(new Setting.Bool("particles", "Click particles", true));
-        public final Setting.Bool blur = add(new Setting.Bool("blur", "Blur behind the Cobra menu", true));
+        public final Setting.Bool blur = add(new Setting.Bool("blur", "Blur behind the Abyss menu", true));
         public final Setting.Mode screenBlur = add(new Setting.Mode("screenblur", "Blur other screens", "Menus", "Off", "Menus", "Menus + inventory"));
         public final Setting.Bind menuKey = add(new Setting.Bind("menukey", "Open menu", -1, "menu"));
         /** Everyone's "Update to the newest" button: fetches the latest Cobra release for the launcher. */
         public final Setting.Action update = add(new Setting.Action("update", "Update to the newest", new Runnable() {
             public void run() { dev.cobra.client.core.SelfUpdate.checkAndDownload(); }
         }));
+
         /** Use the launcher's colour theme (Settings → Theme) for Cobra's menus. */
         public final Setting.Bool followLauncher = add(new Setting.Bool("followlauncher", "Use the launcher's colours", true));
 
@@ -69,16 +70,16 @@ public final class Features {
         /** Look of HUD element backgrounds: plain boxes, or Liquid Glass panels. */
         public final Setting.Mode hudStyle = add(new Setting.Mode("hudstyle", "HUD style", "Liquid Glass", "Classic", "Liquid Glass"));
         /** Cobra icon next to other Cobra players in the Tab list (and let them see yours). */
-        public final Setting.Bool tabIcon = add(new Setting.Bool("tabicon", "Cobra icon in Tab", true));
+        public final Setting.Bool tabIcon = add(new Setting.Bool("tabicon", "Abyss icon in Tab", true));
         /** Turns every particle off (explosions, crits, rain splashes, …): cleaner screen and more FPS. */
         public final Setting.Bool noParticles = add(new Setting.Bool("noparticles", "Disable all particles", false));
         /** Colour of highlights in the Cobra menus (selected tab, switches, bars). */
         public final Setting.Mode accentPreset = add(new Setting.Mode("accentpreset", "Accent", "Classic",
-                "Classic", "Cobra green", "Ocean", "Violet", "Rose", "Sunset", "Gold", "Custom"));
+                "Classic", "Abyss green", "Ocean", "Violet", "Rose", "Sunset", "Gold", "Custom"));
         public final Setting.Color accent = add(new Setting.Color("accent", "Custom accent", 0xFF7C5CFF),
                 new Setting.Cond() { public boolean ok() { return accentPreset.is("Custom"); } });
 
-        private static final String[] PRESETS = {"Cobra green", "Ocean", "Violet", "Rose", "Sunset", "Gold"};
+        private static final String[] PRESETS = {"Abyss green", "Ocean", "Violet", "Rose", "Sunset", "Gold"};
         private static final int[] PRESET_COLORS = {0xFF3DDC84, 0xFF3EA6FF, 0xFF8B6CFF, 0xFFFF5C8A, 0xFFFF8A3D, 0xFFF5C542};
 
         /** Accent colour, or 0 for the classic black/white look. */
@@ -92,7 +93,7 @@ public final class Features {
         }
 
         public Client() {
-            super("client", "Client", "Cobra Client options", Category.UTILITY, true);
+            super("client", "Client", "Abyss Client options", Category.UTILITY, true);
             hidden = true;
         }
 
@@ -113,8 +114,8 @@ public final class Features {
         public final Setting.Bind pause = add(new Setting.Bind("pause", "Pause / resume", 299, null));      // F10
         public final Setting.Bind stop = add(new Setting.Bind("stop", "Stop recording", 301, null));        // F12
         public final Setting.Mode fps = add(new Setting.Mode("fps", "Frame rate", "60", "30", "60", "120"));
-        public final Setting.Mode resolution = add(new Setting.Mode("resolution", "Resolution", "1080p", "1080p", "Window size"));
-        public final Setting.Mode quality = add(new Setting.Mode("quality", "Quality", "High", "High", "Balanced", "Small file"));
+        public final Setting.Mode resolution = add(new Setting.Mode("resolution", "Resolution", "Window size", "Window size", "1440p", "1080p", "720p"));
+        public final Setting.Mode quality = add(new Setting.Mode("quality", "Quality", "High", "Ultra", "High", "Balanced", "Small file"));
         public final Setting.Bool indicator = add(new Setting.Bool("indicator", "Show REC in the corner", true));
         /** Auto: record with the graphics card outside the game when possible (no FPS loss). */
         public final Setting.Mode capture = add(new Setting.Mode("capture", "Capture", "Auto (lightest)", "Auto (lightest)", "Game frames"));
@@ -380,6 +381,105 @@ public final class Features {
         }
     }
 
+    /** Colors: the whole game's contrast, saturation and brightness (a screen effect, like a filter). */
+    public static final class Colors extends Module {
+        public final Setting.Number contrast = add(new Setting.Number("contrast", "Contrast", 100, 50, 150, 1, "%"));
+        public final Setting.Number saturation = add(new Setting.Number("saturation", "Saturation", 100, 0, 200, 1, "%"));
+        public final Setting.Number brightness = add(new Setting.Number("brightness", "Brightness", 100, 50, 150, 1, "%"));
+
+        public Colors() { super("colors", "Colors", "Contrast, saturation and brightness of the whole game", Category.VISUAL, false); }
+
+        /** The colour data the screen effect reads (each value 0..255, 128 = normal). */
+        public int argb() {
+            if (!isEnabled()) return 0x00808080;
+            int c = enc(contrast.f() / 100f), s = enc(saturation.f() / 100f), b = enc(brightness.f() / 100f);
+            return 0xFF000000 | c << 16 | s << 8 | b;
+        }
+
+        private static int enc(float v) {
+            return Math.max(0, Math.min(255, Math.round(v / 2f * 255f)));
+        }
+    }
+
+    /** Low Health Warning: a red glow round the edges of the screen (pulsing) when you're low. */
+    public static final class LowHealth extends Module {
+        public final Setting.Number below = add(new Setting.Number("below", "Warn below (hearts)", 4, 1, 10, 0.5, ""));
+        public final Setting.Number strength = add(new Setting.Number("strength", "Strength", 60, 10, 100, 5, "%"));
+        public final Setting.Bool pulse = add(new Setting.Bool("pulse", "Pulse", true));
+
+        public LowHealth() { super("lowhealth", "Low Health Warning", "A red glow at the screen's edges when your health is low", Category.VISUAL, false); }
+
+        /** Draws the glow (full screen, under the HUD). */
+        public void draw(dev.cobra.client.core.Render r) {
+            if (!isEnabled() || !Cobra.platform.inWorld()) return;
+            float hp = Cobra.platform.health();
+            float limit = below.f() * 2;
+            if (hp <= 0 || hp > limit) return;
+            float k = (1 - hp / limit) * 0.6f + 0.4f;
+            if (pulse.on()) k *= 0.75f + 0.25f * (float) Math.sin(System.currentTimeMillis() / 180.0);
+            int w = r.width(), h = r.height();
+            int band = Math.max(8, Math.min(w, h) / 6);
+            float max = strength.f() / 100f * 0.7f;
+            for (int i = 0; i < band; i++) {                          // a soft gradient, strongest at the edge
+                float t = 1 - i / (float) band;
+                int a = Math.round(255 * max * k * t * t);
+                if (a <= 0) continue;
+                int c = a << 24 | 0xD01818;
+                r.rect(i, i, w - 2 * i, 1, c);
+                r.rect(i, h - 1 - i, w - 2 * i, 1, c);
+                r.rect(i, i + 1, 1, h - 2 * i - 2, c);
+                r.rect(w - 1 - i, i + 1, 1, h - 2 * i - 2, c);
+            }
+        }
+    }
+
+    /** Hit Sound: a crisp sound every time you hit something (pick from a few). */
+    public static final class HitSound extends Module {
+        public final Setting.Mode sound = add(new Setting.Mode("sound", "Sound", "Ding", "Ding", "Click", "Pop", "Bell", "Bass"));
+        public final Setting.Number volume = add(new Setting.Number("volume", "Volume", 70, 0, 100, 5, "%"));
+        public final Setting.Number pitch = add(new Setting.Number("pitch", "Pitch", 1.0, 0.5, 2.0, 0.05, "x"));
+
+        public HitSound() { super("hitsound", "Hit Sound", "Plays a sound when you hit something", Category.UTILITY, false); }
+
+        public void hit() {
+            if (!isEnabled()) return;
+            String id = sound.is("Click") ? "ui.button.click" : sound.is("Pop") ? "entity.chicken.egg"
+                    : sound.is("Bell") ? "block.note_block.bell" : sound.is("Bass") ? "block.note_block.bass" : "entity.experience_orb.pickup";
+            Cobra.platform.playSound(id, volume.f() / 100f, pitch.f());
+        }
+    }
+
+    /** Auto GG: says "gg" (or your text) in chat when a game ends on Hypixel-style servers. */
+    public static final class AutoGG extends Module {
+        public final Setting.Text text = add(new Setting.Text("text", "Message", "gg", 32));
+        public final Setting.Number delay = add(new Setting.Number("delay", "Delay", 1.0, 0, 5, 0.5, "s"));
+        private long sendAt = -1, lastSent;
+
+        public AutoGG() { super("autogg", "Auto GG", "Says gg in chat when a game ends", Category.HYPIXEL, false); }
+
+        private static final String[] ENDS = {"1st Killer -", "Winner -", "Winners -", "Winner:", "WINNER!", "VICTORY!", "Top Survivors", "won the game", "Reward Summary"};
+
+        public void onChat(String plain) {
+            if (!isEnabled() || plain == null) return;
+            for (String e : ENDS) {
+                if (plain.contains(e) && System.currentTimeMillis() - lastSent > 10_000) {
+                    sendAt = System.currentTimeMillis() + Math.round(delay.f() * 1000);
+                    return;
+                }
+            }
+        }
+
+        @Override
+        public void onTick() {
+            if (sendAt > 0 && System.currentTimeMillis() >= sendAt) {
+                sendAt = -1;
+                lastSent = System.currentTimeMillis();
+                String t = text.get().trim();
+                if (!t.isEmpty()) Cobra.platform.say(t);
+            }
+        }
+    }
+
     /** Wavy capes: capes ripple in the wind and swing more naturally. */
     public static final class WavyCapes extends Module {
         public final Setting.Number wind = add(new Setting.Number("wind", "Wind", 1, 0, 3, 0.1, "x"));
@@ -393,19 +493,48 @@ public final class Features {
      * (they're shared through the Cobra online list).
      */
     public static final class Cosmetics extends Module {
-        public final Setting.Mode wings = add(new Setting.Mode("wings", "Wings", "Off", "Off", "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan"));
-        public final Setting.Mode wingStyle = add(new Setting.Mode("wingstyle", "Wing style", "Feather", "Feather", "Dragon", "Butterfly"));
-        public final Setting.Mode halo = add(new Setting.Mode("halo", "Halo", "Off", "Off", "Angel", "Red"));
+        public final Setting.Mode wings = add(new Setting.Mode("wings", "Wings", "Off", "Off", "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan", "Custom"));
+        public final Setting.Color wingsColour = add(new Setting.Color("wings_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return wings.is("Custom"); } });
+        public final Setting.Mode wingStyle = add(new Setting.Mode("wingstyle", "Wing style", "Feather", "Feather", "Dragon", "Butterfly", "Demon", "Energy"));
+        public final Setting.Mode halo = add(new Setting.Mode("halo", "Halo", "Off", "Off", "Angel", "Red", "Custom"));
+        public final Setting.Color haloColour = add(new Setting.Color("halo_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return halo.is("Custom"); } });
         public final Setting.Mode hat = add(new Setting.Mode("hat", "Hat", "Off", "Off", "Crown", "Top hat", "Witch"));
-        public final Setting.Mode ears = add(new Setting.Mode("ears", "Cat ears", "Off", "Off", "Black", "White", "Ginger", "Pink"));
-        public final Setting.Mode bunny = add(new Setting.Mode("bunny", "Bunny ears", "Off", "Off", "White", "Pink", "Black", "Brown"));
-        public final Setting.Mode horns = add(new Setting.Mode("horns", "Horns", "Off", "Off", "Red", "Black", "White", "Gold"));
-        public final Setting.Mode glasses = add(new Setting.Mode("glasses", "Sunglasses", "Off", "Off", "Black", "Gold", "Pink"));
-        public final Setting.Mode headphones = add(new Setting.Mode("headphones", "Headphones", "Off", "Off", "Black", "White", "Pink", "Blue"));
-        public final Setting.Mode tail = add(new Setting.Mode("tailkind", "Tail", "Off", "Off", "Black", "White", "Ginger", "Pink", "Fox"));
-        public final Setting.Mode backpack = add(new Setting.Mode("backpack", "Backpack", "Off", "Off", "Brown", "Black", "Blue", "Red"));
+        public final Setting.Mode ears = add(new Setting.Mode("ears", "Cat ears", "Off", "Off", "Black", "White", "Ginger", "Pink", "Custom"));
+        public final Setting.Color earsColour = add(new Setting.Color("ears_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return ears.is("Custom"); } });
+        public final Setting.Mode bunny = add(new Setting.Mode("bunny", "Bunny ears", "Off", "Off", "White", "Pink", "Black", "Brown", "Custom"));
+        public final Setting.Color bunnyColour = add(new Setting.Color("bunny_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return bunny.is("Custom"); } });
+        public final Setting.Mode horns = add(new Setting.Mode("horns", "Horns", "Off", "Off", "Red", "Black", "White", "Gold", "Custom"));
+        public final Setting.Color hornsColour = add(new Setting.Color("horns_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return horns.is("Custom"); } });
+        public final Setting.Mode glasses = add(new Setting.Mode("glasses", "Sunglasses", "Off", "Off", "Black", "Gold", "Pink", "Custom"));
+        public final Setting.Color glassesColour = add(new Setting.Color("glasses_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return glasses.is("Custom"); } });
+        public final Setting.Mode headphones = add(new Setting.Mode("headphones", "Headphones", "Off", "Off", "Black", "White", "Pink", "Blue", "Custom"));
+        public final Setting.Color headphonesColour = add(new Setting.Color("headphones_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return headphones.is("Custom"); } });
+        public final Setting.Mode antlers = add(new Setting.Mode("antlers", "Antlers", "Off", "Off", "Brown", "White", "Gold", "Custom"));
+        public final Setting.Color antlersColour = add(new Setting.Color("antlers_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return antlers.is("Custom"); } });
+        public final Setting.Mode orbit = add(new Setting.Mode("orbit", "Orbiting gems", "Off", "Off", "Purple", "Cyan", "Red", "Gold", "Green", "Custom"));
+        public final Setting.Color orbitColour = add(new Setting.Color("orbit_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return orbit.is("Custom"); } });
+        public final Setting.Mode scarf = add(new Setting.Mode("scarf", "Scarf", "Off", "Off", "Red", "Blue", "Green", "White", "Black", "Custom"));
+        public final Setting.Color scarfColour = add(new Setting.Color("scarf_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return scarf.is("Custom"); } });
+        public final Setting.Mode tail = add(new Setting.Mode("tailkind", "Tail", "Off", "Off", "Black", "White", "Ginger", "Pink", "Fox", "Custom"));
+        public final Setting.Color tailColour = add(new Setting.Color("tailkind_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return tail.is("Custom"); } });
+        public final Setting.Mode backpack = add(new Setting.Mode("backpack", "Backpack", "Off", "Off", "Brown", "Black", "Blue", "Red", "Custom"));
+        public final Setting.Color backpackColour = add(new Setting.Color("backpack_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return backpack.is("Custom"); } });
         public final Setting.Bool katana = add(new Setting.Bool("katana", "Katana on your back", false));
-        public final Setting.Mode gloves = add(new Setting.Mode("gloves", "Boxing gloves", "Off", "Off", "Red", "Blue", "Black"));
+        public final Setting.Mode gloves = add(new Setting.Mode("gloves", "Boxing gloves", "Off", "Off", "Red", "Blue", "Black", "Custom"));
+        public final Setting.Color glovesColour = add(new Setting.Color("gloves_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return gloves.is("Custom"); } });
         public final Setting.Bool feet = add(new Setting.Bool("feet", "Big feet", false));
         public final Setting.Number size = add(new Setting.Number("size", "Size", 100, 70, 150, 5, "%"));
         public final Setting.Bool glow = add(new Setting.Bool("glow", "Glow effects", true));
@@ -413,7 +542,15 @@ public final class Features {
         public final Setting.Bool trail = add(new Setting.Bool("trail", "Particle trail when moving", false));
         public final Setting.Bool showOwn = add(new Setting.Bool("showown", "Show mine in third person", true));
 
-        public Cosmetics() { super("cosmetics", "Cosmetics", "Wings, halos, hats, ears, tails and more (only Cobra players see them)", Category.VISUAL, false); }
+        public Cosmetics() {
+            super("cosmetics", "Cosmetics", "Wings, halos, hats, ears, tails and more (only Abyss players see them)", Category.VISUAL, false);
+            // fold-out groups so the list stays short; searching opens the right one
+            group(new Setting.Group("g_back", "Wings & back"), wings, wingsColour, wingStyle, tail, tailColour, backpack, backpackColour, katana, scarf, scarfColour);
+            group(new Setting.Group("g_head", "Head"), halo, haloColour, hat, ears, earsColour, bunny, bunnyColour, horns, hornsColour,
+                    antlers, antlersColour, orbit, orbitColour, glasses, glassesColour, headphones, headphonesColour);
+            group(new Setting.Group("g_hands", "Hands & feet"), gloves, glovesColour, feet);
+            group(new Setting.Group("g_fx", "Effects & size"), glow, particles, trail, size);
+        }
 
         private static String code(String v) {
             return v.toLowerCase().replace(" ", "");
@@ -423,9 +560,14 @@ public final class Features {
         public String serialize() {
             if (!isEnabled()) return "";
             StringBuilder b = new StringBuilder();
-            Setting.Mode[] modes = {wings, halo, hat, ears, bunny, horns, glasses, headphones, tail, backpack, gloves};
-            String[] keys = {"wings", "halo", "hat", "ears", "bunny", "horns", "glasses", "headphones", "tail", "backpack", "gloves"};
-            for (int i = 0; i < modes.length; i++) if (!modes[i].is("Off")) b.append(keys[i]).append(':').append(code(modes[i].get())).append(',');
+            Setting.Mode[] modes = {wings, halo, hat, ears, bunny, horns, glasses, headphones, tail, backpack, gloves, antlers, orbit, scarf};
+            String[] keys = {"wings", "halo", "hat", "ears", "bunny", "horns", "glasses", "headphones", "tail", "backpack", "gloves", "antlers", "orbit", "scarf"};
+            Setting.Color[] colours = {wingsColour, haloColour, null, earsColour, bunnyColour, hornsColour, glassesColour, headphonesColour, tailColour, backpackColour, glovesColour, antlersColour, orbitColour, scarfColour};
+            for (int i = 0; i < modes.length; i++) {
+                if (modes[i].is("Off")) continue;
+                String v = modes[i].is("Custom") ? "x" + String.format("%06x", colours[i].argb() & 0xFFFFFF) : code(modes[i].get());
+                b.append(keys[i]).append(':').append(v).append(',');
+            }
             if (!wings.is("Off") && !wingStyle.is("Feather")) b.append("wingstyle:").append(code(wingStyle.get())).append(',');
             if (katana.on()) b.append("katana,");
             if (feet.on()) b.append("feet,");
@@ -450,12 +592,20 @@ public final class Features {
                 int i = part.indexOf(':');
                 m.put(i < 0 ? part : part.substring(0, i), i < 0 ? "" : part.substring(i + 1));
             }
-            Setting.Mode[] modes = {wings, halo, hat, ears, bunny, horns, glasses, headphones, tail, backpack, gloves};
-            String[] keys = {"wings", "halo", "hat", "ears", "bunny", "horns", "glasses", "headphones", "tail", "backpack", "gloves"};
+            Setting.Mode[] modes = {wings, halo, hat, ears, bunny, horns, glasses, headphones, tail, backpack, gloves, antlers, orbit, scarf};
+            String[] keys = {"wings", "halo", "hat", "ears", "bunny", "horns", "glasses", "headphones", "tail", "backpack", "gloves", "antlers", "orbit", "scarf"};
             boolean any = false;
+            Setting.Color[] colours = {wingsColour, haloColour, null, earsColour, bunnyColour, hornsColour, glassesColour, headphonesColour, tailColour, backpackColour, glovesColour, antlersColour, orbitColour, scarfColour};
             for (int i = 0; i < modes.length; i++) {
                 String v = m.get(keys[i]);
-                modes[i].set(pretty(modes[i], v));
+                if (v != null && v.length() == 7 && v.charAt(0) == 'x') {        // a custom colour from the launcher
+                    modes[i].set("Custom");
+                    try {
+                        colours[i].set(0xFF000000 | Integer.parseInt(v.substring(1), 16));
+                    } catch (NumberFormatException ignored) {}
+                } else {
+                    modes[i].set(pretty(modes[i], v));
+                }
                 any |= v != null;
             }
             wingStyle.set(pretty(wingStyle, m.containsKey("wingstyle") ? m.get("wingstyle") : "feather"));

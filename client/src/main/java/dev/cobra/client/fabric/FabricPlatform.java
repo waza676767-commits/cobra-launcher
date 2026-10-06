@@ -437,4 +437,41 @@ public final class FabricPlatform implements Platform {
         } catch (Throwable ignored) {}
         return out;
     }
+
+    @Override
+    public float pitch() {
+        return mc.player == null ? 0 : mc.player.getPitch();
+    }
+
+    @Override
+    public boolean sprinting() {
+        return mc.player != null && mc.player.isSprinting();
+    }
+
+    @Override
+    public int hotbarSlot() {
+        return mc.player == null ? -1 : mc.player.getInventory().getSelectedSlot();
+    }
+
+    @Override
+    public float health() {
+        return mc.player == null ? 20 : mc.player.getHealth();
+    }
+
+    @Override
+    public float maxHealth() {
+        return mc.player == null ? 20 : mc.player.getMaxHealth();
+    }
+
+    @Override
+    public void playSound(String id, float volume, float pitch) {
+        if (mc.player == null) return;
+        net.minecraft.sound.SoundEvent ev = net.minecraft.registry.Registries.SOUND_EVENT.get(net.minecraft.util.Identifier.of("minecraft", id));
+        if (ev != null) mc.player.playSound(ev, volume, pitch);
+    }
+
+    @Override
+    public void say(String message) {
+        if (mc.player != null && mc.player.networkHandler != null) mc.player.networkHandler.sendChatMessage(message);
+    }
 }

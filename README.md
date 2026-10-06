@@ -1,4 +1,4 @@
-# Cobra Launcher + Cobra Client
+# Abyss Launcher + Cobra Client
 
 Minecraft launcher and client in one IntelliJ project. Black/charcoal UI with white accents,
 built from your reference images: collapsible icon rail, centred Launch button with a version
@@ -227,6 +227,15 @@ ssh root@65.109.88.105 'cp /tmp/cobra-online.py /opt/ && cp /tmp/cobra-online.se
 
 Clients send only their Minecraft UUID every 30 s. Players can turn it off in Cobra Settings →
 "Cobra icon in Tab".
+
+## Minecraft versions
+
+Every Minecraft release can be played. Cobra Client is built for the versions in
+`client/versions.txt` (1.21.11, 1.21.10, 1.21.9): `build-appimage.sh` / `build-windows.bat`
+build one client jar per version (`./gradlew build -Pmc=<version>` in `client/`, which looks up
+Yarn, Fabric Loader and Fabric API itself) and the launcher bundles every one that built. Versions
+whose build fails, and every other release, show under "Without Cobra Client" (Fabric with your
+mods, or vanilla before 1.14). Small per-version differences live in `client/versions/<x>/java`.
 
 ## Custom capes and cosmetics (only Cobra players see them)
 

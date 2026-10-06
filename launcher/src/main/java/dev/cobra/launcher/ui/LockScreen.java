@@ -224,8 +224,8 @@ public final class LockScreen extends JComponent {
                 new Color[]{new Color(255, 255, 255, (int) (18 + 30 * br)), new Color(255, 255, 255, 0)}));
         g.fill(new Ellipse2D.Double(cx - glowR, cy - glowR, glowR * 2, glowR * 2));
         Theme.logo(g, cx, cy, size * (0.96 + 0.07 * br), 0.85 + 0.15 * br, Color.WHITE);
-        Theme.left(g, "Cobra Launcher", Theme.font(Theme.BOLD, 15f), Color.WHITE, 28, 22, 24);
-        Theme.left(g, "\u00a9 Cobra " + java.time.Year.now() + ". All rights reserved.", Theme.font(Theme.REGULAR, 10.5f),
+        Theme.left(g, "Abyss Launcher", Theme.font(Theme.BOLD, 15f), Color.WHITE, 28, 22, 24);
+        Theme.left(g, "\u00a9 Abyss " + java.time.Year.now() + ". All rights reserved.", Theme.font(Theme.REGULAR, 10.5f),
                 new Color(255, 255, 255, 110), 28, h - 40, 18);
         // the card
         g.setPaint(new RadialGradientPaint(new java.awt.geom.Point2D.Double(c.x + c.width * 0.3, c.y + c.height * 0.35), (float) (c.width * 0.9),

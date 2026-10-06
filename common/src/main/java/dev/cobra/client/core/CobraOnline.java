@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 
 /**
  * Who else is on Cobra (for the Cobra icon in the Tab list). Every Cobra Client tells a tiny
- * server "this UUID is online with Cobra" every 30 seconds and gets back the UUIDs seen in the
+ * server "this UUID is online with Abyss" every 30 seconds and gets back the UUIDs seen in the
  * last 90. Only Minecraft UUIDs are sent. The server is server/cobra-online.py (run it on your
  * VPS); the address can be changed with -Dcobra.online=http://host:port.
  */

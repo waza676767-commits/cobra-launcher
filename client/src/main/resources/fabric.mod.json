@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "cobra",
   "version": "${version}",
-  "name": "Cobra Client",
-  "description": "Cobra Client: custom menu, HUD editor (Right Shift) and PvP quality-of-life modules.",
+  "name": "Abyss Client",
+  "description": "Abyss Client: custom menu, HUD editor (Right Shift) and PvP quality-of-life modules.",
   "authors": ["ItzLucaPK"],
   "license": "All-Rights-Reserved",
   "icon": "assets/cobra/textures/gui/logo.png",
@@ -15,7 +15,7 @@
   "depends": {
     "fabricloader": ">=0.18.0",
     "fabric-api": "*",
-    "minecraft": "~1.21.11",
+    "minecraft": "${mc}",
     "java": ">=21"
   }
 }

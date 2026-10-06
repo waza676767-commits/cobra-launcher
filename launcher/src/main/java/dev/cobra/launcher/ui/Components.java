@@ -99,7 +99,7 @@ public final class Components {
             double r = Math.min(radius, ht / 2.0);
             Color fg;
             float alpha = isEnabled() ? 1f : 0.45f;
-            g.setComposite(AlphaComposite.SrcOver.derive(alpha));
+            g.setComposite(Theme.fade(alpha));
             switch (variant) {
                 case PRIMARY -> {
                     if (Glass.on()) Glass.glow(g, 0, 0, w, ht, r, Theme.ACCENT, 0);
@@ -404,7 +404,16 @@ public final class Components {
         @Override
         protected void paintComponent(Graphics g0) {
             Graphics2D g = Theme.aa(g0.create());
-            Theme.surface(g, this, 0, 0, getWidth(), getHeight(), radius, 0, solid ? 0.6 : 0.2);
+            if (solid) {
+                // menus and pop-ups: fully opaque, so nothing behind shows through the text
+                int w = getWidth(), h = getHeight();
+                g.setColor(new Color(0, 0, 0, 90));
+                g.fill(new java.awt.geom.RoundRectangle2D.Double(0, 3, w, h - 3, radius * 2, radius * 2));
+                Theme.fill(g, 0, 0, w, h - 3, radius, Theme.isLight() ? new Color(0xFBFBFC) : Theme.mix(Theme.PANEL, Color.BLACK, 0.25));
+                Theme.stroke(g, 0, 0, w, h - 3, radius, Theme.isLight() ? new Color(0, 0, 0, 24) : new Color(255, 255, 255, 26), 1f);
+            } else {
+                Theme.surface(g, this, 0, 0, getWidth(), getHeight(), radius, 0, 0.2);
+            }
             g.dispose();
         }
     }
@@ -539,7 +548,7 @@ public final class Components {
             if (e <= 0.001) return;
             Graphics2D g = (Graphics2D) g0.create();
             g.translate(0, (int) Math.round(12 * (1 - e)));
-            g.setComposite(AlphaComposite.SrcOver.derive((float) e));
+            g.setComposite(Theme.fade(e));
             super.paintChildren(g);
             g.dispose();
         }

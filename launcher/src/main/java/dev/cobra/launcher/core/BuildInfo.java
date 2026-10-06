@@ -4,7 +4,7 @@ import java.io.InputStream;
 import java.util.Properties;
 
 public final class BuildInfo {
-    public static final String NAME = "Cobra Launcher";
+    public static final String NAME = "Abyss Launcher";
     public static final String VERSION;
     /** Paste your Azure client id into launcher/src/main/resources/data/cobra.properties (or Settings → Account). */
     public static final String CLIENT_ID;

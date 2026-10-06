@@ -102,7 +102,7 @@ public final class Updater {
         } catch (InterruptedException ignored) {}
         if (got[0] > 0) return "Build " + got[0] + " downloaded. Close and reopen the launcher to use it.";
         int have = Math.max(BUILD, downloadedBuild());
-        return have > BUILD ? "Build " + have + " is ready: close and reopen the launcher." : "You're on the newest Cobra (build " + BUILD + ").";
+        return have > BUILD ? "Build " + have + " is ready: close and reopen the launcher." : "You're on the newest Abyss (build " + BUILD + ").";
     }
 
     public static void checkInBackground(java.util.function.IntConsumer done) {
@@ -158,7 +158,7 @@ public final class Updater {
         try {
             if (java.nio.file.Files.isDirectory(project.resolve(".git"))) {
                 run(project, "git", "add", ".");
-                run(project, "git", "commit", "-qm", "Cobra update " + java.time.LocalDateTime.now().withNano(0));   // "nothing to commit" is fine
+                run(project, "git", "commit", "-qm", "Abyss update " + java.time.LocalDateTime.now().withNano(0));   // "nothing to commit" is fine
                 String[] push = run(project, "git", "push", "-q", "origin", "main");
                 if (!"0".equals(push[0])) {
                     return "Couldn't upload the code: " + push[1] + " (in a terminal: gh auth setup-git, then try again)";

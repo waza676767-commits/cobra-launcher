@@ -38,21 +38,26 @@ public final class ContentManager {
                     if (!fn.endsWith(".jar")) continue;
                     if (!fn.startsWith("cobra-client") && !fn.startsWith("fabric-api")) continue;   // Sky helpers stay hidden
                     boolean cobra = fn.startsWith("cobra-client");
-                    out.add(new Entry(p, cobra ? "Cobra Client" : fn.replaceAll("\\.jar$", ""), true, size(p), cobra ? "Built in" : "Required"));
+                    out.add(new Entry(p, cobra ? "Abyss Client" : fn.replaceAll("\\.jar$", ""), true, size(p), cobra ? "Built in" : "Required"));
                 }
             } catch (IOException ignored) {}
         }
         try (Stream<Path> s = Files.list(dir)) {
             for (Path p : s.sorted(Comparator.comparing(x -> x.getFileName().toString().toLowerCase())).toList()) {
                 String fn = p.getFileName().toString();
-                if (fn.startsWith(".") || fn.endsWith(".part")) continue;
+                if (fn.startsWith(".") || fn.endsWith(".part") || fn.endsWith(".tmp")) continue;
                 if (kind == Modrinth.Kind.MODS) {
+                    if (Files.isDirectory(p)) continue;                   // a folder called x.jar isn't a mod
                     boolean on = fn.endsWith(".jar");
+                    if (fn.endsWith(".jar.cobra-off")) {                 // set aside by Super optimization (Vulkan)
+                        out.add(new Entry(p, fn.replaceAll("\\.jar\\.cobra-off$", ""), false, size(p), "Off while Super optimization is on"));
+                        continue;
+                    }
                     if (!on && !fn.endsWith(".jar.disabled")) continue;
                     String lock = fn.equals("cobra-client.jar") ? "Built in" : fn.startsWith("fabric-api") ? "Required" : null;
                     if (lock == null && dev.cobra.launcher.core.Profiles.current().locked()) lock = "FPS Boost";
                     String name = fn.replaceAll("\\.jar(\\.disabled)?$", "");
-                    if (fn.equals("cobra-client.jar")) name = "Cobra Client";
+                    if (fn.equals("cobra-client.jar")) name = "Abyss Client";
                     out.add(new Entry(p, name, on, size(p), lock));
                 } else {
                     if (!Files.isDirectory(p) && !fn.endsWith(".zip")) continue;

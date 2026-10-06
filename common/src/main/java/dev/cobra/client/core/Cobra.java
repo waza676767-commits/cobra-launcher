@@ -18,7 +18,7 @@ import java.util.Properties;
 
 /** Shared client core: module registry, config, events. */
 public final class Cobra {
-    public static final String NAME = "Cobra Client";
+    public static final String NAME = "Abyss Client";
     public static final String VERSION = "2.1.0";
     public static final List<Module> MODULES = new ArrayList<Module>();
     public static Platform platform;
@@ -69,6 +69,16 @@ public final class Cobra {
         MODULES.add(new Features.PackOrganizer());
         MODULES.add(new Features.WavyCapes());
         MODULES.add(new Features.Totem());
+        MODULES.add(new Features.Colors());
+        MODULES.add(new HudModules.SprintIndicator());
+        MODULES.add(new HudModules.Rotation());
+        MODULES.add(new HudModules.SwapStreak());
+        MODULES.add(new HudModules.Spotify());
+        MODULES.add(new HudModules.Speedometer());
+        MODULES.add(new HudModules.Clock());
+        MODULES.add(new Features.LowHealth());
+        MODULES.add(new Features.HitSound());
+        MODULES.add(new Features.AutoGG());
         MODULES.add(new HudModules.Saturation());
         MODULES.add(new HudModules.PackInfo());
         MODULES.add(new HudModules.Watermark());
@@ -103,7 +113,7 @@ public final class Cobra {
                 {"memory", "gauge"}, {"stopwatch", "clock"}, {"serveraddress", "globe"}, {"itemcounter", "list"}, {"teamview", "user"},
                 {"chunkborders", "mods"}, {"hitboxes", "crosshair"}, {"glint", "sparkle"}, {"hypixel", "link"},
                 {"tweaks", "flame"}, {"mousetrail", "sparkle"}, {"sky", "sun"}, {"cosmetics", "star"}, {"oldvisuals", "sword"}, {"oldsounds", "sliders"}, 
-                {"menublur", "eye"}, {"packorganizer", "packs"}, {"wavycapes", "flag"}, {"totem", "shield"}, {"saturation", "drop"},
+                {"menublur", "eye"}, {"packorganizer", "packs"}, {"wavycapes", "flag"}, {"totem", "shield"}, {"colors", "sun"}, {"sprintindicator", "run"}, {"rotation", "compass"}, {"swapstreak", "sword"}, {"spotify", "signal"}, {"speedometer", "gauge"}, {"clock", "clock"}, {"lowhealth", "drop"}, {"hitsound", "sliders"}, {"autogg", "chat"}, {"saturation", "drop"},
                 {"packinfo", "packs"}, {"watermark", "star"}, {"recorder", "camera"}, {"blockoverlay", "crosshair"}, {"blockinfo", "search"}};
         for (Module m : MODULES) {
             for (String[] ic : icons) if (ic[0].equals(m.id)) m.icon = ic[1];
@@ -116,6 +126,7 @@ public final class Cobra {
         configFile = new File(new File(p.gameDir(), "config"), "cobra.properties");
         load();
         get(Features.Cosmetics.class).applyFromLauncher();   // cosmetics picked in the launcher
+
         // the launcher passes its Light mode / No account setting; it wins over the saved in-game choice
         String theme = System.getProperty("cobra.theme");
         Features.Client client = get(Features.Client.class);
@@ -154,6 +165,11 @@ public final class Cobra {
     // ------------------------------------------------------------------ events
 
     /** Applies the Client settings (theme, animations). Cheap; runs every tick. */
+    /** The icon name of a module (for its card / app icon), "mods" if it has none. */
+    public static String iconOf(Module m) {
+        return m.icon == null || m.icon.isEmpty() ? "mods" : m.icon;
+    }
+
     private static int customBg, customFg;
     private static String cosmeticsWritten;
 
@@ -281,6 +297,12 @@ public final class Cobra {
             fail(recorder, t);
         }
         if (platform.hudHidden()) return;
+        Features.LowHealth low = get(Features.LowHealth.class);
+        try {
+            low.draw(r);
+        } catch (Throwable t) {
+            fail(low, t);
+        }
         Features.Waypoints wp = get(Features.Waypoints.class);
         try {
             if (wp.isEnabled() && platform.inWorld()) wp.render(r);
@@ -308,7 +330,7 @@ public final class Cobra {
             if (m.isEnabled()) m.toggle();
         } catch (Throwable ignored) {}
         m.problem = "Turned off after an error: " + t.getClass().getSimpleName();
-        System.err.println("[Cobra] " + m.name + " failed and was turned off");
+        System.err.println("[Abyss] " + m.name + " failed and was turned off");
         t.printStackTrace();
     }
 
@@ -322,6 +344,8 @@ public final class Cobra {
 
     /** Called by the platform when the local player attacks an entity; reach is eye→hit distance. */
     public static void onAttack(Object target, double reach) {
+        get(HudModules.SwapStreak.class).attacked();
+        get(Features.HitSound.class).hit();
         get(HudModules.Reach.class).hit(reach);
         get(HudModules.Combo.class).attacked(target);
         Features.Particles particles = get(Features.Particles.class);
@@ -334,6 +358,7 @@ public final class Cobra {
 
     /** Plain text of every incoming chat/system line. */
     public static void onChat(String plain) {
+        get(Features.AutoGG.class).onChat(plain);
         get(HudModules.BedWars.class).onChat(plain);
     }
 
@@ -394,7 +419,7 @@ public final class Cobra {
         try {
             configFile.getParentFile().mkdirs();
             out = new FileOutputStream(configFile);
-            p.store(out, "Cobra Client");
+            p.store(out, "Abyss Client");
         } catch (Exception ignored) {
         } finally {
             close(out);

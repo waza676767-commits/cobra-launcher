@@ -43,13 +43,10 @@ public final class MainWindow {
     private final Root root = new Root();
     private final TitleBar titleBar = new TitleBar();
     private final List<Page> pages = new ArrayList<>();
-    private final Rail sidebar;
-    /** The previous look (Settings → Launcher GUI → Classic): the wide side panel. */
-    private final Sidebar classicBar;
+    private final NavSidebar sidebar;
+    /** The previous look's round rail (Settings → Look → Launcher look → Legacy). */
+    private final Rail rail;
 
-    public static boolean classic() {
-        return "classic".equals(dev.cobra.launcher.core.Settings.get().launcherGui);
-    }
     private final PageHost host = new PageHost();
     private final Overlays.Launch launchOverlay = new Overlays.Launch();
     private final Overlays.Login login = new Overlays.Login();
@@ -71,20 +68,22 @@ public final class MainWindow {
     public MainWindow() {
         instance = this;
         Anim.enabled = settings.animations;
-        Theme.setLight(settings.lightMode);
+        Theme.setLight(false);                               // Abyss is dark only
         version = Profiles.current().gameVersion();
 
-        pages.add(new HomePage());
+        // in sidebar order: Play (Home, Mods, Texture packs, Profiles), Library, App
+        pages.add(settings.legacyGui ? new dev.cobra.launcher.ui.pages.LegacyHomePage() : new HomePage());
         pages.add(new ContentPage(Modrinth.Kind.MODS));
         pages.add(new ContentPage(Modrinth.Kind.PACKS));
+        pages.add(new dev.cobra.launcher.ui.pages.ProfilesPage());
+        pages.add(new dev.cobra.launcher.ui.pages.AccessoriesPage());
+        pages.add(new dev.cobra.launcher.ui.pages.RecordingsPage());
         pages.add(new AnalyticsPage());
         pages.add(new SettingsPage());
-        pages.add(new dev.cobra.launcher.ui.pages.AccessoriesPage());
-        pages.add(new dev.cobra.launcher.ui.pages.ProfilesPage());
-        pages.add(new dev.cobra.launcher.ui.pages.RecordingsPage());
         pages.add(new dev.cobra.launcher.ui.pages.LogsPage());
-        sidebar = new Rail(pages, this::showPage);
-        classicBar = new Sidebar(pages, true, this::showPage, () -> { root.doLayout(); root.repaint(); });
+        sidebar = new NavSidebar(pages, this::showPage, settings.sidebarExpanded, () -> { root.doLayout(); root.repaint(); });
+        rail = new Rail(pages, this::showPage);
+
 
         translucent = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice()
                 .isWindowTranslucencySupported(GraphicsDevice.WindowTranslucency.PERPIXEL_TRANSPARENT);
@@ -97,7 +96,10 @@ public final class MainWindow {
 
         root.add(titleBar);
         root.add(sidebar);
-        root.add(classicBar);
+        root.add(rail);
+        sidebar.setVisible(!settings.legacyGui);
+        rail.setVisible(settings.legacyGui);
+
         root.add(host);
         for (Page p : pages) {
             p.setVisible(false);
@@ -141,7 +143,44 @@ public final class MainWindow {
         layoutOverlays();
     }
 
+    /** Ctrl+1…9 switches pages, Ctrl+Enter launches, Ctrl+, opens Settings, Ctrl+F searches settings. */
+    private void installShortcuts() {
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(e -> {
+            if (e.getID() != java.awt.event.KeyEvent.KEY_PRESSED || !e.isControlDown() || !frame.isActive()) return false;
+            int k = e.getKeyCode();
+            if (k >= java.awt.event.KeyEvent.VK_1 && k <= java.awt.event.KeyEvent.VK_9 && k - java.awt.event.KeyEvent.VK_1 < pages.size()) {
+                showPage(k - java.awt.event.KeyEvent.VK_1);
+                return true;
+            }
+            if (k == java.awt.event.KeyEvent.VK_ENTER) {
+                launch();
+                return true;
+            }
+            if (k == java.awt.event.KeyEvent.VK_COMMA) {
+                for (int i = 0; i < pages.size(); i++) if (pages.get(i).title().equals("Settings")) showPage(i);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    /** The launcher's name: yours (Settings → Launcher → Launcher name) or Abyss. */
+    public static String displayName() {
+        String n = dev.cobra.launcher.core.Settings.get().launcherName;
+        return n == null || n.isBlank() ? "Abyss" : n.trim();
+    }
+
+    /** Applies a new launcher name to the window title and the sidebar. */
+    public void applyName() {
+        frame.setTitle(displayName() + " Launcher");
+        sidebar.repaint();
+    }
+
     public void show() {
+        FreezeWatch.start();
+        applyName();
+        installShortcuts();
+        dev.cobra.launcher.game.GameVersion.refresh(null);     // every Minecraft release, kept up to date
         Theme.setLight(settings.lightMode);
         frame.setVisible(true);
         applyShape();
@@ -166,16 +205,6 @@ public final class MainWindow {
         } catch (Throwable ignored) {}
     }
 
-    public void setLight(boolean on) {
-        settings.lightMode = on;
-        settings.save();
-        Theme.setLight(on);
-        Glass.invalidate();
-        root.setBackground(Theme.BLACK);
-        frame.getLayeredPane().repaint();
-        frame.repaint();
-    }
-
     private void layoutOverlays() {
         Dimension d = frame.getSize();
         launchOverlay.setBounds(0, 0, d.width, d.height);
@@ -194,7 +223,8 @@ public final class MainWindow {
 
     public void showPage(int i) {
         sidebar.setSelected(i);
-        classicBar.setSelected(i);
+        rail.setSelected(i);
+
         SwingUtilities.invokeLater(() -> { root.doLayout(); root.repaint(); });   // Home uses the full frame
         root.repaint();   // the glass sheet behind pages shows/hides with Home
         Page from = null;
@@ -214,9 +244,13 @@ public final class MainWindow {
         }
     }
 
-    public void openSettings() { showPage(4); }
+    public void openSettings() {
+        for (int i = 0; i < pages.size(); i++) if (pages.get(i).title().equals("Settings")) showPage(i);
+    }
 
     public int pageCount() { return pages.size(); }
+
+    public Page pageAt(int i) { return pages.get(i); }
 
     public String pageTitle(int i) { return pages.get(i).title(); }
 
@@ -258,38 +292,6 @@ public final class MainWindow {
         });
     }
 
-    /** Settings → Theme: recolours the whole launcher at once. */
-    public void setTheme(String name) {
-        settings.theme = name;
-        settings.save();
-        Theme.setLight(settings.lightMode);      // re-reads the palette and the accent
-        Glass.invalidate();
-        Wallpaper.touch();
-        frame.repaint();
-    }
-
-    /** Settings → Launcher GUI: the new dashboard or the previous look. */
-    public void setLauncherGui(String gui) {
-        settings.launcherGui = gui;
-        settings.save();
-        Glass.invalidate();
-        root.doLayout();
-        for (Page p : pages) {
-            p.doLayout();
-            p.repaint();
-        }
-        titleBar.doLayout();
-        frame.repaint();
-    }
-
-    public void setStyle(String style) {
-        settings.style = style;
-        settings.save();
-        Glass.invalidate();
-        root.doLayout();   // pages sit a little further in on the glass sheet
-        frame.repaint();
-    }
-
     /** Picks a picture as your own launcher icon and logo. */
     public void chooseAppIcon(Runnable after) {
         Path src = FilePicker.one("Launcher icon", "Pictures", "png", "jpg", "jpeg", "gif", "bmp");
@@ -308,7 +310,7 @@ public final class MainWindow {
         try {
             dev.cobra.launcher.core.AppIcon.reset();
             applyAppIcon();
-            toast("Back to the Cobra icon.");
+            toast("Back to the Abyss icon.");
             if (after != null) after.run();
         } catch (Exception e) {
             toast(e.getMessage());
@@ -384,24 +386,10 @@ public final class MainWindow {
     }
 
     /**
-     * Super optimization: VulkanMod at launch (see Installer) and a lighter launcher while it's on
-     * (Solid style, no animations, still wallpaper). Turning it off restores what you had.
+     * Super optimization: VulkanMod (and friends) at launch, see Installer. The launcher's look
+     * stays the same (the blur is always on in Abyss; Lite mode is the light launcher).
      */
     public void setSuperOptimization(boolean on) {
-        if (on && !settings.superOptimization) {
-            settings.savedStyle = settings.style;
-            settings.savedGlassLook = settings.glassLook;
-            settings.savedAnimations = settings.animations;
-            settings.style = "solid";
-            settings.glassLook = "frosted";
-            settings.animations = false;
-        } else if (!on && settings.superOptimization) {
-            if (settings.savedStyle != null) settings.style = settings.savedStyle;
-            if (settings.savedGlassLook != null) settings.glassLook = settings.savedGlassLook;
-            if (settings.savedAnimations != null) settings.animations = settings.savedAnimations;
-            settings.savedStyle = settings.savedGlassLook = null;
-            settings.savedAnimations = null;
-        }
         settings.superOptimization = on;
         settings.save();
         Anim.enabled = settings.animations;
@@ -409,8 +397,8 @@ public final class MainWindow {
         Glass.invalidate();
         root.doLayout();
         frame.repaint();
-        toast(on ? "Super optimization on: VulkanMod is added at launch, and the launcher is lighter."
-                : "Super optimization off: VulkanMod is removed at launch and your look is back.");
+        toast(on ? "Super optimization on: VulkanMod is added the next time you launch."
+                : "Super optimization off: VulkanMod is removed the next time you launch.");
     }
 
     /**
@@ -448,7 +436,7 @@ public final class MainWindow {
             java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(Math.max(1, frame.getWidth()), Math.max(1, frame.getHeight()),
                     java.awt.image.BufferedImage.TYPE_INT_RGB);
             Graphics2D g = img.createGraphics();
-            frame.getRootPane().paint(g);                         // warm-up
+            for (int i = 0; i < 4; i++) frame.getRootPane().paint(g);   // warm-up (the first draws are always slow)
             long t0 = System.nanoTime();
             for (int i = 0; i < 4; i++) frame.getRootPane().paint(g);
             ms = (System.nanoTime() - t0) / 4_000_000;
@@ -456,7 +444,7 @@ public final class MainWindow {
         } catch (Exception e) {
             return;
         }
-        if (ms > 70 || cores <= 2) {
+        if (ms > 120 && cores <= 4 || ms > 250 || cores <= 2) {      // clearly slow, not just a busy moment
             setMoreOptimization(true);
             toast("Your PC is on the slower side, so More optimization is on for a smoother launcher (Settings → Performance).");
         }
@@ -482,7 +470,7 @@ public final class MainWindow {
         if (settings.betaNoticeSeen) return;
         choice.askMarked("Warning",
                 "This client is still in the beta version. If you experience any bug, please report it to lucawascookin.\n"
-                        + "Cobra Launcher used some artificial intelligence for some of the code!\n"
+                        + "Abyss Launcher used some artificial intelligence for some of the code!\n"
                         + "Shoutout to Mili, mrgetpeaced, initialls, kris, and everyone else for helping me out.",
                 "lucawascookin", java.util.List.of("Got it"), 0, i -> {
                     settings.betaNoticeSeen = true;
@@ -497,7 +485,7 @@ public final class MainWindow {
         settings.passwordAsked = true;
         settings.save();
         SwingUtilities.invokeLater(() -> choice.ask("Set a password?",
-                "You can protect Cobra Launcher with a password, so nobody else on this PC can open it. You can change this later in Settings.",
+                "You can protect Abyss Launcher with a password, so nobody else on this PC can open it. You can change this later in Settings.",
                 java.util.List.of("Set a password", "No thanks"), 0, i -> {
                     if (i == 0) LockScreen.showSetup(frame.getRootPane(), null);
                 }));
@@ -700,7 +688,7 @@ public final class MainWindow {
                 SwingUtilities.invokeLater(() -> {
                     fireState();
                     Timer hold = new Timer(700, e -> launchOverlay.hide(() -> {
-                        if (!prep.cobraBundled && !gv.vanilla()) toast("Cobra Client isn't available for " + gv.id + " yet. Launched Fabric with your mods.");
+                        if (!prep.cobraBundled && !gv.vanilla()) toast("Abyss Client isn't available for " + gv.id + " yet. Launched Fabric with your mods.");
                         if (prep.notice != null) toast(prep.notice);
                         if (!settings.keepOpen) frame.setState(Frame.ICONIFIED);
                     }));
@@ -750,7 +738,7 @@ public final class MainWindow {
             // keep the game running; the launcher can close safely
             Playtime.checkpoint(System.currentTimeMillis(), version.id);
         }
-        settings.save();
+        settings.saveNow();
         frame.dispose();
         System.exit(0);
     }
@@ -796,22 +784,12 @@ public final class MainWindow {
         @Override
         public void doLayout() {
             int w = getWidth(), h = getHeight();
-            boolean old = classic();
-            sidebar.setVisible(!old);
-            classicBar.setVisible(old);
-            if (old) {                                  // the previous layout
-                titleBar.setBounds(0, 0, w, 58);
-                int sw = classicBar.currentWidth();
-                classicBar.setBounds(16, 62, sw, h - 78);
-                int x = 16 + sw + 28;
-                host.setBounds(x, 76, w - x - 34, h - 76 - 30);
-                host.doLayout();
-                return;
-            }
             // one frame with a rail on the left; the title pill (clock, account, window buttons) top right
             int in = FRAME + 12;
-            sidebar.setBounds(in, in, Rail.WIDTH, h - 2 * in);
-            int x = in + Rail.WIDTH + 12;
+            int nav = settings.legacyGui ? Rail.WIDTH : sidebar.currentWidth();
+            sidebar.setBounds(in, in, sidebar.currentWidth(), h - 2 * in);
+            rail.setBounds(in, in, Rail.WIDTH, h - 2 * in);
+            int x = in + nav + (settings.legacyGui ? 12 : 14);
             titleBar.setBounds(x, in, w - x - in, 48);
             boolean home = pages.get(0).isVisible();
             if (home) host.setBounds(x, in, w - x - in, h - 2 * in);              // Home arranges itself round the pill
@@ -826,15 +804,8 @@ public final class MainWindow {
         private void paintFrame(Graphics2D g, int w, int h) {
             Glass.paintBackground(g, w, h);
             if (Wallpaper.active() && !Glass.lite()) g.drawImage(scrim(w, h), 0, 0, null);
-            if (classic()) {
-                if (!pages.get(0).isVisible() && host.getWidth() > 0) {
-                    int sx = classicBar.getX() + classicBar.getWidth() + 10;
-                    Glass.surface(g, this, sx, 62, w - 16 - sx, h - 16 - 62, 26, 0);
-                }
-            } else {
-                Glass.surface(g, this, FRAME, FRAME, w - 2 * FRAME, h - 2 * FRAME, 30, 0);
-            }
-            Theme.stroke(g, 0, 0, w, h, translucent ? 14 : 0, Theme.alpha(Theme.TEXT, 0.12), 1f);
+            Glass.surface(g, this, FRAME, FRAME, w - 2 * FRAME, h - 2 * FRAME, 30, 0);
+
         }
 
         @Override
@@ -845,8 +816,7 @@ public final class MainWindow {
             if (Wallpaper.active() && !Glass.on()) {
                 Wallpaper.paint(g, w, h);
                 g.drawImage(scrim(w, h), 0, 0, null);
-                Theme.stroke(g, 0, 0, w, h, translucent ? 14 : 0, Theme.alpha(Theme.TEXT, 0.12), 1f);
-                g.dispose();
+                    g.dispose();
                 return;
             }
             if (Glass.on()) {
@@ -855,8 +825,8 @@ public final class MainWindow {
                 boolean live = Wallpaper.active() && Wallpaper.animated() && !Glass.lite();
                 var cs = settings;
                 String fk = w + "x" + h + "|" + Wallpaper.version() + "|" + Theme.isLight() + "|" + cs.theme + "|" + cs.style + "|" + cs.glassLook
-                        + "|" + cs.frost + "|" + cs.glassTint + "|" + cs.glassBorder + "|" + cs.roundness + "|" + Glass.lite() + "|" + classic()
-                        + "|" + pages.get(0).isVisible() + "|" + classicBar.getWidth() + "|" + Theme.gradientKey() + "|" + cs.wallpaperDim;
+                        + "|" + cs.frost + "|" + cs.glassTint + "|" + cs.glassBorder + "|" + cs.roundness + "|" + Glass.lite()
+                        + "|" + pages.get(0).isVisible() + "|" + Theme.gradientKey() + "|" + cs.wallpaperDim;
                 if (!live && fk.equals(frameKey) && frameImage != null) {
                     g.drawImage(frameImage, 0, 0, null);
                     g.dispose();
@@ -884,18 +854,8 @@ public final class MainWindow {
             if (false) {
                 Glass.paintBackground(g, w, h);
                 if (Wallpaper.active() && !Glass.lite()) g.drawImage(scrim(w, h), 0, 0, null);
-                if (classic()) {
-                    // previous look: one glass sheet behind every page except Home
-                    if (!pages.get(0).isVisible() && host.getWidth() > 0) {
-                        int sx = classicBar.getX() + classicBar.getWidth() + 10;
-                        Glass.surface(g, this, sx, 62, w - 16 - sx, h - 16 - 62, 26, 0);
-                    }
-                } else {
-                    // the frame: one sheet of glass over the wallpaper, holding the rail and the cards
-                    Glass.surface(g, this, FRAME, FRAME, w - 2 * FRAME, h - 2 * FRAME, 30, 0);
-                }
-                Theme.stroke(g, 0, 0, w, h, translucent ? 14 : 0, Theme.alpha(Theme.TEXT, 0.12), 1f);
-                g.dispose();
+                Glass.surface(g, this, FRAME, FRAME, w - 2 * FRAME, h - 2 * FRAME, 30, 0);
+                    g.dispose();
                 return;
             }
             // solid background: the radial gradient is slow to rasterise, so draw it once per size/theme
@@ -907,7 +867,6 @@ public final class MainWindow {
                 if (Theme.paintGradient(b, w, h)) {     // your own gradient (Settings → Appearance)
                     b.dispose();
                     g.drawImage(bg, 0, 0, null);
-                    Theme.stroke(g, 0, 0, w, h, translucent ? 14 : 0, Theme.LINE, 1f);
                     g.dispose();
                     return;
                 }
@@ -922,7 +881,6 @@ public final class MainWindow {
                 b.dispose();
             }
             g.drawImage(bg, 0, 0, null);
-            Theme.stroke(g, 0, 0, w, h, translucent ? 14 : 0, Theme.LINE, 1f);
             g.dispose();
         }
     }
@@ -961,13 +919,6 @@ public final class MainWindow {
         public void doLayout() {
             int w = getWidth();
             int cw = chip.getPreferredSize().width;
-            if (classic()) {
-                close.setBounds(w - 50, 14, 34, 34);
-                min.setBounds(w - 88, 14, 34, 34);
-                chip.setBounds(w - 104 - cw, 13, cw, 36);
-                clock.setBounds(w - 104 - cw - 18 - 150, 11, 150, 40);
-                return;
-            }
             close.setBounds(w - 42, 7, 34, 34);
             min.setBounds(w - 78, 7, 34, 34);
             chip.setBounds(w - 92 - cw, 6, cw, 36);
@@ -978,8 +929,7 @@ public final class MainWindow {
         protected void paintComponent(Graphics g0) {
             Graphics2D g = Theme.aa(g0.create());
             int w = getWidth();
-            if (classic()) Theme.left(g, "Cobra Launcher", Theme.font(Theme.MEDIUM, 13f), Theme.MUTED, 28, 14, 34);
-            else Theme.surface(g, this, w - PILL, 0, PILL, 48, 24, 0, 0.6);   // the top-right pill
+            Theme.gloss(g, w - PILL, 0, PILL, 48, 24, 0);              // the top-right pill
             g.dispose();
         }
     }
@@ -1071,7 +1021,7 @@ public final class MainWindow {
             double e = 1 - Math.pow(1 - a, 3);
             Graphics2D g = (Graphics2D) g0.create();
             g.translate(0, (int) Math.round(12 * (1 - e)));
-            g.setComposite(AlphaComposite.SrcOver.derive((float) Math.max(0.01, e)));
+            g.setComposite(Theme.fade(Math.max(0.01, e)));
             super.paintChildren(g);
             g.dispose();
         }
@@ -1095,7 +1045,7 @@ public final class MainWindow {
         @Override
         public void paint(Graphics g0) {
             Graphics2D g = (Graphics2D) g0.create();
-            g.setComposite(AlphaComposite.SrcOver.derive((float) Math.max(0.01, fade.get())));
+            g.setComposite(Theme.fade(Math.max(0.01, fade.get())));
             super.paint(g);
             g.dispose();
         }

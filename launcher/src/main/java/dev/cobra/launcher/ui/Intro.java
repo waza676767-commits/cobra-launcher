@@ -56,7 +56,7 @@ public final class Intro extends JComponent {
         double name = ease((t - 180) / (double) IN) * (1 - out);
         if (name > 0.01) {
             Graphics2D gt = (Graphics2D) g.create();
-            gt.setComposite(AlphaComposite.SrcOver.derive((float) name));
+            gt.setComposite(Theme.fade(name));
             Font f = Theme.font(Theme.BOLD, 26f);
             String s = "C O B R A";
             gt.setFont(f);

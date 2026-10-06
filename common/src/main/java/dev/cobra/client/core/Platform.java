@@ -161,6 +161,26 @@ public interface Platform {
 
     void closeScreen();
 
+    /** Your health and max health (0 outside a world). */
+    default float health() { return 20; }
+
+    default float maxHealth() { return 20; }
+
+    /** Plays a Minecraft sound (e.g. "entity.experience_orb.pickup") just for you. */
+    default void playSound(String id, float volume, float pitch) {}
+
+    /** Sends a chat message to the server as you. */
+    default void say(String message) {}
+
+    /** Looking up/down in degrees (-90 up … 90 down). */
+    default float pitch() { return 0; }
+
+    /** Is your player sprinting right now? */
+    default boolean sprinting() { return false; }
+
+    /** The selected hotbar slot (0-8), or -1 outside a world. */
+    default int hotbarSlot() { return -1; }
+
     /** Saturation (the hidden food bar), or -1 outside a world. */
     default float saturation() { return -1; }
 

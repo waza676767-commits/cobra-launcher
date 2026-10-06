@@ -45,7 +45,7 @@ public final class CobraLauncher {
             dev.cobra.launcher.core.DiscordPresence.idle();
             dev.cobra.launcher.core.DiscordPresence.start();
             dev.cobra.launcher.core.Updater.checkInBackground(build -> SwingUtilities.invokeLater(() ->
-                    MainWindow.get().toast("Cobra update ready. Close and reopen the launcher to get it.")));
+                    MainWindow.get().toast("Abyss update ready. Close and reopen the launcher to get it.")));
             new Thread(() -> {   // Cobra Client ready in the launcher's folder before the first launch
                 try {
                     dev.cobra.launcher.game.Installer.ensureClient(dev.cobra.launcher.game.GameVersion.MODERN);

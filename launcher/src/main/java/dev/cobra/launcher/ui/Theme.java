@@ -55,7 +55,7 @@ public final class Theme {
     public static Color ACCENT = TEXT, ON_ACCENT = BLACK;
 
     /** Named accent presets for Settings → Appearance. "Classic" = ivory / charcoal. */
-    public static final String[] ACCENTS = {"Classic", "Cobra green", "Ocean", "Violet", "Rose", "Sunset", "Gold", "Mint", "White", "Black", "Custom"};
+    public static final String[] ACCENTS = {"Classic", "Abyss green", "Ocean", "Violet", "Rose", "Sunset", "Gold", "Mint", "White", "Black", "Custom"};
     static final int[] ACCENT_RGB = {0, 0x3DDC84, 0x3EA6FF, 0x8B6CFF, 0xFF5C8A, 0xFF8A3D, 0xF5C542, 0x5EEAD4, 0xFFFFFF, 0x111111, 0};
 
     private static boolean light;
@@ -91,7 +91,7 @@ public final class Theme {
     public static void applyAccent() {
         dev.cobra.launcher.core.Settings s = dev.cobra.launcher.core.Settings.get();
         int rgb = 0;
-        if ("Kit green".equals(s.accent)) s.accent = "Cobra green";     // back from the Kit test build
+        if ("Kit green".equals(s.accent) || "Cobra green".equals(s.accent)) s.accent = "Abyss green";   // renamed
         for (int i = 0; i < ACCENTS.length; i++) if (ACCENTS[i].equals(s.accent)) rgb = ACCENT_RGB[i];
         if ("Custom".equals(s.accent)) rgb = s.accentCustom & 0xFFFFFF;
         if (rgb == 0) {                         // Classic: the theme's own accent
@@ -232,6 +232,14 @@ public final class Theme {
         return Math.max(0, Math.min(1, v));
     }
 
+    /**
+     * A see-through composite, always within 0..1. Spring animations overshoot a little (e.g. 1.01),
+     * and AlphaComposite throws on anything outside 0..1, which made parts of the window vanish.
+     */
+    public static AlphaComposite fade(double a) {
+        return AlphaComposite.SrcOver.derive((float) Math.max(0, Math.min(1, a)));
+    }
+
     /** Settings → Customization → Corner roundness: every rounded corner is scaled by this. */
     public static double round(double r) {
         double k = dev.cobra.launcher.core.Settings.get().roundness / 100.0;
@@ -274,10 +282,44 @@ public final class Theme {
     }
 
     /** Buttons, inputs and switches: a flat tinted shape, stronger on hover/focus. No outline. */
+    /**
+     * Buttons, inputs and switches: a glossy dark pill like polished glass. A soft vertical
+     * gradient, a thin light edge that's brighter on top and fades towards the bottom, and a
+     * faint sheen across the upper half. Brighter on hover.
+     */
     public static void chip(Graphics2D g, double x, double y, double w, double h, double r, double level) {
         level = Math.max(0, Math.min(1, level));
-        Color c = isLight() ? new Color(0, 0, 0, (int) (12 + 16 * level)) : new Color(255, 255, 255, (int) (14 + 20 * level));
-        fill(g, x, y, w, h, r, c);
+        if (Glass.lite()) {                                     // More optimization: flat and cheap
+            fill(g, x, y, w, h, r, isLight() ? new Color(0, 0, 0, (int) (12 + 16 * level)) : new Color(255, 255, 255, (int) (14 + 20 * level)));
+            return;
+        }
+        gloss(g, x, y, w, h, r, level);
+    }
+
+    /** The glossy surface used by {@link #chip} and the title pill / rail controls. */
+    public static void gloss(Graphics2D g, double x, double y, double w, double h, double r, double level) {
+        level = Math.max(0, Math.min(1, level));
+        float y0 = (float) y, y1 = (float) (y + h);
+        if (isLight()) {
+            fill(g, x, y, w, h, r, new GradientPaint(0, y0, new Color(255, 255, 255, (int) (200 + 40 * level)), 0, y1, new Color(236, 236, 240, (int) (200 + 40 * level))));
+            stroke(g, x, y, w, h, r, new Color(0, 0, 0, (int) (22 + 14 * level)), 1f);
+            return;
+        }
+        int lift = (int) (18 * level);
+        fill(g, x, y, w, h, r, new GradientPaint(0, y0, new Color(44 + lift, 44 + lift, 47 + lift, 235), 0, y1, new Color(14 + lift / 2, 14 + lift / 2, 15 + lift / 2, 235)));
+        // the sheen: a faint light band over the top half
+        Graphics2D s = (Graphics2D) g.create();
+        double rr = Math.min(round(r), Math.min(w, h) / 2);
+        s.clip(new RoundRectangle2D.Double(x, y, w, h, rr * 2, rr * 2));
+        s.setPaint(new GradientPaint(0, y0, new Color(255, 255, 255, (int) (22 + 14 * level)), 0, (float) (y + h * 0.55), new Color(255, 255, 255, 0)));
+        s.fill(new java.awt.geom.Rectangle2D.Double(x, y, w, h * 0.55));
+        s.dispose();
+        // the edge: bright at the top, fading to almost nothing at the bottom
+        Graphics2D e = (Graphics2D) g.create();
+        e.setPaint(new GradientPaint(0, y0, new Color(255, 255, 255, (int) (34 + 30 * level)), 0, y1, new Color(255, 255, 255, 0)));
+        e.setStroke(new BasicStroke(1f));
+        e.draw(new RoundRectangle2D.Double(x + 0.5, y + 0.5, w - 1, h - 1, Math.max(0, rr * 2 - 1), Math.max(0, rr * 2 - 1)));
+        e.dispose();
     }
 
     public static void stroke(Graphics2D g, double x, double y, double w, double h, double r, Color c, float width) {
@@ -313,6 +355,43 @@ public final class Theme {
         int end = s.length();
         while (end > 0 && fm.stringWidth(s.substring(0, end) + "…") > max) end--;
         return s.substring(0, end).trim() + "…";
+    }
+
+    private static BufferedImage wordmarkCache;
+    private static int wordmarkW;
+
+    /** The ABYSS wordmark (in its own colours), {@code w} wide, its top-left at (x, y). Returns its height. */
+    public static int wordmark(Graphics2D g, double x, double y, int w) {
+        BufferedImage src = image("wordmark.png");
+        if (src == null || w <= 0) return 0;
+        int h = (int) Math.round(src.getHeight() * (w / (double) src.getWidth()));
+        double scale = Math.max(1, g.getTransform().getScaleX());
+        int pw = (int) Math.round(w * scale);
+        if (wordmarkCache == null || wordmarkW != pw) {
+            int ph = (int) Math.round(src.getHeight() * (pw / (double) src.getWidth()));
+            BufferedImage cur = src;
+            while (cur.getWidth() / 2 >= pw) {
+                BufferedImage half = new BufferedImage(cur.getWidth() / 2, cur.getHeight() / 2, BufferedImage.TYPE_INT_ARGB);
+                Graphics2D hg = half.createGraphics();
+                hg.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                hg.drawImage(cur, 0, 0, half.getWidth(), half.getHeight(), null);
+                hg.dispose();
+                cur = half;
+            }
+            BufferedImage out = new BufferedImage(pw, Math.max(1, ph), BufferedImage.TYPE_INT_ARGB);
+            Graphics2D og = out.createGraphics();
+            og.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            og.drawImage(cur, 0, 0, pw, ph, null);
+            og.dispose();
+            wordmarkCache = out;
+            wordmarkW = pw;
+        }
+        Graphics2D gl = (Graphics2D) g.create();
+        gl.translate(x, y);
+        gl.scale(1 / scale, 1 / scale);
+        gl.drawImage(wordmarkCache, 0, 0, null);
+        gl.dispose();
+        return h;
     }
 
     public static void logo(Graphics2D g, double cx, double cy, double size, double alpha) {

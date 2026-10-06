@@ -28,6 +28,7 @@ public final class FilePicker {
     }
 
     private static List<Path> pick(String title, String what, String[] exts, boolean multi) {
+        if (Boolean.getBoolean("cobra.test")) return List.of();          // automated tests: never open a dialog
         if ("windows".equals(Paths.OS_NAME)) {
             List<Path> r = windows(title, what, exts, multi);
             if (r != null) return r;
@@ -65,8 +66,24 @@ public final class FilePicker {
                     + "if($d.ShowDialog($o) -eq 'OK'){[Console]::OutputEncoding=[Text.Encoding]::UTF8; $d.FileNames -join \"`n\"}";
             Process p = new ProcessBuilder("powershell.exe", "-NoProfile", "-STA", "-Command", script)
                     .redirectErrorStream(true).start();
-            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
-            if (p.waitFor() != 0) return null;
+            // wait for the dialog without blocking the launcher's drawing (no "frozen" window behind it)
+            final String[] result = {null};
+            final int[] exit = {-1};
+            java.awt.SecondaryLoop loop = java.awt.Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
+            Thread reader = new Thread(() -> {
+                try {
+                    result[0] = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+                    exit[0] = p.waitFor();
+                } catch (Exception ignored) {
+                } finally {
+                    loop.exit();
+                }
+            }, "cobra-file-dialog");
+            reader.start();
+            if (javax.swing.SwingUtilities.isEventDispatchThread()) loop.enter();
+            else reader.join();
+            String out = result[0] == null ? "" : result[0];
+            if (exit[0] != 0) return null;
             List<Path> r = new ArrayList<>();
             for (String line : out.split("\\r?\\n")) {
                 if (line.isBlank()) continue;

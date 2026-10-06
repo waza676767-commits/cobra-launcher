@@ -59,19 +59,20 @@ public final class ExternalCapture {
     public static File start(String ffmpeg, File dir, int fps, String quality) throws Exception {
         if (proc != null) return file;
         if (!dir.isDirectory() && !dir.mkdirs()) throw new Exception("can't make " + dir);
-        file = new File(dir, "Cobra " + new SimpleDateFormat("yyyy-MM-dd HH-mm-ss").format(new Date()) + ".mp4");
+        file = new File(dir, "Abyss " + new SimpleDateFormat("yyyy-MM-dd HH-mm-ss").format(new Date()) + ".mp4");
         List<String> cmd = new ArrayList<String>();
         if (windows()) {
             String enc = ScreenRecorder.pickEncoder(ffmpeg);
             if (enc.equals("h264_vaapi")) enc = "libx264";
             add(cmd, ffmpeg, "-y", "-loglevel", "error", "-filter_complex",
                     "ddagrab=output_idx=0:framerate=" + fps + ",hwdownload,format=bgra", "-c:v", enc);
-            if (enc.equals("libx264")) add(cmd, "-preset", "veryfast", "-crf", quality.equals("High") ? "20" : "24");
+            if (enc.equals("libx264")) add(cmd, "-preset", "veryfast", "-crf", quality.equals("Ultra") ? "15" : quality.equals("High") ? "18" : "23");
+            else add(cmd, "-b:v", quality.equals("Ultra") ? "40M" : quality.equals("High") ? "25M" : "12M");
             add(cmd, "-pix_fmt", "yuv420p", "-movflags", "+faststart", file.getAbsolutePath());
         } else {
             boolean wayland = System.getenv("WAYLAND_DISPLAY") != null && !"x11".equals(System.getenv("XDG_SESSION_TYPE"));
             add(cmd, "gpu-screen-recorder", "-w", wayland ? "portal" : "focused", "-f", String.valueOf(fps), "-k", "h264",
-                    "-q", quality.equals("Small file") ? "medium" : quality.equals("Balanced") ? "high" : "very_high",
+                    "-q", quality.equals("Small file") ? "medium" : quality.equals("Balanced") ? "high" : quality.equals("Ultra") ? "ultra" : "very_high",
                     "-a", "default_output", "-o", file.getAbsolutePath());
         }
         ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);

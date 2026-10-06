@@ -59,10 +59,10 @@ tasks.named('processResources', ProcessResources) {
         into 'bundled/skies'
     }
     from(rootProject.file('client/build/libs')) {
-        include 'cobra-client-1.21.11-*.jar'
+        include 'cobra-client-*-*.jar'                           // one per Minecraft version that built
         exclude '*-sources.jar', '*-dev.jar'
         into 'bundled'
-        rename { 'cobra-client-1.21.11.jar' }
+        rename { String n -> n.replaceAll(/^cobra-client-(.+)-[^-]+\.jar$/, 'cobra-client-$1.jar') }
     }
 }
 

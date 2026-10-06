@@ -54,7 +54,7 @@ public abstract class Page extends JPanel {
         if (p <= 0.001) return;
         Graphics2D cg = (Graphics2D) g.create();
         cg.translate(0, (int) Math.round((1 - p) * 12));
-        if (p < 0.999) cg.setComposite(AlphaComposite.SrcOver.derive((float) p));
+        if (p < 0.999) cg.setComposite(Theme.fade(p));
         super.paintChildren(cg);
         cg.dispose();
     }

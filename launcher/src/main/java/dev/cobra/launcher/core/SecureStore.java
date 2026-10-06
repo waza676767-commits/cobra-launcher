@@ -50,7 +50,7 @@ public final class SecureStore {
                 if (enc == null || enc.isBlank()) throw new IllegalStateException("DPAPI failed");
                 Files.writeString(DIR.resolve(name + ".dpapi"), enc.trim());
             } else if (keyringWorks()) {
-                if (run(secret, "secret-tool", "store", "--label=Cobra Launcher (" + name + ")", "service", "cobra-launcher", "key", name) == null) {
+                if (run(secret, "secret-tool", "store", "--label=Abyss Launcher (" + name + ")", "service", "cobra-launcher", "key", name) == null) {
                     throw new IllegalStateException("keyring failed");
                 }
                 Files.deleteIfExists(DIR.resolve(name + ".aes"));
@@ -105,7 +105,7 @@ public final class SecureStore {
     /** Is a Secret Service keyring usable (secret-tool installed and answering)? */
     private static boolean keyringWorks() {
         if (keyring == null) {
-            keyring = run("probe", "secret-tool", "store", "--label=Cobra Launcher (test)", "service", "cobra-launcher", "key", "probe") != null
+            keyring = run("probe", "secret-tool", "store", "--label=Abyss Launcher (test)", "service", "cobra-launcher", "key", "probe") != null
                     && "probe".equals(strip(run(null, "secret-tool", "lookup", "service", "cobra-launcher", "key", "probe")));
             if (keyring) run(null, "secret-tool", "clear", "service", "cobra-launcher", "key", "probe");
         }

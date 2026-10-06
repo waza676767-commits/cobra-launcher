@@ -57,7 +57,7 @@ public final class CobraFabric implements ClientModInitializer {
             } catch (Throwable t) {                 // a Cobra bug must never stop the game
                 if (!tickErrorShown) {
                     tickErrorShown = true;
-                    System.err.println("[Cobra] error in the client tick (kept running):");
+                    System.err.println("[Abyss] error in the client tick (kept running):");
                     t.printStackTrace();
                 }
             }
@@ -168,7 +168,6 @@ public final class CobraFabric implements ClientModInitializer {
         syncSky(mc);
         syncMenuBlur(mc);
         packKey(mc);
-        cosmeticParticles(mc);
         if (mc.world != null || mc.currentScreen != null) syncGlint(mc);
         Cobra.tick();
     }
@@ -400,7 +399,22 @@ public final class CobraFabric implements ClientModInitializer {
 
     // ------------------------------------------------------------------ velocity motion blur
 
-    private static net.minecraft.client.texture.NativeImageBackedTexture motionTex;
+    private static net.minecraft.client.texture.NativeImageBackedTexture motionTex, colorTex;
+    private static int colorLast = -1;
+
+    /** Colors module: writes contrast / saturation / brightness into the effect's colour texture. */
+    private static void syncColorData() {
+        if (colorTex == null) return;
+        int argb = Cobra.get(Features.Colors.class).argb();
+        if (argb == colorLast) return;
+        try {
+            net.minecraft.client.texture.NativeImage img = colorTex.getImage();
+            if (img == null) return;
+            img.setColorArgb(0, 0, argb);
+            colorTex.upload();
+            colorLast = argb;
+        } catch (Throwable ignored) {}
+    }
     private static int motionLast = -1;
 
     /** The 1x1 texture the blur shader reads the frame's motion from (registered before the effect loads). */
@@ -410,6 +424,13 @@ public final class CobraFabric implements ClientModInitializer {
         net.minecraft.client.texture.NativeImage img = motionTex.getImage();
         if (img != null) img.setColorArgb(0, 0, 0x00808000);
         motionTex.upload();
+        // Colors module data (contrast / saturation / brightness), read by the same effect
+        colorTex = new net.minecraft.client.texture.NativeImageBackedTexture("cobra colors", 1, 1, false);
+        net.minecraft.client.texture.NativeImage ci = colorTex.getImage();
+        if (ci != null) ci.setColorArgb(0, 0, 0x00808080);
+        colorTex.upload();
+        mc.getTextureManager().registerTexture(net.minecraft.util.Identifier.of("cobra", "textures/effect/color_data.png"), colorTex);
+        mc.getTextureManager().registerTexture(net.minecraft.util.Identifier.of("cobra", "color_data"), colorTex);
         // both spellings, whichever way the post-effect loader resolves "cobra:motion_data"
         mc.getTextureManager().registerTexture(net.minecraft.util.Identifier.of("cobra", "textures/effect/motion_data.png"), motionTex);
         mc.getTextureManager().registerTexture(net.minecraft.util.Identifier.of("cobra", "motion_data"), motionTex);
@@ -422,7 +443,16 @@ public final class CobraFabric implements ClientModInitializer {
         Features.MotionBlur mb = Cobra.get(Features.MotionBlur.class);
         if (!mb.isEnabled() || MinecraftClient.getInstance().world == null || MinecraftClient.getInstance().currentScreen != null) {
             mb.reset();
-            motionLast = -1;
+            if (motionLast != 0x00808000) {                       // no leftover blur (Colors may keep the effect on)
+                try {
+                    net.minecraft.client.texture.NativeImage img = motionTex.getImage();
+                    if (img != null) {
+                        img.setColorArgb(0, 0, 0x00808000);
+                        motionTex.upload();
+                    }
+                } catch (Throwable ignored) {}
+                motionLast = 0x00808000;
+            }
             return;
         }
         MinecraftClient mc = MinecraftClient.getInstance();
@@ -454,10 +484,12 @@ public final class CobraFabric implements ClientModInitializer {
         try {
             dev.cobra.client.fabric.mixin.GameRendererInvoker gr = (dev.cobra.client.fabric.mixin.GameRendererInvoker) mc.gameRenderer;
             Features.MotionBlur mb = Cobra.get(Features.MotionBlur.class);
+            boolean colors = Cobra.get(Features.Colors.class).isEnabled();
             net.minecraft.util.Identifier cur = gr.cobra$getPostProcessorId();
             boolean ours = cur != null && cur.getNamespace().equals("cobra");
-            if (mb.isEnabled() && mc.world != null && mc.currentScreen == null) {
+            if ((mb.isEnabled() || colors) && mc.world != null && (mc.currentScreen == null || colors && !mb.isEnabled())) {
                 ensureMotionTexture(mc);
+                syncColorData();
                 net.minecraft.util.Identifier want = net.minecraft.util.Identifier.of("cobra", "motion_blur");
                 if (cur == null || ours && !cur.equals(want)) gr.cobra$setPostProcessor(want);
             } else if (ours) {

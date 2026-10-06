@@ -54,17 +54,24 @@ public final class Settings {
     public boolean passwordAsked = false;
     /** The first-start speed check ran (it may have turned on More optimization). */
     public boolean speedChecked = false;
-    /** "new" (dashboard with the rail) or "classic" (the previous look with the wide side panel). */
-    public String launcherGui = "new";
+
     /** Colour theme for the whole launcher (see Theme.THEMES); with themeInGame the game uses it too. */
     public String theme = "Midnight";
     public boolean themeInGame = true;
     // ---- cosmetics (sent to Cobra Client at launch; only Cobra players see them)
     public String cosEars = "Off", cosWings = "Off", cosHalo = "Off", cosGloves = "Off";
     public String cosWingStyle = "Feather", cosHat = "Off", cosBunny = "Off", cosHorns = "Off", cosGlasses = "Off",
-            cosHeadphones = "Off", cosTailKind = "Off", cosBackpack = "Off";
+            cosHeadphones = "Off", cosTailKind = "Off", cosBackpack = "Off", cosAntlers = "Off", cosOrbit = "Off", cosScarf = "Off";
     public boolean cosTail = false, cosKatana = false, cosFeet = false, cosGlow = true;
     public int cosSize = 100;
+    /** Built-in capes added to the library (1 = the first set). */
+    public int presetCapes = 0;
+    /** Simple Voice Chat installed in every Fabric profile. */
+    public boolean voiceChat = true;
+    /** Your own name for the launcher (empty = Abyss). */
+    public String launcherName = "";
+    /** The previous look (round rail, big Home card). */
+    public boolean legacyGui = false;
     public String cosParticles = "Off";
     public boolean cosTrail = false;
 
@@ -77,6 +84,7 @@ public final class Settings {
 
     private static String pretty(String v, String... options) {
         if (v == null || v.isEmpty()) return "Off";
+        if (v.matches("x[0-9a-f]{6}")) return v;                         // a custom colour
         for (String o : options) if (c(o).equals(v)) return o;
         return "Off";
     }
@@ -92,7 +100,7 @@ public final class Settings {
             }
         }
         cosWings = pretty(m.get("wings"), "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan");
-        cosWingStyle = m.containsKey("wingstyle") ? pretty(m.get("wingstyle"), "Feather", "Dragon", "Butterfly") : "Feather";
+        cosWingStyle = m.containsKey("wingstyle") ? pretty(m.get("wingstyle"), "Feather", "Dragon", "Butterfly", "Demon", "Energy") : "Feather";
         if ("Off".equals(cosWingStyle)) cosWingStyle = "Feather";
         cosHalo = pretty(m.get("halo"), "Angel", "Red");
         cosHat = pretty(m.get("hat"), "Crown", "Top hat", "Witch");
@@ -105,6 +113,9 @@ public final class Settings {
         cosTail = false;
         cosBackpack = pretty(m.get("backpack"), "Brown", "Black", "Blue", "Red");
         cosGloves = pretty(m.get("gloves"), "Red", "Blue", "Black");
+        cosAntlers = pretty(m.get("antlers"), "Brown", "White", "Gold");
+        cosOrbit = pretty(m.get("orbit"), "Purple", "Cyan", "Red", "Gold", "Green");
+        cosScarf = pretty(m.get("scarf"), "Red", "Blue", "Green", "White", "Black");
         cosKatana = m.containsKey("katana");
         cosFeet = m.containsKey("feet");
         cosParticles = pretty(m.get("fx"), "Sparkles", "Hearts", "Flames", "Soul fire", "Snow", "Magic", "Petals", "Notes");
@@ -120,7 +131,7 @@ public final class Settings {
         if (cosTail && "Off".equals(cosTailKind)) cosTailKind = "Black";      // the old on/off tail
         String[][] modes = {{"wings", cosWings}, {"halo", cosHalo}, {"hat", cosHat}, {"ears", cosEars}, {"bunny", cosBunny},
                 {"horns", cosHorns}, {"glasses", cosGlasses}, {"headphones", cosHeadphones}, {"tail", cosTailKind},
-                {"backpack", cosBackpack}, {"gloves", cosGloves}};
+                {"backpack", cosBackpack}, {"gloves", cosGloves}, {"antlers", cosAntlers}, {"orbit", cosOrbit}, {"scarf", cosScarf}};
         StringBuilder b = new StringBuilder();
         for (String[] m : modes) if (m[1] != null && !"Off".equals(m[1])) b.append(m[0]).append(':').append(c(m[1])).append(',');
         if (!"Off".equals(cosWings) && cosWingStyle != null && !"Feather".equals(cosWingStyle)) b.append("wingstyle:").append(c(cosWingStyle)).append(',');
@@ -136,17 +147,22 @@ public final class Settings {
         return b.substring(0, b.length() - 1);
     }
 
+    /** Join this server straight away when the game starts (empty = the main menu). */
+    public String quickJoin = "";
+
     // ---- customization
     /** Corner roundness, 50–150 % (100 = normal). */
     public int roundness = 100;
     /** How dark/light the glass tint is and how visible the glass borders are, 0–200 % (100 = normal). */
-    public int glassTint = 100, glassBorder = 100;
+    public int glassTint = 100, glassBorder = 30;
+    /** One-time: the old bright outlines (100%) were turned down to 30%. */
+    public boolean outlinesSoftened = false;
     /** Animation speed, 50–200 % (100 = normal). */
     public int animSpeed = 100;
     /** Clock: 24-hour or 12-hour, with seconds, and whether the date shows. */
     public boolean clock24 = true, clockSeconds = false, clockDate = true;
     /** Home: the big title (default COBRA) and your own line under it (empty = automatic). */
-    public String homeTitle = "COBRA", homeGreeting = "";
+    public String homeTitle = "ABYSS", homeGreeting = "";
     /** Home: show your wallpaper in the big card (off = a calm dark gradient). */
     public boolean heroWallpaper = true;
     /** Home cards you hid ("profiles", "skins", "quick"). */
@@ -161,11 +177,11 @@ public final class Settings {
     public Boolean savedAnimations;
     /** Glass look: "frosted" (soft blur, calm, no bending; default) or "liquid" (clear, bends at the rim). */
     public String glassLook = "frosted";   // "frosted" (default, like the reference widgets) or "liquid" (Clear)
-    /** Discord Rich Presence: show "Playing Cobra Client" on your Discord profile. */
+    /** Discord Rich Presence: show "Playing Abyss Client" on your Discord profile. */
     public boolean discordRpc = true;
     /** Show the server address (e.g. "On mc.eclypse.net") in the Discord status. */
     public boolean discordShowServer = true;
-    /** Your own Discord lines (empty = automatic), elapsed time, profile name, a "Get Cobra" button. */
+    /** Your own Discord lines (empty = automatic), elapsed time, profile name, a "Get Abyss" button. */
     public String discordDetails = "", discordState = "";
     public boolean discordShowTime = true, discordShowProfile = false, discordButton = true;
     /** Second line (what you're doing) and the small round status icon. */
@@ -184,15 +200,58 @@ public final class Settings {
             }
             if (instance == null) instance = new Settings();
             instance.ramMb = Math.max(1024, Math.min(instance.ramMb, maxRamMb()));
+            // Abyss: dark only, see-through frosted blur, the black palette
+            instance.lightMode = false;
+            instance.glassLook = "frosted";
+            instance.style = "glass";
+            instance.theme = "Midnight";
+            if (!instance.outlinesSoftened) {                     // the bright outlines people didn't like
+                if (instance.glassBorder == 100) instance.glassBorder = 30;
+                instance.outlinesSoftened = true;
+            }
         }
         return instance;
     }
 
+    private static final java.util.concurrent.ScheduledExecutorService SAVER =
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "cobra-settings-save");
+                t.setDaemon(true);
+                return t;
+            });
+    private static java.util.concurrent.ScheduledFuture<?> pending;
+
+    static {
+        // whatever is still waiting to be written is written when the launcher closes
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (instance != null) instance.saveNow();
+        }, "cobra-settings-flush"));
+    }
+
+    /**
+     * Saves soon (a quarter of a second later, once, however often it's called): dragging a slider
+     * used to write the file dozens of times a second on the UI thread.
+     */
     public void save() {
+        synchronized (Settings.class) {
+            if (pending != null) pending.cancel(false);
+            pending = SAVER.schedule(this::saveNow, 250, java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /** Writes now, safely: to a temporary file first, then swapped in (never a half-written file). */
+    public synchronized void saveNow() {
         try {
             Files.createDirectories(FILE.getParent());
-            Files.writeString(FILE, Http.GSON.toJson(this));
-        } catch (IOException e) {
+            String json = Http.GSON.toJson(this);
+            java.nio.file.Path tmp = FILE.resolveSibling(FILE.getFileName() + ".tmp");
+            Files.writeString(tmp, json);
+            try {
+                Files.move(tmp, FILE, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(tmp, FILE, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }

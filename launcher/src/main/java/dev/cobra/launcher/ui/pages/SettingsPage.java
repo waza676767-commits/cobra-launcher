@@ -65,19 +65,18 @@ public final class SettingsPage extends Page {
         stack.add(new Section("Performance", new Row[]{
                 new Row("More optimization", "Plain colours instead of wallpaper and glass, no blur, no animations. The lightest launcher.", lite, 50),
                 new Row("Super optimization (Vulkan)", "VulkanMod + EntityCulling, FerriteCore, MoreCulling, Clumps. Also turns off costly launcher effects. Off undoes it all.", vulkan, 50)}));
+        Components.Input join = new Components.Input(s.quickJoin, "e.g. hypixel.net", "globe");
+        join.onChange(() -> { s.quickJoin = join.getText().trim(); s.save(); });
+        Components.Toggle voice = new Components.Toggle(s.voiceChat, v -> { s.voiceChat = v; s.save(); });
         stack.add(new Section("Game", new Row[]{
+                new Row("Voice chat", "Simple Voice Chat in every profile (press V in game to talk). Works on servers that have the Simple Voice Chat plugin or mod.", voice, 50),
+                new Row("Quick join server", "Go straight into this server when the game starts. Empty = main menu.", join, 260),
                 new Row("Memory", "Maximum RAM Minecraft may use. 4–6 GB suits most setups.", ram, 380),
                 new Row("Window size", "Starting size of the game window.", size, 216),
                 new Row("Fullscreen", "Start the game in fullscreen.", fullscreen, 50),
                 new Row("Java arguments", "Extra JVM flags, added after the defaults.", jvm, 380)}));
 
         // ---------------------------------------------------------- Appearance
-        Components.Toggle lightMode = new Components.Toggle(s.lightMode, v -> MainWindow.get().setLight(v));
-        Components.Segmented style = new Components.Segmented(List.of("Solid", "Glass"), "glass".equals(s.style) ? 1 : 0,
-                i -> {
-                    MainWindow.get().setStyle(i == 1 ? "glass" : "solid");
-                    refilter();           // glass-only options come and go
-                });
         Components.Slider frost = new Components.Slider(0, 100, 5, s.frost, v -> Math.round(v) + "%",
                 v -> MainWindow.get().setFrost(v.intValue()));
         Components.Toggle anim = new Components.Toggle(s.animations, v -> MainWindow.get().setAnimations(v));
@@ -86,10 +85,9 @@ public final class SettingsPage extends Page {
                 v -> MainWindow.get().setWallpaperDim(v.intValue()));
         stack.add(new Section("Wallpaper & colours", new Row[]{
                 wallpaperRow,
-                new ThemeRow(),
-                new Row("Use these colours in game", "Cobra Client's menus take the launcher's theme and accent (next launch).",
-                        new Components.Toggle(s.themeInGame, v -> { s.themeInGame = v; s.save(); }), 50),
                 new AccentRow(),
+                new Row("Use the accent in game", "Abyss Client's menus take the launcher's accent colour (next launch).",
+                        new Components.Toggle(s.themeInGame, v -> { s.themeInGame = v; s.save(); }), 50),
                 gradientRow(s),
                 gradientColorsRow(s),
                 gradientStrengthRow(s),
@@ -97,9 +95,7 @@ public final class SettingsPage extends Page {
                     s.wallpaperTint = v; s.save(); Wallpaper.touch(); restyle();
                 }), 50),
                 new IconRow(),
-                new Row("Wallpaper dim", "Darkens the wallpaper so text stays readable (lightens in Light mode).", dim, 300)}));
-        Components.Segmented gui = new Components.Segmented(List.of("New", "Classic"), "classic".equals(s.launcherGui) ? 1 : 0,
-                i -> MainWindow.get().setLauncherGui(i == 1 ? "classic" : "new"));
+                new Row("Wallpaper dim", "Darkens the wallpaper so text stays readable.", dim, 300)}));
         // ---- Cosmetics (the same choices as the Cosmetics page; searchable here)
         java.util.function.BiFunction<String, List<String>, Components.Button> picker = (key, opts) -> {
             Components.Button b = new Components.Button(CosmeticsGallery.value(key), null, Components.Variant.GHOST, null);
@@ -118,12 +114,12 @@ public final class SettingsPage extends Page {
             for (int k = 0; k < mw.pageCount(); k++) if (mw.pageTitle(k).equals("Accessories")) mw.showPage(k);
         });
         stack.add(new Section("Cosmetics", new Row[]{
-                new Row("Cosmetics gallery", "Accessories page, below your capes: 3D previews of everything. Only other Cobra players see what you wear.", openCos, 120),
+                new Row("Cosmetics gallery", "Accessories page, below your capes: 3D previews of everything. Only other Abyss players see what you wear.", openCos, 120),
                 new Row("Wings", "Angel, red, black, gold, blue, purple, pink, green or cyan.", picker.apply("wings", List.of("Off", "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan")), 130),
                 new Row("Halo", "A glowing ring above your head.", picker.apply("halo", List.of("Off", "Angel", "Red")), 130),
                 new Row("Cat ears", "Black, white, ginger or pink.", picker.apply("ears", List.of("Off", "Black", "White", "Ginger", "Pink")), 130),
                 new Row("Boxing gloves", "Red, blue or black.", picker.apply("gloves", List.of("Off", "Red", "Blue", "Black")), 130),
-                new Row("Wing style", "Feathered, dragon or butterfly wings.", picker.apply("wingstyle", List.of("Feather", "Dragon", "Butterfly")), 130),
+                new Row("Wing style", "Feathered, dragon, butterfly, demon blades or energy rays.", picker.apply("wingstyle", List.of("Feather", "Dragon", "Butterfly", "Demon", "Energy")), 130),
                 new Row("Hat", "A crown, a top hat or a witch hat.", picker.apply("hat", List.of("Off", "Crown", "Top hat", "Witch")), 130),
                 new Row("Bunny ears", "Tall ears that bob a little.", picker.apply("bunny", List.of("Off", "White", "Pink", "Black", "Brown")), 130),
                 new Row("Horns", "Devil horns.", picker.apply("horns", List.of("Off", "Red", "Black", "White", "Gold")), 130),
@@ -162,7 +158,7 @@ public final class SettingsPage extends Page {
         Components.Toggle cSec = new Components.Toggle(s.clockSeconds, v -> { s.clockSeconds = v; s.save(); MainWindow.get().frame.repaint(); });
         Components.Toggle cDate = new Components.Toggle(s.clockDate, v -> { s.clockDate = v; s.save(); MainWindow.get().frame.repaint(); });
         Components.Toggle heroWp = new Components.Toggle(s.heroWallpaper, v -> { s.heroWallpaper = v; s.save(); MainWindow.get().frame.repaint(); });
-        Components.Input title = new Components.Input(s.homeTitle, "COBRA", null);
+        Components.Input title = new Components.Input(s.homeTitle, "ABYSS", null);
         title.onChange(() -> { s.homeTitle = title.getText(); s.save(); MainWindow.get().frame.repaint(); });
         Components.Input greet = new Components.Input(s.homeGreeting, "Automatic (Welcome back, …)", null);
         greet.onChange(() -> { s.homeGreeting = greet.getText(); s.save(); MainWindow.get().frame.repaint(); });
@@ -189,19 +185,14 @@ public final class SettingsPage extends Page {
                 new Row("Home greeting", "Your own line under the title. Empty = automatic.", greet, 300),
                 new Row("Reset customization", "Roundness, glass and animation speed back to normal.", resetLook, 120)}));
 
+        Components.Segmented look = new Components.Segmented(List.of("Abyss", "Legacy"), s.legacyGui ? 1 : 0, i -> {
+            s.legacyGui = i == 1;
+            s.save();
+            MainWindow.get().toast("Reopen the launcher to switch to the " + (i == 1 ? "legacy" : "Abyss") + " look.");
+        });
         stack.add(new Section("Look", new Row[]{
-                new Row("Launcher GUI", "New: the dashboard with the round rail. Classic: the previous look with the wide side panel.", gui, 250),
-                new Row("Light mode", "Flips the palette: white surfaces, black text and buttons. Also used in game.", lightMode, 50),
-                new Row("Style", "Glass: clear panels with a shine. Solid: darker, more blurred panels, calmer to read.", style, 250),
-                new Row("Glass look", "Clear: sharp glass that bends at the edges. Frosted: soft and calm.", new Components.Segmented(
-                        List.of("Frosted", "Clear"), "liquid".equals(s.glassLook) ? 1 : 0, i -> {
-                            s.glassLook = i == 1 ? "liquid" : "frosted";
-                            s.save();
-                            Glass.invalidate();
-                            MainWindow.get().frame.repaint();
-                        }), 250).when(() -> "glass".equals(Settings.get().style)),
-                new Row("Glass frost", "How much the glass blurs what's behind it. Low = clearer, more liquid.", frost, 300)
-                        .when(() -> "glass".equals(Settings.get().style)),
+                new Row("Launcher look", "Abyss: the sidebar and the player Home. Legacy: the previous round rail and big Home card.", look, 220),
+                new Row("Blur", "How much the see-through panels blur what's behind them.", frost, 300),
                 new Row("Animations", "Fades, sliding and transitions. Turn off for instant switching.", anim, 50)}));
 
         // ------------------------------------------------------------ Launcher
@@ -248,7 +239,7 @@ public final class SettingsPage extends Page {
         Components.Button updateBtn = new Components.Button("Update", "download", Components.Variant.PRIMARY, null);
         updateBtn.onClick(() -> {
             updateBtn.setEnabled(false);
-            MainWindow.get().toast("Checking for a newer Cobra…");
+            MainWindow.get().toast("Checking for a newer Abyss…");
             new Thread(() -> {
                 String msg = dev.cobra.launcher.core.Updater.checkNow();
                 SwingUtilities.invokeLater(() -> {
@@ -257,9 +248,16 @@ public final class SettingsPage extends Page {
                 });
             }, "cobra-check-update").start();
         });
+        Components.Input lname = new Components.Input(s.launcherName, "Abyss", null);
+        lname.onChange(() -> {
+            s.launcherName = lname.getText().trim();
+            s.save();
+            MainWindow.get().applyName();
+        });
         stack.add(new Section("Launcher", new Row[]{
-                new Row("Launcher password", "Asked when Cobra Launcher opens, so nobody else on this PC can use it.", lockBox, 230),
-                new Row("Update to the newest", "Gets the latest Cobra Launcher and Client (build " + dev.cobra.launcher.core.Updater.BUILD
+                new Row("Launcher name", "Call the launcher whatever you like: the window title and the sidebar use it. Empty = Abyss.", lname, 240),
+                new Row("Launcher password", "Asked when Abyss Launcher opens, so nobody else on this PC can use it.", lockBox, 230),
+                new Row("Update to the newest", "Gets the latest Abyss Launcher and Client (build " + dev.cobra.launcher.core.Updater.BUILD
                         + "). It's used the next time you open the launcher.", updateBtn, 150),
                 new Row("Import a profile", "From Lunar, Dawn, Prism, MultiMC, Modrinth App, CurseForge, ATLauncher or Minecraft: options, mods, packs.", importBtn, 150),
                 new Row("Keep launcher open", "Stay on screen while you play instead of minimizing.", keep, 50)}));
@@ -340,15 +338,15 @@ public final class SettingsPage extends Page {
             dev.cobra.launcher.core.DiscordPresence.refresh();
         });
         stack.add(new Section("Discord", new Row[]{
-                new Row("Rich Presence", "Shows \"Playing Cobra Client\" on your Discord profile, with what you're doing.", rpc, 50),
+                new Row("Rich Presence", "Shows \"Playing Abyss Client\" on your Discord profile, with what you're doing.", rpc, 50),
                 new Row("Show server", "Adds the server you're on (e.g. \"On mc.eclypse.net\"). Off shows just \"Multiplayer\".", showServer, 50),
                 new Row("Top line", "Your own text instead of the automatic one. Empty = automatic.", dDetails, 300),
                 new Row("Bottom line", "Your own text instead of what you're doing. Empty = automatic.", dState, 300),
                 new Row("Show what you're doing", "In the menus / Playing singleplayer / On a server. Off hides the second line.", dActivity, 50),
-                new Row("Status icon", "The small round icon (launcher, menus, singleplayer, server) on the Cobra logo.", dSmall, 50),
+                new Row("Status icon", "The small round icon (launcher, menus, singleplayer, server) on the Abyss logo.", dSmall, 50),
                 new Row("Show play time", "The \"elapsed\" timer on your status.", dTime, 50),
-                new Row("Show profile name", "Adds the Cobra profile you're playing.", dProfile, 50),
-                new Row("\"Get Cobra Client\" button", "A button on your status so friends can download it.", dButton, 50)}));
+                new Row("Show profile name", "Adds the Abyss profile you're playing.", dProfile, 50),
+                new Row("\"Get Abyss Client\" button", "A button on your status so friends can download it.", dButton, 50)}));
 
         // --------------------------------------------------------------- Files
         Components.Button open = new Components.Button("Open folder", "folder", Components.Variant.GHOST, () -> MainWindow.openPath(Paths.ROOT));
@@ -356,7 +354,7 @@ public final class SettingsPage extends Page {
                 new Row("Game files", Paths.ROOT.toString(), open, 150)}));
 
         // order: what people change most first
-        String[] order = {"Account", "Performance", "Game", "Cosmetics", "Wallpaper & colours", "Look", "Customization", "Discord", "Launcher", "Files", "Developer"};
+        String[] order = {"Account", "Game", "Performance", "Wallpaper & colours", "Look", "Customization", "Cosmetics", "Discord", "Launcher", "Files", "Developer"};
         List<Component> sections = new java.util.ArrayList<>(List.of(stack.getComponents()));
         stack.removeAll();
         for (String t : order) {
@@ -458,7 +456,7 @@ public final class SettingsPage extends Page {
             List<String> profs = new java.util.ArrayList<>();
             for (var f : src.profiles()) profs.add(f.name());
             SwingUtilities.invokeLater(() -> MainWindow.get().ask("Import from " + src.name(),
-                    "Its options.txt, mods, resource packs, shader packs and configs are copied into a new Cobra profile. "
+                    "Its options.txt, mods, resource packs, shader packs and configs are copied into a new Abyss profile. "
                             + "Mods made for another Minecraft version may need updating.",
                     profs, -1, j -> {
                         var f = src.profiles().get(j);
@@ -718,78 +716,6 @@ public final class SettingsPage extends Page {
         }
     }
 
-    /** Colour themes: a round preview of each (its background with its accent), click to use. */
-    private static final class ThemeRow extends Row {
-        private int hover = -1;
-
-        ThemeRow() {
-            super("Theme", "", new JPanel(null), 1);
-            ((JPanel) control).setOpaque(false);
-            addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
-                @Override public void mouseMoved(java.awt.event.MouseEvent e) {
-                    int h = at(e.getX(), e.getY());
-                    if (h != hover) {
-                        hover = h;
-                        setCursor(Cursor.getPredefinedCursor(h >= 0 ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
-                        repaint();
-                    }
-                }
-            });
-            addMouseListener(new java.awt.event.MouseAdapter() {
-                @Override public void mouseClicked(java.awt.event.MouseEvent e) {
-                    int i = at(e.getX(), e.getY());
-                    if (i >= 0) {
-                        MainWindow.get().setTheme(Theme.THEMES[i]);
-                        repaint();
-                    }
-                }
-
-                @Override public void mouseExited(java.awt.event.MouseEvent e) {
-                    hover = -1;
-                    repaint();
-                }
-            });
-        }
-
-        private Rectangle tile(int i) {
-            int w = getWidth() - 44, n = Theme.THEMES.length, gap = 10;
-            int tw = Math.max(70, Math.min(118, (w - gap * (n - 1)) / n));
-            return new Rectangle(22 + i * (tw + gap), 50, tw, 58);
-        }
-
-        private int at(int x, int y) {
-            for (int i = 0; i < Theme.THEMES.length; i++) if (tile(i).contains(x, y)) return i;
-            return -1;
-        }
-
-        @Override
-        public Dimension getPreferredSize() { return new Dimension(super.getPreferredSize().width, 126); }
-
-        @Override
-        int height() { return 126; }
-
-        @Override
-        protected void paintComponent(Graphics g0) {
-            Graphics2D g = Theme.aa(g0.create());
-            Theme.left(g, "Theme", Theme.font(Theme.MEDIUM, 14.5f), Theme.TEXT, 22, 8, 22);
-            Theme.left(g, "Recolours the whole launcher (and the game, if you like).", Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 22, 26, 16);
-            String cur = dev.cobra.launcher.core.Settings.get().theme;
-            for (int i = 0; i < Theme.THEMES.length; i++) {
-                Rectangle r = tile(i);
-                int[] p = Theme.palette(i);
-                boolean sel = Theme.THEMES[i].equals(cur), hov = i == hover;
-                // a tiny preview: the theme's background with a panel, a line of text and its accent
-                Theme.fill(g, r.x, r.y, r.width, r.height, 12, new GradientPaint(r.x, r.y, new Color(p[11]), r.x + r.width, r.y + r.height, new Color(p[0])));
-                Theme.fill(g, r.x + 8, r.y + 8, r.width - 16, 16, 6, new Color(p[3]));
-                Theme.fill(g, r.x + 12, r.y + 13, (r.width - 24) * 0.55, 6, 3, new Color(p[8]));
-                Theme.fill(g, r.x + 8, r.y + r.height - 24, 30, 14, 7, new Color(p[10]));
-                if (sel || hov) Theme.stroke(g, r.x - 2, r.y - 2, r.width + 4, r.height + 4, 14, sel ? Theme.ACCENT : Theme.alpha(Theme.TEXT, 0.35), sel ? 2f : 1f);
-                g.setFont(Theme.font(Theme.MEDIUM, 11f));
-                Theme.left(g, Theme.THEMES[i], Theme.font(Theme.MEDIUM, 11f), new Color(p[9]), r.x + 44, r.y + r.height - 26, 18);
-            }
-            g.dispose();
-        }
-    }
 
     /** Accent colour: preset swatches plus your own hex colour. */
     private static final class AccentRow extends Row {
@@ -915,7 +841,7 @@ public final class SettingsPage extends Page {
             Theme.logo(g, 34, 30, 26, 1);
             Theme.left(g, "Launcher icon", Theme.font(Theme.MEDIUM, 14.5f), Theme.TEXT, 58, 14, 22);
             String desc = mine ? "Your own picture: window, taskbar, app menu and the logo in here."
-                    : "Use any picture as the launcher's icon and logo. Reset brings Cobra back.";
+                    : "Use any picture as the launcher's icon and logo. Reset brings Abyss back.";
             g.setFont(Theme.font(Theme.REGULAR, 12.5f));
             Theme.left(g, Theme.ellipsize(desc, g.getFontMetrics(), getWidth() - 360), Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 58, 36, 20);
             g.dispose();
@@ -976,7 +902,7 @@ public final class SettingsPage extends Page {
             }
             Theme.left(g, "Crosshair image", Theme.font(Theme.MEDIUM, 14.5f), Theme.TEXT, 58, 14, 22);
             String desc = has ? "Used in game with Custom Crosshair → Style: Image."
-                    : "Your own crosshair picture for Cobra Client (PNG with transparency is best).";
+                    : "Your own crosshair picture for Abyss Client (PNG with transparency is best).";
             g.setFont(Theme.font(Theme.REGULAR, 12.5f));
             Theme.left(g, Theme.ellipsize(desc, g.getFontMetrics(), getWidth() - 360), Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 58, 36, 20);
             g.dispose();
@@ -1000,20 +926,73 @@ public final class SettingsPage extends Page {
         }
     }
 
+    /**
+     * A settings card. Click its title to fold it up or open it (the chevron shows which); long ones
+     * like Cosmetics start folded. A search opens the sections that match.
+     */
     private static final class Section extends JComponent {
+        private static final java.util.Set<String> FOLDED_BY_DEFAULT = java.util.Set.of("Cosmetics", "Customization", "Developer");
         private final String title;
         private final Row[] rows;
+        private boolean folded;
+        private boolean searching;
+        private final dev.cobra.launcher.ui.Anim.Tween open;
+        private boolean hoverHead;
 
         Section(String title, Row[] rows) {
             this.title = title;
             this.rows = rows;
+            this.folded = FOLDED_BY_DEFAULT.contains(title);
+            this.open = new dev.cobra.launcher.ui.Anim.Tween(this, folded ? 0 : 1).rate(16);
             setLayout(null);
             for (Row r : rows) add(r);
+            java.awt.event.MouseAdapter m = new java.awt.event.MouseAdapter() {
+                @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                    if (e.getY() > 44) return;
+                    folded = !folded;
+                    open.to(folded ? 0 : 1);
+                    relayout();
+                }
+
+                @Override public void mouseMoved(java.awt.event.MouseEvent e) {
+                    boolean h = e.getY() <= 44;
+                    if (h != hoverHead) {
+                        hoverHead = h;
+                        setCursor(Cursor.getPredefinedCursor(h ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
+                        repaint();
+                    }
+                }
+
+                @Override public void mouseExited(java.awt.event.MouseEvent e) {
+                    hoverHead = false;
+                    repaint();
+                }
+            };
+            addMouseListener(m);
+            addMouseMotionListener(m);
         }
+
+        /** Grows / shrinks smoothly: the page re-measures every frame while it animates. */
+        private void relayout() {
+            Timer t = new Timer(16, null);
+            t.addActionListener(e -> {
+                Container p = getParent();
+                if (p != null) {
+                    p.revalidate();
+                    p.repaint();
+                }
+                double v = open.get();
+                if (Math.abs(v - (folded ? 0 : 1)) < 0.01) t.stop();
+            });
+            t.start();
+        }
+
+        private boolean expanded() { return searching || !folded; }
 
         /** Shows the rows that match the search (all when the section's own name matches). */
         void filter(String q) {
-            boolean titleHit = q != null && !q.isBlank() && title.toLowerCase().contains(q.toLowerCase().trim());
+            searching = q != null && !q.isBlank();
+            boolean titleHit = searching && title.toLowerCase().contains(q.toLowerCase().trim());
             int shown = 0;
             for (Row r : rows) {
                 boolean on = titleHit ? r.matches("") : r.matches(q);
@@ -1023,11 +1002,17 @@ public final class SettingsPage extends Page {
             setVisible(shown > 0);
         }
 
+        private int rowsHeight() {
+            int h = 0;
+            for (Row r : rows) if (r.isVisible()) h += r.height();
+            return h;
+        }
+
+        private double openness() { return searching ? 1 : Math.max(0, Math.min(1, open.get())); }
+
         @Override
         public Dimension getPreferredSize() {
-            int h = 44;
-            for (Row r : rows) if (r.isVisible()) h += r.height();
-            return new Dimension(100, h + 6);
+            return new Dimension(100, 50 + (int) Math.round(rowsHeight() * openness()));
         }
 
         @Override
@@ -1042,16 +1027,39 @@ public final class SettingsPage extends Page {
         }
 
         @Override
+        public void paint(Graphics g) {
+            Graphics2D c = (Graphics2D) g.create();
+            c.clipRect(0, 0, getWidth(), getHeight());              // folded rows stay hidden
+            super.paint(c);
+            c.dispose();
+        }
+
+        @Override
         protected void paintComponent(Graphics g0) {
             Graphics2D g = Theme.aa(g0.create());
             int w = getWidth(), h = getHeight();
             Theme.surface(g, this, 0, 0, w, h, 20);
+            if (hoverHead) Theme.fill(g, 6, 6, w - 12, 34, 14, Theme.alpha(Theme.TEXT, 0.04));
             Theme.left(g, title, Theme.font(Theme.BOLD, 15f), Theme.TEXT, 22, 12, 26);
+            // the chevron: points down when open, right when folded
+            double o = openness();
+            Graphics2D cg = (Graphics2D) g.create();
+            cg.translate(w - 34, 25);
+            cg.rotate(-Math.PI / 2 * (1 - o));
+            dev.cobra.launcher.ui.Icons.paint(cg, "chevron-down", -8, -8, 16, Theme.MUTED);
+            cg.dispose();
+            if (!expanded() && o < 0.05) {
+                int n = 0;
+                for (Row r : rows) if (r.isVisible()) n++;
+                String hint = n + (n == 1 ? " setting" : " settings");
+                Font f = Theme.font(Theme.REGULAR, 12f);
+                Theme.left(g, hint, f, Theme.MUTED, w - 50 - Theme.width(g, hint, f), 12, 26);
+            }
             g.setColor(Theme.LINE);
             int y = 44;
             for (Row r : rows) {
                 if (!r.isVisible()) continue;
-                g.fillRect(22, y, w - 44, 1);
+                if (y < h) g.fillRect(22, y, w - 44, 1);
                 y += r.height();
             }
             g.dispose();

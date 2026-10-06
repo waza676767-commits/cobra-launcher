@@ -246,6 +246,15 @@ public final class ContentPage extends Page {
         }
     }
 
+    /** Opens Browse Modrinth with this search (the iOS Home's search pill). */
+    public void browseFor(String query) {
+        tabs.select(1);
+        browsing = true;
+        search.setText(query);
+        refresh();
+        runSearch();
+    }
+
     /** The built-in FPS Boost profile's mods are fixed: no adding, removing or browsing. */
     private boolean fpsLocked() {
         return kind == Modrinth.Kind.MODS && dev.cobra.launcher.core.Profiles.current().locked();
@@ -362,7 +371,7 @@ public final class ContentPage extends Page {
             Graphics2D g = Theme.aa(g0.create());
             int w = getWidth(), h = getHeight();
             Theme.surface(g, this, 0, 0, w, h, 16);
-            if (e.locked() && e.name().equals("Cobra Client")) {
+            if (e.locked() && e.name().equals("Abyss Client")) {
                 Theme.fill(g, 14, 13, 40, 40, 10, Theme.BLACK);
                 Theme.logo(g, 34, 33, 30, 1);
             } else drawBadge(g, icon, e.name(), 14, 13, 40);

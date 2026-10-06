@@ -152,4 +152,44 @@ public abstract class Setting<T> {
         @Override public String save() { return null; }
         @Override public void load(String s) {}
     }
+
+    /**
+     * A fold-out heading in a module's settings: the settings under it only show while it's open
+     * (click it), or when the menu's search matches one of them.
+     */
+    public static final class Group extends Setting<Boolean> {
+        /** What's typed in the Right Shift menu's search (lower case), set by the menu. */
+        public static volatile String search = "";
+        private final java.util.List<Setting<?>> members = new java.util.ArrayList<Setting<?>>();
+
+        public Group(String id, String name) {
+            super(id, name, false);
+        }
+
+        public boolean open() { return value || matches(); }
+
+        public void toggle() { value = !value; }
+
+        public void add(Setting<?> s) { members.add(s); }
+
+        @Override
+        public String save() { return String.valueOf(value); }
+
+        @Override
+        public void load(String s) { value = Boolean.parseBoolean(s); }
+
+        /** Does the search hit this group or something in it? */
+        public boolean matches() {
+            String q = search;
+            if (q == null || q.isEmpty()) return false;
+            if (name.toLowerCase().contains(q)) return true;
+            for (Setting<?> m : members) if (m.name.toLowerCase().contains(q)) return true;
+            return false;
+        }
+
+        /** Shown only while the group is open. */
+        public Cond inside() {
+            return new Cond() { public boolean ok() { return open(); } };
+        }
+    }
 }

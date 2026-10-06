@@ -24,7 +24,7 @@ final class CosmeticsGallery extends JPanel {
     private record Item(String key, String name, List<String> options, double yaw, String group) {
         Item(String key, String name, List<String> options, double yaw) {
             this(key, name, options, yaw, switch (key) {
-                case "wings", "wingstyle", "tail", "backpack", "katana" -> "Back";
+                case "wings", "wingstyle", "tail", "backpack", "katana", "scarf" -> "Back";
                 case "gloves", "feet" -> "Hands & feet";
                 case "particles", "trail" -> "Effects";
                 default -> "Head";
@@ -37,19 +37,22 @@ final class CosmeticsGallery extends JPanel {
     private final Components.Segmented groups;
 
     static final List<Item> ITEMS = List.of(
-            new Item("wings", "Wings", List.of("Off", "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan"), 200),
-            new Item("wingstyle", "Wing style", List.of("Feather", "Dragon", "Butterfly"), 200),
-            new Item("halo", "Halo", List.of("Off", "Angel", "Red"), 25),
+            new Item("wings", "Wings", List.of("Off", "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan", "Custom"), 200),
+            new Item("wingstyle", "Wing style", List.of("Feather", "Dragon", "Butterfly", "Demon", "Energy"), 200),
+            new Item("halo", "Halo", List.of("Off", "Angel", "Red", "Custom"), 25),
             new Item("hat", "Hat", List.of("Off", "Crown", "Top hat", "Witch"), 25),
-            new Item("ears", "Cat ears", List.of("Off", "Black", "White", "Ginger", "Pink"), 25),
-            new Item("bunny", "Bunny ears", List.of("Off", "White", "Pink", "Black", "Brown"), 25),
-            new Item("horns", "Horns", List.of("Off", "Red", "Black", "White", "Gold"), 25),
-            new Item("glasses", "Sunglasses", List.of("Off", "Black", "Gold", "Pink"), 20),
-            new Item("headphones", "Headphones", List.of("Off", "Black", "White", "Pink", "Blue"), 40),
-            new Item("tail", "Tail", List.of("Off", "Black", "White", "Ginger", "Pink", "Fox"), 215),
-            new Item("backpack", "Backpack", List.of("Off", "Brown", "Black", "Blue", "Red"), 205),
+            new Item("ears", "Cat ears", List.of("Off", "Black", "White", "Ginger", "Pink", "Custom"), 25),
+            new Item("bunny", "Bunny ears", List.of("Off", "White", "Pink", "Black", "Brown", "Custom"), 25),
+            new Item("horns", "Horns", List.of("Off", "Red", "Black", "White", "Gold", "Custom"), 25),
+            new Item("antlers", "Antlers", List.of("Off", "Brown", "White", "Gold", "Custom"), 25),
+            new Item("orbit", "Orbiting gems", List.of("Off", "Purple", "Cyan", "Red", "Gold", "Green", "Custom"), 25),
+            new Item("scarf", "Scarf", List.of("Off", "Red", "Blue", "Green", "White", "Black", "Custom"), 200),
+            new Item("glasses", "Sunglasses", List.of("Off", "Black", "Gold", "Pink", "Custom"), 20),
+            new Item("headphones", "Headphones", List.of("Off", "Black", "White", "Pink", "Blue", "Custom"), 40),
+            new Item("tail", "Tail", List.of("Off", "Black", "White", "Ginger", "Pink", "Fox", "Custom"), 215),
+            new Item("backpack", "Backpack", List.of("Off", "Brown", "Black", "Blue", "Red", "Custom"), 205),
             new Item("katana", "Katana", List.of("Off", "On"), 205),
-            new Item("gloves", "Boxing gloves", List.of("Off", "Red", "Blue", "Black"), 30),
+            new Item("gloves", "Boxing gloves", List.of("Off", "Red", "Blue", "Black", "Custom"), 30),
             new Item("feet", "Big feet", List.of("Off", "On"), 30),
             new Item("particles", "Particles", List.of("Off", "Sparkles", "Hearts", "Flames", "Soul fire", "Snow", "Magic", "Petals", "Notes"), 200),
             new Item("trail", "Trail", List.of("Off", "On"), 120));
@@ -148,7 +151,7 @@ final class CosmeticsGallery extends JPanel {
         int w = getWidth(), h = getHeight();
         Theme.surface(g, this, 0, 0, w, h, 20, 0, 0.1);
         Theme.left(g, "Cosmetics", Theme.font(Theme.BOLD, 16f), Theme.TEXT, 20, 14, 26);
-        Theme.left(g, "Only other Cobra players see them · applies when you launch", Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 118, 16, 22);
+        Theme.left(g, "Only other Abyss players see them · applies when you launch", Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 118, 16, 22);
         int rx = 320;
         Theme.left(g, "Glow effects", Theme.font(Theme.MEDIUM, 14f), Theme.TEXT, rx, 76, 22);
         Theme.left(g, "Wings, halo, horns and katana glow softly and shine in the dark.", Theme.font(Theme.REGULAR, 12f), Theme.MUTED, rx, 96, 18);
@@ -177,6 +180,9 @@ final class CosmeticsGallery extends JPanel {
             case "tail" -> s.cosTailKind;
             case "backpack" -> s.cosBackpack;
             case "gloves" -> s.cosGloves;
+            case "antlers" -> s.cosAntlers;
+            case "orbit" -> s.cosOrbit;
+            case "scarf" -> s.cosScarf;
             case "katana" -> s.cosKatana ? "On" : "Off";
             case "feet" -> s.cosFeet ? "On" : "Off";
             case "particles" -> s.cosParticles == null ? "Off" : s.cosParticles;
@@ -203,6 +209,9 @@ final class CosmeticsGallery extends JPanel {
             }
             case "backpack" -> s.cosBackpack = v;
             case "gloves" -> s.cosGloves = v;
+            case "antlers" -> s.cosAntlers = v;
+            case "orbit" -> s.cosOrbit = v;
+            case "scarf" -> s.cosScarf = v;
             case "katana" -> s.cosKatana = !"Off".equals(v);
             case "feet" -> s.cosFeet = !"Off".equals(v);
             case "particles" -> s.cosParticles = v;
@@ -225,6 +234,7 @@ final class CosmeticsGallery extends JPanel {
     }
 
     static Color colourOf(String v) {
+        if (v != null && v.matches("x[0-9a-fA-F]{6}")) return new Color(Integer.parseInt(v.substring(1), 16));
         return switch (v) {
             case "Angel", "White" -> new Color(0xF4F4EF);
             case "Red" -> new Color(0xD62B3A);
@@ -418,6 +428,15 @@ final class CosmeticsGallery extends JPanel {
                 @Override public void mouseClicked(java.awt.event.MouseEvent e) {
                     int c = chipAt(e.getPoint());
                     List<String> opts = it.options();
+                    if (c >= 0 && opts.get(c).equals("Custom")) {          // your own colour from the wheel
+                        String cur = value(it.key());
+                        int start = cur.startsWith("x") ? Integer.parseInt(cur.substring(1), 16) : 0x8B5CF6;
+                        ColorWheel.open(Card.this, start, rgb -> {
+                            set(it.key(), "x" + String.format("%06x", rgb & 0xFFFFFF));
+                            changed();
+                        });
+                        return;
+                    }
                     if (c >= 0) set(it.key(), opts.get(c));
                     else if (e.getY() < CARD_H - 70) {
                         int i = opts.indexOf(value(it.key()));
@@ -431,7 +450,7 @@ final class CosmeticsGallery extends JPanel {
         }
 
         private boolean words() {
-            for (String o : it.options()) if (!o.equals("Off") && colourOf(o) == null) return true;
+            for (String o : it.options()) if (!o.equals("Off") && !o.equals("Custom") && colourOf(o) == null) return true;
             return false;
         }
 
@@ -464,7 +483,7 @@ final class CosmeticsGallery extends JPanel {
             stage(g, 8, 8, w - 16, ph, 12);
             BufferedImage img = preview(sample(it, cur), w - 24, ph - 8, it.yaw());
             Composite old = g.getComposite();
-            if (!on) g.setComposite(AlphaComposite.SrcOver.derive(0.45f));
+            if (!on) g.setComposite(Theme.fade(0.45f));
             g.drawImage(img, 12, 12, null);
             if (it.group().equals("Effects")) sparkle(g, 12, 12, w - 24, ph - 8, on ? value("particles") : "Sparkles", it.key().equals("trail"));
             g.setComposite(old);
@@ -473,12 +492,28 @@ final class CosmeticsGallery extends JPanel {
                 Theme.center(g, "Wearing", Theme.font(Theme.MEDIUM, 10.5f), Theme.ON_ACCENT, w - 16 - 66, 14, 60, 20);
             }
             Theme.left(g, it.name(), Theme.font(Theme.MEDIUM, 14f), Theme.TEXT, 12, h - 80, 22);
-            Theme.left(g, on ? cur : "Off", Theme.font(Theme.REGULAR, 11.5f), Theme.MUTED, 12, h - 60, 16);
+            Theme.left(g, on ? (cur.startsWith("x") ? "Custom #" + cur.substring(1).toUpperCase() : cur) : "Off", Theme.font(Theme.REGULAR, 11.5f), Theme.MUTED, 12, h - 60, 16);
             List<String> opts = it.options();
             boolean words = words();
             for (int i = 0; i < opts.size(); i++) {
                 Rectangle r = chip(i);
-                boolean sel = opts.get(i).equals(cur);
+                boolean custom = opts.get(i).equals("Custom");
+                boolean sel = opts.get(i).equals(cur) || custom && cur.startsWith("x");
+                if (custom) {
+                    for (int k = 0; k < 12; k++) {
+                        g.setColor(Color.getHSBColor(k / 12f, 0.75f, 1f));
+                        g.fill(new Arc2D.Double(r.x + 1, r.y + 1, r.width - 2, r.height - 2, k * 30, 31, Arc2D.PIE));
+                    }
+                    Color inner = cur.startsWith("x") ? colourOf(cur) : Theme.PANEL;
+                    g.setColor(inner);
+                    g.fill(new Ellipse2D.Double(r.x + 4, r.y + 4, r.width - 8, r.height - 8));
+                    if (sel || i == hoverChip) {
+                        g.setColor(sel ? Theme.TEXT : Theme.alpha(Theme.TEXT, 0.4));
+                        g.setStroke(new BasicStroke(sel ? 2f : 1f));
+                        g.draw(new Ellipse2D.Double(r.x - 2, r.y - 2, r.width + 4, r.height + 4));
+                    }
+                    continue;
+                }
                 if (words) {
                     Theme.fill(g, r.x, r.y, r.width, r.height, r.height / 2.0, sel ? Theme.TEXT : Theme.alpha(Theme.TEXT, i == hoverChip ? 0.14 : 0.07));
                     g.setFont(Theme.font(Theme.MEDIUM, 11f));

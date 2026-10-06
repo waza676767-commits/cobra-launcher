@@ -11,7 +11,7 @@ import dev.cobra.client.core.Render;
 public final class TitleMenu {
     private static final String[] ICONS = {"settings", "packs", "sliders"};
     private static final Platform.TitleAction[] ICON_ACTIONS = {Platform.TitleAction.OPTIONS, Platform.TitleAction.RESOURCE_PACKS, Platform.TitleAction.COBRA_MENU};
-    private static final String[] ICON_TIPS = {"Options", "Resource Packs", "Cobra Settings"};
+    private static final String[] ICON_TIPS = {"Options", "Resource Packs", "Abyss Settings"};
     private static boolean introPlayed;
 
     private final float[] hover = new float[12];   // one per button (Quit Game is #6)
@@ -81,7 +81,7 @@ public final class TitleMenu {
         int ly = (int) (h * 0.24) - logo / 2 + Math.round(slide(0));
         r.texture("logo", w / 2f - logo / 2f, ly, logo, logo, fg);
         r.push();
-        String name = "COBRA";
+        String name = "ABYSS";
         float s = 2.6f;
         r.translate(w / 2f - r.textWidth(name) * s / 2f, ly + logo + 8);
         r.scale(s);

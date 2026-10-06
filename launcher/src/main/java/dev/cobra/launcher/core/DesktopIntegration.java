@@ -22,9 +22,9 @@ public final class DesktopIntegration {
             writeIcons();
             String entry = "[Desktop Entry]\n"
                     + "Type=Application\n"
-                    + "Name=Cobra Launcher\n"
+                    + "Name=Abyss Launcher\n"
                     + "GenericName=Minecraft Launcher\n"
-                    + "Comment=Minecraft launcher for Cobra Client\n"
+                    + "Comment=Minecraft launcher for Abyss Client\n"
                     + "Exec=\"" + appimage.replace("\"", "\\\"") + "\" %U\n"
                     + "TryExec=" + appimage + "\n"
                     + "Icon=cobra-launcher\n"

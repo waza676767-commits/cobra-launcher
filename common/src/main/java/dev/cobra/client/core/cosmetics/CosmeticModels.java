@@ -114,8 +114,20 @@ public final class CosmeticModels {
     }
 
     /** Colour names shared by every cosmetic. */
+    /** The halo's colour for its code: angel gold, red, or a custom x-colour. */
+    public static int haloColour(String c) {
+        if ("red".equals(c)) return 0xFFFF3B3B;
+        if (c != null && c.length() == 7 && c.charAt(0) == 'x') return colour(c);
+        return 0xFFFFE08A;
+    }
+
     public static int colour(String c) {
         String k = c == null ? "" : c;
+        if (k.length() == 7 && k.charAt(0) == 'x') {                    // a custom colour: x + RRGGBB
+            try {
+                return 0xFF000000 | Integer.parseInt(k.substring(1), 16);
+            } catch (NumberFormatException ignored) {}
+        }
         if (k.equals("white") || k.equals("angel")) return 0xFFF4F4EF;
         if (k.equals("red")) return 0xFFD62B3A;
         if (k.equals("gold")) return 0xFFE8B63A;
@@ -208,6 +220,43 @@ public final class CosmeticModels {
         }
     }
 
+    /** Deer antlers: branching tines from the top of the head. */
+    public static void antlers(M e, Out vc, int light, int c) {
+        for (int s = -1; s <= 1; s += 2) {
+            M a = moved(e, s * 2.6f, -8f, 0.5f, 0, -0.2f, s * 0.45f);
+            box(a, vc, light, c, -0.6f, -7f, -0.6f, 0.6f, 0.2f, 0.6f);                        // main beam
+            M t1 = moved(a, 0, -3f, 0, 0, 0, s * -0.9f);
+            box(t1, vc, light, shade(c, 1.08f), -0.45f, -3.2f, -0.45f, 0.45f, 0f, 0.45f);    // tines
+            M t2 = moved(a, 0, -5.6f, 0, 0, 0, s * -0.8f);
+            box(t2, vc, light, shade(c, 1.08f), -0.4f, -2.6f, -0.4f, 0.4f, 0f, 0.4f);
+            M t3 = moved(a, 0, -7f, 0, 0, 0, s * 0.5f);
+            box(t3, vc, light, shade(c, 1.12f), -0.35f, -2.4f, -0.35f, 0.35f, 0f, 0.35f);
+        }
+    }
+
+    /** Three glowing gems orbiting your head. */
+    public static void orbit(M e, Out vc, int light, float t, int c) {
+        for (int i = 0; i < 3; i++) {
+            double a = t * 0.08 + i * Math.PI * 2 / 3;
+            float x = (float) Math.cos(a) * 8f, z = (float) Math.sin(a) * 8f, y = -5f + (float) Math.sin(t * 0.1 + i) * 1.2f;
+            M g = moved(e, x, y, z, (float) (t * 0.12), 0, 0.6f);
+            box(g, vc, BRIGHT, c, -0.9f, -1.3f, -0.9f, 0.9f, 1.3f, 0.9f);
+            box(g, vc, BRIGHT, shade(c, 1.25f), -0.5f, -0.5f, -0.95f, 0.5f, 0.5f, 0.95f);
+        }
+    }
+
+    /** A knitted scarf round the neck with one end hanging down the back. */
+    public static void scarf(M e, Out vc, int light, float t, int c) {
+        int dark = shade(c, 0.82f);
+        box(e, vc, light, c, -4.6f, -0.6f, -2.6f, 4.6f, 1.6f, 2.6f);                              // wrap
+        for (int i = 0; i < 4; i++) box(e, vc, light, i % 2 == 0 ? dark : c, -4.65f, -0.2f + i * 0.45f, -2.65f, 4.65f, 0.05f + i * 0.45f, 2.65f);
+        float sway = (float) Math.sin(t * 0.12) * 0.15f;
+        M tail = moved(e, 1.8f, 1.2f, 2.6f, 0, 0.25f + sway, 0);
+        box(tail, vc, light, c, -1.3f, 0f, 0f, 1.3f, 7f, 0.5f);
+        for (int i = 0; i < 3; i++) box(tail, vc, light, dark, -1.35f, 1.5f + i * 2f, -0.02f, 1.35f, 2.1f + i * 2f, 0.52f);
+        box(tail, vc, light, dark, -1.3f, 7f, 0f, 1.3f, 7.8f, 0.5f);                             // fringe
+    }
+
     /** Sunglasses on the face. */
     public static void glasses(M e, Out vc, int light, int c) {
         box(e, vc, light, c, -3.9f, -5.2f, -4.45f, 3.9f, -4.7f, -4.2f);                // bridge bar
@@ -228,7 +277,12 @@ public final class CosmeticModels {
 
     /** A thin ring floating over the head, bobbing gently. */
     public static void halo(M e, Out vc, int light, float t, boolean red, float thick, int alpha) {
-        int c = tint(red ? 0xFFFF3B3B : 0xFFFFE08A, alpha);
+        halo(e, vc, light, t, red ? 0xFFFF3B3B : 0xFFFFE08A, thick, alpha);
+    }
+
+    /** The halo in any colour (custom colours from the colour wheel). */
+    public static void halo(M e, Out vc, int light, float t, int rgb, float thick, int alpha) {
+        int c = tint(rgb, alpha);
         float y = -13f - (float) Math.sin(t * 0.08) * 0.5f;
         int n = 20;
         float r = 5.4f;
@@ -253,7 +307,32 @@ public final class CosmeticModels {
         for (int s = -1; s <= 1; s += 2) {
             // out to the side, then swept BACK (+z) — the model is mirrored, so the sweep is -s
             M w = moved(e, s * 1.5f, 2.5f, 2.4f, -s * (0.55f + flap), 0, -s * 0.32f);
-            if (style.equals("dragon")) {
+            if (style.equals("demon")) {
+                // three long curved blades per side, sweeping out and up like scythes
+                for (int b = 0; b < 3; b++) {
+                    M blade = moved(w, 0, -1f + b * 3.2f, 0.2f * b, 0, 0, s * (-0.15f + b * 0.55f) * -1f);
+                    float len = 15f - b * 2.5f;
+                    int segs = 8;
+                    M cur = blade;
+                    for (int i = 0; i < segs; i++) {
+                        float th = (1.3f - i * 0.13f) - (shell ? -g : 0);
+                        int col = tint(shade(c, 0.75f + 0.04f * i), a);
+                        wbox(cur, vc, light, col, s, -g, -th / 2 - g, -0.4f - g, len / segs + 0.3f + g, th / 2 + g, 0.4f + g);
+                        cur = moved(cur, s * len / segs, 0, 0, 0, 0, -s * 0.13f);   // curl upwards along the blade
+                    }
+                }
+            } else if (style.equals("energy")) {
+                // a fan of thin rays of light (always faintly glowing, brighter with Glow on)
+                int rays = 9;
+                for (int i = 0; i < rays; i++) {
+                    float ang = -0.9f + i * (1.6f / (rays - 1));
+                    float len = 12f + (float) Math.sin(i * 1.7) * 3f + (float) Math.sin(t * 0.15 + i) * 1.2f;
+                    M ray = moved(w, 0, 3f, 0.1f * i, 0, 0, -s * ang);
+                    int col = tint(shade(c, 1.1f), shell ? a : 0xFF);
+                    wbox(ray, vc, light, col, s, 0 - g, -0.35f - g, -0.2f - g, len + g, 0.35f + g, 0.2f + g);
+                    wbox(ray, vc, light, tint(0xFFFFFFFF, shell ? a : 0xFF), s, len - 1.2f - g, -0.55f - g, -0.25f - g, len + 0.4f + g, 0.55f + g, 0.25f + g);
+                }
+            } else if (style.equals("dragon")) {
                     int bone = tint(shade(c, 0.7f), a), skin = tint(c, a);
                     wbox(w, vc, light, bone, s, -g, -1.2f - g, -g, 20f + g, 0.4f + g, 0.9f + g);          // arm
                     float[] fx = {6f, 11f, 16f, 20f};
@@ -277,24 +356,71 @@ public final class CosmeticModels {
                         wbox(w, vc, light, dot, s, 5f, 6f, -0.05f, 6.5f, 7.5f, 0.6f);
                     }
             } else {                                                                                        // feathered
-                    wbox(w, vc, light, tint(shade(c, 1.04f), a), s, -g, -1.4f - g, -g, 19f + g, 1f + g, 1.1f + g);   // bone
-                    // overlapping rows like real feathers: each row tucks under the one above (a step back in z)
-                    float[][] rows = {{0.4f, 6f, 20f}, {4.6f, 10.2f, 16.5f}, {8.8f, 14f, 12.5f}, {12.6f, 17f, 8f}};
-                    for (int i = 0; i < rows.length; i++) {
-                        float z0 = 0.18f * (i + 1);
-                        int col = tint(shade(c, 1f - i * 0.045f), a);
-                        float len = rows[i][2];
-                        int n = 5;
-                        float seg = len / n;
-                        for (int f = 0; f < n; f++) {
-                            float x0 = f * seg + 0.1f, x1 = (f + 1) * seg - 0.1f;
-                            float drop = f * 0.35f;                                         // outer feathers a bit longer
-                            float tipCut = f == n - 1 ? 1.6f : 0;                           // the last one tapers
-                            wbox(w, vc, light, col, s, x0 - g, rows[i][0] - g, z0 - g, x1 + g, rows[i][1] + drop - tipCut + g, z0 + 0.7f + g);
-                        }
-                    }
+                feathered(w, vc, light, c, s, g, a, t);
             }
         }
+    }
+
+    /**
+     * Real-looking feathered wing: an arched bone (three segments rising outwards), long flight
+     * feathers fanning from it (longest towards the tip), and a row of short rounded covert
+     * feathers over their roots. Every feather is tapered (wide at the root, pointed at the tip)
+     * with a darker shaft down the middle and its own shade, so the wing reads as feathers, not
+     * planks. {@code g} > 0 draws the slightly larger glow shell instead.
+     */
+    private static void feathered(M w, Out vc, int light, int c, int s, float g, int a, float t) {
+        // the bone: 3 segments that curve up and out
+        float bx = 0, by = 0;
+        float[][] bone = {{6f, -1.5f}, {6.5f, -2.6f}, {6f, -2.2f}};
+        float[] boneX = new float[4], boneY = new float[4];
+        boneX[0] = 0;
+        boneY[0] = 0;
+        for (int i = 0; i < bone.length; i++) {
+            float nx = bx + bone[i][0], ny = by + bone[i][1];
+            float ang = (float) Math.atan2(ny - by, nx - bx), len = (float) Math.hypot(nx - bx, ny - by);
+            M seg = moved(w, s * bx, by, 0, 0, 0, s * ang);
+            box(seg, vc, light, tint(shade(c, 1.06f), a), -g, -0.9f - g, -0.2f - g, len + g, 0.9f + g, 1.0f + g);
+            bx = nx;
+            by = ny;
+            boneX[i + 1] = bx;
+            boneY[i + 1] = by;
+        }
+        float flutter = (float) Math.sin(t * 0.22) * 0.03f;
+        // flight feathers (primaries + secondaries), fanning out, longest at the tip
+        int n = 16;
+        for (int i = 0; i < n; i++) {
+            float f = i / (float) (n - 1);
+            float px = f * bx, py = f * by;                         // along the bone
+            float len = 9f + 9f * (float) Math.pow(f, 1.2);         // 9 → 18 px, longest at the tip
+            float ang = (float) Math.toRadians(-6 + 40 * f) + flutter * (i % 2 == 0 ? 1 : -1);  // hang down, fanning out a little
+            int col = tint(shade(c, (i % 2 == 0 ? 0.98f : 0.92f) - 0.05f * f), a);
+            feather(w, vc, light, s, px, py + 0.4f, 0.45f + 0.035f * i, ang, len, 3.4f - 1.0f * f, col, shade(c, 0.72f), a, g);
+        }
+        // coverts: short rounded feathers over the roots, a step forward
+        int m = 10;
+        for (int i = 0; i < m; i++) {
+            float f = (i + 0.5f) / m;
+            float px = f * bx, py = f * by;
+            float len = 4.5f + 2.5f * f;
+            float ang = (float) Math.toRadians(-4 + 30 * f);
+            int col = tint(shade(c, 1.05f - 0.03f * (i % 2)), a);
+            feather(w, vc, light, s, px, py + 0.3f, -0.15f, ang, len, 2.4f, col, shade(c, 0.85f), a, g);
+        }
+    }
+
+    /** One tapered feather hanging from (px, py), turned outwards by {@code ang} (radians). */
+    private static void feather(M w, Out vc, int light, int s, float px, float py, float z, float ang, float len, float width,
+                                int col, int shaftCol, int a, float g) {
+        M f = moved(w, s * px, py, z, 0, 0, -s * ang);              // y runs down the feather
+        float[] widths = {1f, 0.92f, 0.78f, 0.55f, 0.28f};          // tapers to a point
+        float seg = len / widths.length;
+        for (int k = 0; k < widths.length; k++) {
+            float hw = width * widths[k] / 2;
+            float y0 = k * seg - 0.05f, y1 = (k + 1) * seg + 0.05f;
+            int cc = k == widths.length - 1 ? shade(col, 1.08f) : col;    // tips catch a little light
+            box(f, vc, light, cc, -hw - g, y0 - g, -0.18f - g, hw + g, y1 + g, 0.18f + g);
+        }
+        if (g == 0) box(f, vc, light, tint(shaftCol, a), -0.16f, 0, -0.24f, 0.16f, len * 0.92f, 0.24f);   // the shaft
     }
 
     /** A box on one side of the body (mirrored for the other side). */

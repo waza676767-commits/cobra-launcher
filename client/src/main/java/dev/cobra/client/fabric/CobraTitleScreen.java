@@ -10,7 +10,7 @@ public final class CobraTitleScreen extends Screen {
     private final TitleMenu menu = new TitleMenu();
 
     public CobraTitleScreen() {
-        super(Text.literal("Cobra Client"));
+        super(Text.literal("Abyss Client"));
     }
 
     @Override

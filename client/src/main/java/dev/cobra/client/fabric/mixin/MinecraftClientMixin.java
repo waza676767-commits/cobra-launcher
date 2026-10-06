@@ -21,6 +21,6 @@ public abstract class MinecraftClientMixin {
 
     @Inject(method = "getWindowTitle", at = @At("RETURN"), cancellable = true)
     private void cobra$windowTitle(CallbackInfoReturnable<String> cir) {
-        cir.setReturnValue("Cobra Client 1.21.11");
+        cir.setReturnValue("Abyss Client 1.21.11");
     }
 }

@@ -277,7 +277,7 @@ public final class Wallpaper {
         g.setColor(Theme.isLight() ? new Color(255, 255, 255, dim * 255 / 100) : new Color(0, 0, 0, dim * 255 / 100));
         g.fillRect(0, 0, w, h);
         if (Settings.get().gradient && Settings.get().wallpaperTint) {
-            g.setComposite(AlphaComposite.SrcOver.derive(Math.max(0f, Math.min(1f, Settings.get().gradientStrength / 100f))));
+            g.setComposite(Theme.fade(Math.max(0f, Math.min(1f, Settings.get().gradientStrength / 100f))));
             Theme.paintGradient(g, w, h);
         }
         g.dispose();
@@ -310,7 +310,7 @@ public final class Wallpaper {
                 p.setProperty("count", String.valueOf(frames.size()));
                 p.setProperty("dim", String.valueOf(Settings.get().wallpaperDim));
                 try (java.io.OutputStream o = Files.newOutputStream(anim)) {
-                    p.store(o, "Cobra Launcher animated wallpaper");
+                    p.store(o, "Abyss Launcher animated wallpaper");
                 }
             } else {
                 Files.deleteIfExists(anim);

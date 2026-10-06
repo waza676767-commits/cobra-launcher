@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Discord Rich Presence ("Playing Cobra Client") over Discord's local IPC socket. No library:
+ * Discord Rich Presence ("Playing Abyss Client") over Discord's local IPC socket. No library:
  * Discord listens on a Unix socket (discord-ipc-0…9) and speaks length-prefixed JSON frames.
  * Works with the normal, Flatpak and Snap Discord, and Vesktop/arRPC-style clients that expose
  * the same socket.
@@ -28,7 +28,7 @@ import java.util.UUID;
  */
 public final class DiscordPresence {
     /** The Discord application behind the presence (its name is what shows after "Playing"). */
-    public static final String DEFAULT_APP_ID = "1553693351633621163";   // the "Cobra Client" Discord application
+    public static final String DEFAULT_APP_ID = "1553693351633621163";   // the "Abyss Client" Discord application
 
     private static final Object LOCK = new Object();
     private static SocketChannel channel;
@@ -283,7 +283,7 @@ public final class DiscordPresence {
         if (cfg.discordButton && !Updater.REPO.isEmpty()) {
             com.google.gson.JsonArray buttons = new com.google.gson.JsonArray();
             JsonObject b = new JsonObject();
-            b.addProperty("label", "Get Cobra Client");
+            b.addProperty("label", "Get Abyss Client");
             b.addProperty("url", "https://github.com/" + Updater.REPO + "/releases/latest");
             buttons.add(b);
             activity.add("buttons", buttons);
@@ -291,7 +291,7 @@ public final class DiscordPresence {
         if (!cfg.discordShowActivity) activity.remove("state");
         JsonObject assets = new JsonObject();
         assets.addProperty("large_image", "logo");          // art assets uploaded to the Discord app (see README)
-        assets.addProperty("large_text", "Cobra Client " + BuildInfo.VERSION);
+        assets.addProperty("large_text", "Abyss Client " + BuildInfo.VERSION);
         if (cfg.discordSmallIcon) {
             String k;
             synchronized (LOCK) {
@@ -302,7 +302,7 @@ public final class DiscordPresence {
                 case "server" -> cfg.discordShowServer && !serverAddress.isEmpty() ? "On " + serverAddress : "Multiplayer";
                 case "singleplayer" -> "Singleplayer";
                 case "menu" -> "In the menus";
-                default -> "Cobra Launcher";
+                default -> "Abyss Launcher";
             });
         }
         activity.add("assets", assets);

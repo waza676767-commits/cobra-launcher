@@ -288,10 +288,11 @@ public final class CobraMenu {
     private List<Module> visibleModules() {
         List<Module> out = new ArrayList<Module>();
         String q = search.toLowerCase(Locale.ROOT);
+        Setting.Group.search = q;                           // fold-out groups open when the search hits them
         for (Module m : Cobra.MODULES) {
             if (m.hidden) continue;
             if (chip > 0 && m.category != Category.values()[chip - 1]) continue;
-            if (!q.isEmpty() && !m.name.toLowerCase(Locale.ROOT).contains(q) && !m.description.toLowerCase(Locale.ROOT).contains(q)) continue;
+            if (!q.isEmpty() && !m.matches(q)) continue;
             out.add(m);
         }
         return out;
@@ -394,6 +395,14 @@ public final class CobraMenu {
             int right = cx0 + cw0 - 2;
             if (in(mx, my, cx0, y, cw0, ROW) && !picker.isOpen()) r.rect(cx0, y, cw0, ROW - 1, Draw.alpha(accent(), 0.07f));
             r.rect(cx0, y + ROW - 1, cw0, 1, line());
+            if (st instanceof Setting.Group) {                     // a fold-out heading
+                Setting.Group gr = (Setting.Group) st;
+                boolean open = gr.open();
+                Draw.spaced(r, st.name.toUpperCase(Locale.ROOT), cx0 + 4, y + 7, 0.62f, Draw.FG, false);
+                String arrow = open ? "-" : "+";
+                r.text(arrow, right - r.textWidth(arrow) - 2, y + 6, soft(), false);
+                continue;
+            }
             if (st instanceof Setting.Action) {
                 wideButton(r, cx0 + 2, y + 3, Math.min(cw0 - 4, Draw.spacedWidth(r, st.name.toUpperCase(Locale.ROOT), 0.6f) + 16), 14,
                         st.name.toUpperCase(Locale.ROOT), mx, my, false);
@@ -775,7 +784,8 @@ public final class CobraMenu {
             int y = top + i * ROW - Math.round(scroll);
             if (my < top || !in(mx, my, cx0, y, cw0, ROW)) continue;
             int right = cx0 + cw0 - 2;
-            if (st instanceof Setting.Action) ((Setting.Action) st).run();
+            if (st instanceof Setting.Group) ((Setting.Group) st).toggle();
+            else if (st instanceof Setting.Action) ((Setting.Action) st).run();
             else if (st instanceof Setting.Bool) ((Setting.Bool) st).toggle();
             else if (st instanceof Setting.Number) {
                 Setting.Number n = (Setting.Number) st;

@@ -35,11 +35,26 @@ public final class Http {
 
     public record Response(int code, String body) {
         public boolean ok() { return code >= 200 && code < 300; }
+        /**
+         * The body as a JSON object; an empty object when it isn't JSON (an error page from a
+         * proxy, a firewall or a server that's down), so callers see "missing fields", not a crash.
+         */
         public JsonObject json() {
-            JsonElement e = JsonParser.parseString(body.isEmpty() ? "{}" : body);
-            return e.isJsonObject() ? e.getAsJsonObject() : new JsonObject();
+            try {
+                JsonElement e = JsonParser.parseString(body.isEmpty() ? "{}" : body);
+                return e.isJsonObject() ? e.getAsJsonObject() : new JsonObject();
+            } catch (RuntimeException notJson) {
+                return new JsonObject();
+            }
         }
-        public JsonElement element() { return JsonParser.parseString(body); }
+
+        public JsonElement element() {
+            try {
+                return JsonParser.parseString(body);
+            } catch (RuntimeException notJson) {
+                return new JsonObject();
+            }
+        }
     }
 
     private static HttpRequest.Builder req(String url) {

@@ -55,7 +55,7 @@ public final class GameLauncher {
         vars.put("clientid", "0");
         vars.put("user_type", acc.offline() ? "legacy" : "msa");
         vars.put("user_properties", "{}");
-        vars.put("version_type", "Cobra");
+        vars.put("version_type", "Abyss");
         vars.put("natives_directory", prep.nativesDir.toAbsolutePath().toString());
         vars.put("launcher_name", "CobraLauncher");
         vars.put("launcher_version", BuildInfo.VERSION);
@@ -135,6 +135,11 @@ public final class GameLauncher {
             }
         }
         if (s.fullscreen) cmd.add("--fullscreen");
+        // Quick join: straight into a server (Minecraft 1.20+ understands this)
+        if (s.quickJoin != null && !s.quickJoin.isBlank() && !s.offline) {
+            cmd.add("--quickPlayMultiplayer");
+            cmd.add(s.quickJoin.trim());
+        }
 
         ProcessBuilder pb = new ProcessBuilder(cmd).directory(prep.gameDir.toFile()).redirectErrorStream(true);
         // Don't leak AppImage runtime variables into the game.

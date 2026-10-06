@@ -92,7 +92,7 @@ public final class Installer {
         String component = vanilla.has("javaVersion") ? vanilla.getAsJsonObject("javaVersion").get("component").getAsString() : "jre-legacy";
         out.javaExe = ensureJava(component, p);
 
-        p.update("Installing Cobra Client", 1);
+        p.update("Installing Abyss Client", 1);
         out.cobraBundled = installBundledMods(gv, out.gameDir);
         boolean fpsProfile = dev.cobra.launcher.core.Profiles.current().locked();
         boolean vulkan = dev.cobra.launcher.core.Settings.get().superOptimization;
@@ -112,6 +112,13 @@ public final class Installer {
         } else {
             removeManagedMods(modsDir, ".cobra-vulkan.json");
             restoreConflicting(modsDir);
+        }
+        // Settings → Game → Voice chat: Simple Voice Chat in every Fabric profile (talks on servers that have it)
+        if (!gv.vanilla() && dev.cobra.launcher.core.Settings.get().voiceChat) {
+            p.update("Adding Simple Voice Chat", 1);
+            syncManagedMods(gv, modsDir, List.of("simple-voice-chat"), ".abyss-voicechat.json");
+        } else {
+            removeManagedMods(modsDir, ".abyss-voicechat.json");
         }
         removeDuplicateMods(modsDir, managedMods(gv));
         return out;
@@ -417,7 +424,7 @@ public final class Installer {
             }
             // Cobra's Sky module needs Skyboxify (custom skies from packs) and its config library;
             // they live with Cobra in the launcher's folder and aren't listed as your mods
-            for (String slug : List.of("skyboxify", "yacl")) {
+            for (String slug : bundled ? List.of("skyboxify", "yacl") : List.<String>of()) {   // only Cobra's Sky needs these
                 String prefix = slug.equals("yacl") ? "yet_another_config_lib" : slug;
                 boolean have;
                 try (var s = Files.list(managed)) {
@@ -432,7 +439,7 @@ public final class Installer {
                 }
             }
         }
-        installSkies(gameDir);
+        if (bundled) installSkies(gameDir);
         return bundled;
     }
 

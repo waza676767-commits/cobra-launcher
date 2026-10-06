@@ -8,3 +8,8 @@ run/
 client/.gradle/
 client/run/
 *.AppImage
+dist/
+*.exe
+*.log
+checks/classes/
+checks/recordings/

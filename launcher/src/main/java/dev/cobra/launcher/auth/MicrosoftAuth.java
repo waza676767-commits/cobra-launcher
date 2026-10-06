@@ -331,7 +331,7 @@ public final class MicrosoftAuth {
                     Map<String, String> params = queryOf(request);
                     String error = params.get("error_description") != null ? params.get("error_description") : params.get("error");
                     boolean done = params.containsKey("code") || error != null;
-                    respond(socket, done ? (error == null ? "Signed in. You can close this tab and go back to Cobra Launcher."
+                    respond(socket, done ? (error == null ? "Signed in. You can close this tab and go back to Abyss Launcher."
                             : "Sign-in failed: " + error) : "Waiting for Microsoft…");
                     if (error != null) throw new AuthException(error.split("\\r?\\n")[0]);
                     if (params.containsKey("code")) {
@@ -360,7 +360,7 @@ public final class MicrosoftAuth {
     }
 
     private static void respond(Socket socket, String message) throws IOException {
-        String html = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Cobra Launcher</title></head>"
+        String html = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Abyss Launcher</title></head>"
                 + "<body style=\"margin:0;height:100vh;display:flex;align-items:center;justify-content:center;"
                 + "background:#0c0c0d;color:#fff;font-family:system-ui,sans-serif\">"
                 + "<p style=\"font-size:18px\">" + message + "</p></body></html>";

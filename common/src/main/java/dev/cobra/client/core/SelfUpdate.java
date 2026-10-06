@@ -26,11 +26,11 @@ public final class SelfUpdate {
         final String root = System.getProperty("cobra.root", "");
         final int build = Integer.getInteger("cobra.build", 0);
         if (repo.isEmpty() || root.isEmpty()) {
-            Cobra.platform.chat("\u00a7eThis Cobra build can't update itself (it wasn't built on GitHub).");
+            Cobra.platform.chat("\u00a7eThis Abyss build can't update itself (it wasn't built on GitHub).");
             return;
         }
         busy = true;
-        Cobra.platform.chat("Checking for a newer Cobra\u2026");
+        Cobra.platform.chat("Checking for a newer Abyss\u2026");
         Thread t = new Thread(new Runnable() {
             public void run() {
                 try {
@@ -38,12 +38,12 @@ public final class SelfUpdate {
                     Matcher tag = Pattern.compile("\"tag_name\"\\s*:\\s*\"[^0-9\"]*(\\d+)").matcher(json);
                     Matcher url = Pattern.compile("\"browser_download_url\"\\s*:\\s*\"([^\"]*/cobra-launcher\\.jar)\"").matcher(json);
                     if (!tag.find() || !url.find()) {
-                        Cobra.platform.chat("\u00a7eNo Cobra release found yet.");
+                        Cobra.platform.chat("\u00a7eNo Abyss release found yet.");
                         return;
                     }
                     int latest = Integer.parseInt(tag.group(1));
                     if (latest <= build) {
-                        Cobra.platform.chat("\u00a7aYou're on the newest Cobra (build " + build + ").");
+                        Cobra.platform.chat("\u00a7aYou're on the newest Abyss (build " + build + ").");
                         return;
                     }
                     File dir = new File(root, "update");

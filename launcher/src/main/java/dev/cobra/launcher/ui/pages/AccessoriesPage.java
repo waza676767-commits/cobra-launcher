@@ -22,6 +22,8 @@ public final class AccessoriesPage extends Page {
     private final Components.Stack stack = new Components.Stack(18);
     private final JScrollPane scroll = Components.scroll(stack);
     private final Card skinCard = new Card(true), capeCard = new Card(false);
+    /** Keeps animated capes moving while the page is open. */
+    private final Timer animate = new Timer(90, e -> { if (capeCard.isShowing()) capeCard.repaint(); });
     private final CosmeticsGallery gallery = new CosmeticsGallery();
     private final Components.Button upload;
 
@@ -39,6 +41,8 @@ public final class AccessoriesPage extends Page {
 
     @Override
     public void onShow() {
+        animate.start();
+        dev.cobra.launcher.core.Accessories.installPresetCapes();
         skinCard.reload();
         capeCard.reload();
         upload.setEnabled(Accessories.hasSkin());
@@ -335,7 +339,9 @@ public final class AccessoriesPage extends Page {
         int u = Math.max(2, Math.min(area.width / 12, area.height / 18));
         int ox = area.x + (area.width - 10 * u) / 2, oy = area.y + (area.height - 16 * u) / 2;
         int k = Math.max(1, c.getWidth() / 64);   // HD capes: same layout, k times the pixels
-        g.drawImage(c, ox, oy, ox + 10 * u, oy + 16 * u, k, k, 11 * k, 17 * k, null);   // the outside face of the cape
+        int frames = Math.max(1, c.getHeight() / Math.max(1, c.getWidth() / 2));   // animated capes: frames stacked
+        int fy = frames > 1 ? (int) ((System.currentTimeMillis() / 90) % frames) * 32 * k : 0;
+        g.drawImage(c, ox, oy, ox + 10 * u, oy + 16 * u, k, k + fy, 11 * k, 17 * k + fy, null);   // the outside face of the cape
         g.dispose();
     }
 

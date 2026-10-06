@@ -40,6 +40,34 @@ public abstract class Module {
         return s;
     }
 
+    /**
+     * Puts {@code members} under a fold-out heading: the heading goes where the first one was,
+     * and each member only shows while the heading is open (or the search finds it).
+     */
+    protected void group(final Setting.Group g, Setting<?>... members) {
+        int at = settings.indexOf(members[0]);
+        settings.add(Math.max(0, at), g);
+        for (final Setting<?> m : members) {
+            final Setting.Cond old = m.visibleIf;
+            m.visibleIf = new Setting.Cond() {
+                public boolean ok() { return g.open() && (old == null || old.ok()); }
+            };
+            g.add(m);
+            settings.remove(m);
+        }
+        // members follow their heading, in the order given
+        int pos = settings.indexOf(g) + 1;
+        for (Setting<?> m : members) settings.add(pos++, m);
+    }
+
+    /** Does the search text hit this module's name, description or one of its settings? */
+    public boolean matches(String q) {
+        if (q == null || q.isEmpty()) return true;
+        if (name.toLowerCase().contains(q) || description.toLowerCase().contains(q)) return true;
+        for (Setting<?> s : settings) if (s.name.toLowerCase().contains(q)) return true;
+        return false;
+    }
+
     /** The settings currently listed in the menu. */
     public List<Setting<?>> shownSettings() {
         List<Setting<?>> out = new ArrayList<Setting<?>>();

@@ -48,11 +48,14 @@ final class CosmeticPreview {
         if (wear.containsKey("tail")) CosmeticModels.tail(bk, out, 0, t, wear.get("tail"));
         if (wear.containsKey("backpack")) CosmeticModels.backpack(body, out, 0, CosmeticModels.colour(wear.get("backpack")));
         if (wear.containsKey("katana")) CosmeticModels.katana(bk, out, 0);
-        if (wear.containsKey("halo")) CosmeticModels.halo(hk, out, 0, t, "red".equals(wear.get("halo")), 0.45f, 0xFF);
+        if (wear.containsKey("halo")) CosmeticModels.halo(hk, out, 0, t, CosmeticModels.haloColour(wear.get("halo")), 0.45f, 0xFF);
         if (wear.containsKey("hat")) CosmeticModels.hat(hk, out, 0, wear.get("hat"));
         if (wear.containsKey("ears")) CosmeticModels.catEars(hk, out, 0, CosmeticModels.colour(wear.get("ears")));
         if (wear.containsKey("bunny")) CosmeticModels.bunnyEars(hk, out, 0, CosmeticModels.colour(wear.get("bunny")), t);
         if (wear.containsKey("horns")) CosmeticModels.horns(hk, out, 0, CosmeticModels.colour(wear.get("horns")));
+        if (wear.containsKey("antlers")) CosmeticModels.antlers(hk, out, 0, CosmeticModels.colour(wear.get("antlers")));
+        if (wear.containsKey("orbit")) CosmeticModels.orbit(hk, out, 0, t, CosmeticModels.colour(wear.get("orbit")));
+        if (wear.containsKey("scarf")) CosmeticModels.scarf(body, out, 0, t, CosmeticModels.colour(wear.get("scarf")));
         if (wear.containsKey("glasses")) CosmeticModels.glasses(head, out, 0, CosmeticModels.colour(wear.get("glasses")));
         if (wear.containsKey("headphones")) CosmeticModels.headphones(head, out, 0, CosmeticModels.colour(wear.get("headphones")));
         if (wear.containsKey("gloves")) {

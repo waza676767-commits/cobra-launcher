@@ -148,14 +148,14 @@ public final class HudModules {
     /** A little badge with the Cobra mark and your text (your name by default). */
     public static final class Watermark extends HudModule {
         private final Setting.Text text = add(new Setting.Text("text", "Text (empty = your name)", "", 20));
-        private final Setting.Bool mark = add(new Setting.Bool("mark", "Cobra mark", true));
+        private final Setting.Bool mark = add(new Setting.Bool("mark", "Abyss mark", true));
 
-        public Watermark() { super("watermark", "Watermark", "The Cobra mark and your name in a small badge", false, 0.01f, 0.01f); }
+        public Watermark() { super("watermark", "Watermark", "The Abyss mark and your name in a small badge", false, 0.01f, 0.01f); }
 
         @Override
         public void draw(Render r, boolean editing) {
             String t = text.get() == null || text.get().trim().isEmpty() ? p().playerName() : text.get().trim();
-            if (t == null) t = "Cobra";
+            if (t == null) t = "Abyss";
             t = t.toUpperCase(java.util.Locale.ROOT);
             int tw = dev.cobra.client.core.ui.Draw.spacedWidth(r, t, 1f);
             int markW = mark.on() ? 14 : 0;
@@ -358,6 +358,327 @@ public final class HudModules {
         @Override
         public void draw(Render r, boolean editing) {
             textBox(r, combo == 0 ? "No Combo" : combo + " Combo");
+        }
+    }
+
+    // ---------------------------------------------------------------- Sprint indicator
+
+    /** Shows when you're sprinting (and, if you like, when you're not). */
+    public static final class SprintIndicator extends HudModule {
+        private final Setting.Bool showOff = add(new Setting.Bool("showoff", "Show when not sprinting", false));
+        private final Setting.Text onText = add(new Setting.Text("ontext", "Text when sprinting", "Sprinting", 20));
+
+        public SprintIndicator() { super("sprintindicator", "Sprint Indicator", "Shows when you're sprinting", false, 0.01f, 0.62f); }
+
+        @Override
+        public void draw(Render r, boolean editing) {
+            boolean on = editing || p().sprinting();
+            if (!on && !showOff.on()) {
+                w = h = 0;
+                return;
+            }
+            textBox(r, on ? onText.get() : "Walking");
+        }
+    }
+
+    // ---------------------------------------------------------------- Rotation (degrees)
+
+    /** Your exact facing in degrees (yaw), optionally with pitch and the compass direction. */
+    public static final class Rotation extends HudModule {
+        private final Setting.Bool pitch = add(new Setting.Bool("pitch", "Show pitch (up / down)", true));
+        private final Setting.Bool name = add(new Setting.Bool("name", "Show direction name", true));
+        private final Setting.Mode decimals = add(new Setting.Mode("decimals", "Decimals", "1", "0", "1", "2"));
+
+        public Rotation() { super("rotation", "Rotation", "The exact degrees you're looking at", false, 0.01f, 0.56f); }
+
+        @Override
+        public void draw(Render r, boolean editing) {
+            float yaw = ((p().yaw() % 360) + 540) % 360 - 180;               // -180 … 180 like F3
+            String f = "%." + decimals.get() + "f";
+            StringBuilder t = new StringBuilder("Yaw " + String.format(java.util.Locale.ROOT, f, yaw) + "°");
+            if (pitch.on()) t.append("  Pitch ").append(String.format(java.util.Locale.ROOT, f, p().pitch())).append("°");
+            if (name.on()) t.append("  ").append(facingName(p().yaw()));
+            textBox(r, t.toString());
+        }
+    }
+
+    // ---------------------------------------------------------------- Attribute swap streak
+
+    /**
+     * Counts attribute swaps: hits where you switched to another hotbar slot just before
+     * attacking (within 3 ticks), like switching to an axe or mace for its damage and back.
+     * Consecutive ones build a streak; a hit without a swap, or 3 s of nothing, resets it.
+     */
+    public static final class SwapStreak extends HudModule {
+        private int lastSlot = -1, streak, best;
+        private long lastSwapTick = -100, lastHitTick = -100;
+
+        public SwapStreak() { super("swapstreak", "Attribute Swap Streak", "Hits you landed right after swapping items", false, 0.01f, 0.74f); }
+
+        @Override
+        public void onTick() {
+            if (!p().inWorld()) return;
+            int slot = p().hotbarSlot();
+            if (slot != lastSlot && lastSlot != -1) lastSwapTick = Cobra.ticks();
+            lastSlot = slot;
+            if (Cobra.ticks() - lastHitTick > 60) streak = 0;
+        }
+
+        /** Called on every attack you make. */
+        public void attacked() {
+            long now = Cobra.ticks();
+            if (now - lastSwapTick <= 3) {
+                streak++;
+                best = Math.max(best, streak);
+            } else {
+                streak = 0;
+            }
+            lastHitTick = now;
+        }
+
+        @Override
+        public void draw(Render r, boolean editing) {
+            int s = editing && streak == 0 ? 4 : streak;
+            textBox(r, s == 0 ? "No swap streak" : "Swap streak " + s + "  (best " + Math.max(best, s) + ")");
+        }
+    }
+
+    // ---------------------------------------------------------------- Spotify
+
+    /**
+     * Spotify: what's playing (song, artist, progress) in a corner, with keys for play / pause,
+     * next and previous. It talks to the Spotify app on your PC, no login needed: on Linux through
+     * playerctl (MPRIS), on Windows through the Spotify window and the media keys.
+     */
+    public static final class Spotify extends HudModule {
+        private final Setting.Bind playPause = add(new Setting.Bind("playpause", "Play / pause", -1, null));
+        private final Setting.Bind next = add(new Setting.Bind("next", "Next song", -1, null));
+        private final Setting.Bind prev = add(new Setting.Bind("prev", "Previous song", -1, null));
+        private final Setting.Bool progress = add(new Setting.Bool("progress", "Progress bar", true));
+        private final Setting.Bool hideIdle = add(new Setting.Bool("hideidle", "Hide when nothing plays", false));
+
+        private volatile String title = "", artist = "", status = "", problem = null;
+        private volatile long posMs, lenMs, polledAt;
+        private boolean ppDown, nDown, pDown;
+        private long nextPoll;
+        private Thread poller;
+
+        public Spotify() { super("spotify", "Spotify", "What's playing on Spotify, with play / pause / skip keys", false, 0.70f, 0.02f); }
+
+        private static boolean windows() { return System.getProperty("os.name", "").toLowerCase().contains("win"); }
+
+        @Override
+        public void onTick() {
+            long now = System.currentTimeMillis();
+            if (now >= nextPoll && (poller == null || !poller.isAlive())) {
+                nextPoll = now + 1000;
+                poller = new Thread(new Runnable() { public void run() { poll(); } }, "abyss-spotify");
+                poller.setDaemon(true);
+                poller.start();
+            }
+            if (p().screenOpen()) return;
+            boolean a = playPause.code() >= 0 && p().rawKeyDown(playPause.code());
+            boolean b = next.code() >= 0 && p().rawKeyDown(next.code());
+            boolean c = prev.code() >= 0 && p().rawKeyDown(prev.code());
+            if (a && !ppDown) control("play-pause", 0xB3);
+            if (b && !nDown) control("next", 0xB0);
+            if (c && !pDown) control("previous", 0xB1);
+            ppDown = a;
+            nDown = b;
+            pDown = c;
+        }
+
+        private void control(final String mpris, final int vk) {
+            Thread t = new Thread(new Runnable() {
+                public void run() {
+                    if (windows()) {
+                        Spotify.run("powershell", "-NoProfile", "-Command",
+                                "$s='[DllImport(\"user32.dll\")] public static extern void keybd_event(byte b,byte s,uint f,System.UIntPtr e);';"
+                                        + "$k=Add-Type -MemberDefinition $s -Name K -Namespace W -PassThru;$k::keybd_event(" + vk + ",0,0,[UIntPtr]::Zero);$k::keybd_event(" + vk + ",0,2,[UIntPtr]::Zero)");
+                    } else {
+                        Spotify.run("playerctl", "-p", "spotify", mpris);
+                    }
+                    nextPoll = 0;                                    // show the change right away
+                }
+            }, "abyss-spotify-key");
+            t.setDaemon(true);
+            t.start();
+        }
+
+        private void poll() {
+            try {
+                if (windows()) {
+                    String out = run("tasklist", "/v", "/fo", "csv", "/nh", "/fi", "imagename eq Spotify.exe");
+                    String found = null;
+                    for (String line : out.split("\\r?\\n")) {
+                        String[] f = line.split("\",\"");
+                        if (f.length < 9) continue;
+                        String wt = f[f.length - 1].replace("\"", "").trim();
+                        if (wt.contains(" - ")) found = wt;
+                        else if (found == null && (wt.startsWith("Spotify"))) found = "";
+                    }
+                    if (found == null) {
+                        status = "";
+                        problem = "Spotify isn't running";
+                    } else if (found.isEmpty()) {
+                        status = "Paused";
+                        problem = null;
+                    } else {
+                        int i = found.indexOf(" - ");
+                        artist = found.substring(0, i);
+                        title = found.substring(i + 3);
+                        status = "Playing";
+                        problem = null;
+                    }
+                    lenMs = 0;
+                } else {
+                    String out = run("playerctl", "-p", "spotify", "metadata", "--format",
+                            "{{status}}\t{{title}}\t{{artist}}\t{{position}}\t{{mpris:length}}");
+                    if (out == null) {
+                        problem = "Install playerctl to see Spotify";
+                        status = "";
+                        return;
+                    }
+                    String[] f = out.trim().split("\t", -1);
+                    if (f.length < 5 || f[0].isEmpty()) {
+                        problem = "Spotify isn't running";
+                        status = "";
+                        return;
+                    }
+                    status = f[0];
+                    title = f[1];
+                    artist = f[2];
+                    posMs = parse(f[3]) / 1000;
+                    lenMs = parse(f[4]) / 1000;
+                    polledAt = System.currentTimeMillis();
+                    problem = null;
+                }
+            } catch (Exception e) {
+                problem = "Can't reach Spotify";
+            }
+        }
+
+        private static long parse(String s) {
+            try {
+                return Long.parseLong(s.trim());
+            } catch (Exception e) {
+                return 0;
+            }
+        }
+
+        /** Runs a command; its output, or null if the program isn't there. */
+        private static String run(String... cmd) {
+            try {
+                Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+                java.io.InputStream in = p.getInputStream();
+                java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096];
+                int n;
+                while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
+                p.waitFor();
+                return p.exitValue() == 0 || b.size() > 0 ? b.toString("UTF-8") : null;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        private static String time(long ms) {
+            long s = Math.max(0, ms / 1000);
+            return (s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60);
+        }
+
+        @Override
+        public void draw(Render r, boolean editing) {
+            String t = title, a = artist, st = status;
+            if (editing && (t.isEmpty() || problem != null)) {
+                t = "Song title";
+                a = "Artist";
+                st = "Playing";
+            }
+            if (!editing && (problem != null || t.isEmpty())) {
+                if (hideIdle.on() || problem == null) {
+                    w = h = 0;
+                    return;
+                }
+                textBox(r, problem);
+                return;
+            }
+            int tw = Math.max(r.textWidth(t), r.textWidth(a)) + 32;
+            w = Math.max(120, Math.min(220, tw));
+            boolean bar = progress.on() && lenMs > 0;
+            h = bar ? 40 : 30;
+            bg(r, 0, 0, w, h);
+            // a little "playing" mark: three bars, or two for paused
+            boolean playing = st.equalsIgnoreCase("Playing");
+            for (int i = 0; i < 3; i++) {
+                double tt = System.currentTimeMillis() / 160.0 + i;
+                int bh = playing ? 3 + (int) (5 * Math.abs(Math.sin(tt))) : 3;
+                r.rect(6 + i * 3, 13 - bh / 2, 2, bh, 0xFF1DB954);
+            }
+            r.text(clip(r, t, w - 24), 18, 5, color.argb(), textShadow());
+            r.text(clip(r, a, w - 24), 18, 16, 0xFF9A9B9F, textShadow());
+            if (bar) {
+                long pos = posMs + (playing ? System.currentTimeMillis() - polledAt : 0);
+                float f = Math.max(0, Math.min(1, pos / (float) lenMs));
+                r.rect(6, 31, w - 12, 2, 0x55FFFFFF);
+                r.rect(6, 31, Math.round((w - 12) * f), 2, 0xFF1DB954);
+            }
+        }
+
+        private static String clip(Render r, String s, int max) {
+            if (r.textWidth(s) <= max) return s;
+            while (s.length() > 1 && r.textWidth(s + "..") > max) s = s.substring(0, s.length() - 1);
+            return s + "..";
+        }
+    }
+
+    // ---------------------------------------------------------------- Speedometer
+
+    /** Your speed in blocks per second (horizontal, like a speedometer). */
+    public static final class Speedometer extends HudModule {
+        private final Setting.Bool vertical = add(new Setting.Bool("vertical", "Include up / down", false));
+        private double lx = Double.NaN, ly, lz, speed;
+
+        public Speedometer() { super("speedometer", "Speedometer", "How fast you're moving, in blocks per second", false, 0.01f, 0.50f); }
+
+        @Override
+        public void onTick() {
+            if (!p().inWorld()) {
+                lx = Double.NaN;
+                return;
+            }
+            double x = p().x(), y = p().y(), z = p().z();
+            if (!Double.isNaN(lx)) {
+                double dx = x - lx, dy = vertical.on() ? y - ly : 0, dz = z - lz;
+                double now = Math.sqrt(dx * dx + dy * dy + dz * dz) * 20;     // 20 ticks a second
+                speed += (now - speed) * 0.35;                                   // a little smoothing
+            }
+            lx = x;
+            ly = y;
+            lz = z;
+        }
+
+        @Override
+        public void draw(Render r, boolean editing) {
+            textBox(r, String.format(java.util.Locale.ROOT, "%.2f m/s", editing && speed < 0.01 ? 5.61 : speed));
+        }
+    }
+
+    // ---------------------------------------------------------------- Clock
+
+    /** The real time (and date if you like). */
+    public static final class Clock extends HudModule {
+        private final Setting.Mode format = add(new Setting.Mode("format", "Format", "24h", "24h", "12h"));
+        private final Setting.Bool seconds = add(new Setting.Bool("seconds", "Seconds", false));
+        private final Setting.Bool date = add(new Setting.Bool("date", "Date", false));
+
+        public Clock() { super("clock", "Clock", "The real time", false, 0.88f, 0.01f); }
+
+        @Override
+        public void draw(Render r, boolean editing) {
+            String pat = (format.is("12h") ? "h:mm" : "HH:mm") + (seconds.on() ? ":ss" : "") + (format.is("12h") ? " a" : "");
+            if (date.on()) pat = "EEE d MMM  " + pat;
+            textBox(r, new java.text.SimpleDateFormat(pat, java.util.Locale.ENGLISH).format(new java.util.Date()));
         }
     }
 

@@ -34,7 +34,7 @@ public abstract class ServerListMixin {
                 break;
             }
         }
-        if (ours == null) ours = new ServerInfo("Cobra Server", COBRA_ADDRESS, ServerInfo.ServerType.OTHER);
+        if (ours == null) ours = new ServerInfo("Abyss Server", COBRA_ADDRESS, ServerInfo.ServerType.OTHER);
         servers.remove(ours);
         servers.add(0, ours);
     }

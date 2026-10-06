@@ -11,8 +11,9 @@ public final class CobraMenuScreen extends Screen {
     // in a world Right Shift opens the HUD editor first (MODS button in the middle goes to the modules)
     private final CobraMenu menu = new CobraMenu(dev.cobra.client.core.Cobra.platform != null && dev.cobra.client.core.Cobra.platform.inWorld());
 
+
     public CobraMenuScreen(Screen parent) {
-        super(Text.literal("Cobra"));
+        super(Text.literal("Abyss"));
         this.parent = parent;
     }
 
@@ -22,7 +23,7 @@ public final class CobraMenuScreen extends Screen {
         if (client.world == null) {
             if (!r.wallpaper(width, height)) renderPanoramaBackground(context, delta);
         } else if (!menu.editingHud() && dev.cobra.client.core.Cobra.get(dev.cobra.client.core.module.Features.Client.class).blur.on()) {
-            // the world behind is blurred by a post effect (see init); a light dim on top
+            // the world behind is blurred by a post effect (see init); a dim on top (a light haze for Panels)
             context.fill(0, 0, width, height, 0x40000000);
         }
         menu.setRender(r);
@@ -104,7 +105,8 @@ public final class CobraMenuScreen extends Screen {
             case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> CobraMenu.KEY_ENTER;
             default -> CobraMenu.KEY_OTHER;
         };
-        if (k == CobraMenu.KEY_OTHER && !menu.typing() && CobraFabric.MENU.matchesKey(input)) {
+        boolean typing = menu.typing();
+        if (k == CobraMenu.KEY_OTHER && !typing && CobraFabric.MENU.matchesKey(input)) {
             close();
             return true;
         }

@@ -86,10 +86,24 @@ public final class Accessories {
     }
 
     /** Is this library entry the one currently worn? */
+    private static final java.util.Map<String, Boolean> WEARING = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Is this library entry the one worn? Comparing the files is only done again when one of them
+     * changed (size or time), not on every redraw: reading files while painting froze the launcher.
+     */
     public static boolean wearing(Path entry, boolean skin) {
         Path cur = skin ? SKIN : CAPE;
         try {
-            return Files.exists(cur) && Files.size(cur) == Files.size(entry) && java.util.Arrays.equals(Files.readAllBytes(cur), Files.readAllBytes(entry));
+            if (!Files.exists(cur) || !Files.exists(entry)) return false;
+            String key = entry + "|" + Files.size(entry) + "|" + Files.getLastModifiedTime(entry).toMillis()
+                    + "|" + Files.size(cur) + "|" + Files.getLastModifiedTime(cur).toMillis();
+            Boolean known = WEARING.get(key);
+            if (known != null) return known;
+            boolean same = Files.size(cur) == Files.size(entry) && java.util.Arrays.equals(Files.readAllBytes(cur), Files.readAllBytes(entry));
+            if (WEARING.size() > 200) WEARING.clear();
+            WEARING.put(key, same);
+            return same;
         } catch (IOException e) {
             return false;
         }
@@ -227,6 +241,9 @@ public final class Accessories {
             return w > 1024 ? scaleNearest(top, 1024, 512) : toArgb(top);
         }
         if (w == h && w == 32) return placeTopLeft(img, 64, 32);                        // 32×32 cape-only
+        if (w >= 64 && w % 64 == 0 && h % (w / 2) == 0 && h / (w / 2) <= 64) {           // animated: frames stacked
+            return w > 512 ? scaleNearest(img, 512, h * 512 / w) : toArgb(img);
+        }
         if (w == 22 && h == 17) return placeTopLeft(img, 64, 32);                       // pre-1.8 cape
         if (w * 22 == h * 46) {                                                         // OptiFine 46×22 × n
             int n = Math.max(1, w / 46);
@@ -285,7 +302,7 @@ public final class Accessories {
             Properties p = new Properties();
             p.setProperty("slim", String.valueOf(Settings.get().skinSlim));
             try (OutputStream o = Files.newOutputStream(dir.resolve("accessories.properties"))) {
-                p.store(o, "Cobra Launcher accessories");
+                p.store(o, "Abyss Launcher accessories");
             }
         } catch (IOException ignored) {}
     }
@@ -362,5 +379,28 @@ public final class Accessories {
             p.load(in);
         } catch (IOException ignored) {}
         return p;
+    }
+
+    /** Abyss's own capes, added to your cape library once (you can forget any of them). */
+    public static final String[] PRESET_CAPES = {"Abyss", "Amethyst", "Ember", "Ocean", "Galaxy", "Frost", "Emerald", "Sakura", "Void",
+            // animated (frames stacked; they move in the launcher and in game)
+            "Aurora", "Lava", "Rainbow", "Starfall", "Electric", "Pulse", "Nebula", "Inferno"};
+    private static final int PRESET_SET = 2;
+
+    public static void installPresetCapes() {
+        dev.cobra.launcher.core.Settings st = dev.cobra.launcher.core.Settings.get();
+        if (st.presetCapes >= PRESET_SET) return;
+        try {
+            Files.createDirectories(LIB_CAPES);
+            for (String n : PRESET_CAPES) {
+                Path dest = LIB_CAPES.resolve(n + ".png");
+                if (Files.exists(dest)) continue;
+                try (var in = Accessories.class.getResourceAsStream("/capes/" + n + ".png")) {
+                    if (in != null) Files.copy(in, dest);
+                }
+            }
+            st.presetCapes = PRESET_SET;
+            st.save();
+        } catch (IOException ignored) {}
     }
 }

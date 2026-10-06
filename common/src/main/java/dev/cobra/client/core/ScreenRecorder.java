@@ -173,8 +173,8 @@ public final class ScreenRecorder {
         w = width;
         h = height;
         if (!dir.isDirectory() && !dir.mkdirs()) throw new Exception("can't make " + dir);
-        file = new File(dir, "Cobra " + new SimpleDateFormat("yyyy-MM-dd HH-mm-ss-SSS").format(new Date()) + ".mp4");
-        String crf = quality.equals("Small file") ? "28" : quality.equals("Balanced") ? "23" : "18";
+        file = new File(dir, "Abyss " + new SimpleDateFormat("yyyy-MM-dd HH-mm-ss-SSS").format(new Date()) + ".mp4");
+        String crf = quality.equals("Small file") ? "28" : quality.equals("Balanced") ? "23" : quality.equals("Ultra") ? "14" : "18";
         String preset = fps >= 120 ? "ultrafast" : fps >= 60 ? "superfast" : "veryfast";
         List<String> cmd = new ArrayList<String>();
         // H.264 MP4 with the best encoder this PC has (the GPU's own when possible)
@@ -184,7 +184,9 @@ public final class ScreenRecorder {
         if (vaapi) add(cmd, "-vaapi_device", vaapiDevice());
         add(cmd, "-f", "rawvideo", "-pix_fmt", "bgra", "-s", w + "x" + h, "-r", String.valueOf(fps), "-i", "-");
         // H.264 needs even dimensions, including native/window mode; VA-API also needs the frames on the GPU
-        String vf = scale.equals("1080p") ? "scale=-2:1080:flags=fast_bilinear" : "pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:black";
+        // never upscale (a 720p window stays 720p, sharp); scale down with a good filter
+        int target = scale.equals("1440p") ? 1440 : scale.equals("1080p") ? 1080 : scale.equals("720p") ? 720 : 0;
+        String vf = target > 0 && h > target ? "scale=-2:" + target + ":flags=lanczos" : "pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:black";
         cmd.add("-vf");
         cmd.add(vaapi ? vf + ",format=nv12,hwupload" : vf);
         cmd.add("-c:v");
@@ -201,7 +203,7 @@ public final class ScreenRecorder {
         } else if (encoder.endsWith("_amf")) {
             add(cmd, "-quality", "speed", "-rc", "cqp", "-qp_i", String.valueOf(q + 2), "-qp_p", String.valueOf(q + 4));
         } else if (encoder.equals("libopenh264")) {
-            add(cmd, "-b:v", q <= 18 ? "16M" : q <= 23 ? "10M" : "6M", "-allow_skip_frames", "1");
+            add(cmd, "-b:v", q <= 14 ? "30M" : q <= 18 ? "16M" : q <= 23 ? "10M" : "6M", "-allow_skip_frames", "1");
         } else {                                   // mpeg4: works with every ffmpeg, still an .mp4
             add(cmd, "-q:v", q <= 18 ? "2" : q <= 23 ? "4" : "6");
         }

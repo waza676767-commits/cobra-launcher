@@ -2,9 +2,35 @@ plugins {
     id 'fabric-loom' version '1.14-SNAPSHOT'
 }
 
+// ---------------------------------------------------------------- which Minecraft version
+// Built once per version: ./gradlew build -Pmc=1.21.10 (default: minecraft_version below).
+// Yarn, Fabric Loader and Fabric API for that version are looked up live, so every build uses
+// valid, current ones; gradle.properties only holds fallbacks for the default version.
+def mc = (project.findProperty('mc') ?: project.minecraft_version).toString()
+def fetchJson = { String url ->
+    def c = new URL(url).openConnection()
+    c.setRequestProperty('User-Agent', 'cobra-client-build')
+    c.connectTimeout = 15000
+    c.readTimeout = 30000
+    new groovy.json.JsonSlurper().parse(c.inputStream)
+}
+def yarn = project.yarn_mappings, loaderV = project.loader_version, api = project.fabric_version
+try {
+    yarn = fetchJson("https://meta.fabricmc.net/v2/versions/yarn/${mc}")[0].version
+    loaderV = fetchJson('https://meta.fabricmc.net/v2/versions/loader').find { it.stable }.version
+    def q = URLEncoder.encode('["' + mc + '"]', 'UTF-8')
+    api = fetchJson("https://api.modrinth.com/v2/project/fabric-api/version?game_versions=${q}&loaders=%5B%22fabric%22%5D")[0].version_number
+} catch (Exception e) {
+    if (mc != project.minecraft_version) throw new GradleException("Couldn't look up Yarn / Fabric API for Minecraft ${mc}: ${e.message}")
+    logger.warn("Offline: using the versions from gradle.properties")
+}
+// small version-specific pieces (e.g. render layers moved in 1.21.11) live in versions/<x>/java
+def compat = mc == '1.21.11' ? '1.21.11' : '1.21.9'
+println "Cobra Client for Minecraft ${mc}: yarn ${yarn}, loader ${loaderV}, Fabric API ${api}, compat ${compat}"
+
 version = project.mod_version
 group = 'dev.cobra'
-base { archivesName = 'cobra-client-1.21.11' }
+base { archivesName = "cobra-client-${mc}" }
 
 loom {
     mixin {
@@ -17,20 +43,22 @@ loom {
 sourceSets {
     main {
         java.srcDir '../common/src/main/java'
+        java.srcDir "versions/${compat}/java"
         resources.srcDir '../common/src/main/resources'
     }
 }
 
 dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    minecraft "com.mojang:minecraft:${mc}"
+    mappings "net.fabricmc:yarn:${yarn}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${loaderV}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${api}"
 }
 
 processResources {
     inputs.property 'version', project.version
-    filesMatching('fabric.mod.json') { expand 'version': project.version }
+    inputs.property 'mc', mc
+    filesMatching('fabric.mod.json') { expand 'version': project.version, 'mc': mc }
 }
 
 tasks.withType(JavaCompile).configureEach {

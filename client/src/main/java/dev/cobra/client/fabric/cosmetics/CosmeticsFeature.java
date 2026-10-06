@@ -6,7 +6,6 @@ import dev.cobra.client.core.module.Features;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.model.ModelPart;
 import net.minecraft.client.render.OverlayTexture;
-import net.minecraft.client.render.RenderLayers;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.command.OrderedRenderCommandQueue;
 import net.minecraft.client.render.entity.feature.FeatureRenderer;
@@ -63,12 +62,15 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
         if (wear.containsKey("bunny")) part(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.bunnyEars(e, vc, light, CosmeticModels.colour(wear.get("bunny")), t));
         if (wear.containsKey("horns")) part(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.horns(e, vc, glow ? BRIGHT : light, CosmeticModels.colour(wear.get("horns"))));
         if (wear.containsKey("hat")) part(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.hat(e, vc, light, wear.get("hat")));
+        if (wear.containsKey("antlers")) part(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.antlers(e, vc, light, CosmeticModels.colour(wear.get("antlers"))));
+        if (wear.containsKey("orbit")) part(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.orbit(e, vc, light, t, CosmeticModels.colour(wear.get("orbit"))));
+        if (wear.containsKey("scarf")) part(matrices, queue, m.body, 1f, (e, vc) -> CosmeticModels.scarf(e, vc, light, t, CosmeticModels.colour(wear.get("scarf"))));
         if (wear.containsKey("glasses")) part(matrices, queue, m.head, 1f, (e, vc) -> CosmeticModels.glasses(e, vc, light, CosmeticModels.colour(wear.get("glasses"))));
         if (wear.containsKey("headphones")) part(matrices, queue, m.head, 1f, (e, vc) -> CosmeticModels.headphones(e, vc, light, CosmeticModels.colour(wear.get("headphones"))));
         if (wear.containsKey("halo")) {
-            boolean red = "red".equals(wear.get("halo"));
-            part(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.halo(e, vc, BRIGHT, t, red, 0.45f, 0xFF));
-            glowPart(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.halo(e, vc, BRIGHT, t, red, 1.1f, Math.round(80 * (glow ? pulse + 0.3f : 0.6f))));
+            int hc = CosmeticModels.haloColour(wear.get("halo"));
+            part(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.halo(e, vc, BRIGHT, t, hc, 0.45f, 0xFF));
+            glowPart(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.halo(e, vc, BRIGHT, t, hc, 1.1f, Math.round(80 * (glow ? pulse + 0.3f : 0.6f))));
         }
         // ---- back
         if (wear.containsKey("wings")) {
@@ -93,7 +95,19 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
             if (ent != null) {
                 boolean self = mc.player != null && ent.getUuid().equals(mc.player.getUuid());
                 Identifier tex = CobraCapes.get(ent.getUuid().toString(), wear.get("cape"), self);
-                if (tex != null) cape(matrices, queue, m.body, light, tex, limbDistance, t);
+                if (tex != null) cape(matrices, queue, m.body, light, tex, limbDistance, t, CobraCapes.frames(tex));
+            }
+        }
+        // ---- Cobra's own particles (always visible, whatever Minecraft's particle setting is)
+        if (wear.containsKey("fx")) {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            Entity pe = mc.world == null ? null : mc.world.getEntityById(state.id);
+            boolean firstPerson = pe != null && mc.player != null && pe.getUuid().equals(mc.player.getUuid()) && mc.options.getPerspective().isFirstPerson();
+            if (pe != null && !firstPerson) {
+                String fx = wear.get("fx"), who = pe.getUuid().toString();
+                boolean w = wear.containsKey("wings"), h = wear.containsKey("halo"), tr = wear.containsKey("trail");
+                float walk = Math.min(1f, limbDistance * 1.5f);
+                glowPart(matrices, queue, m.body, 1f, (e, vc) -> dev.cobra.client.core.cosmetics.CosmeticParticles.render(who, fx, w, h, tr, walk, e, vc));
             }
         }
         // ---- hands and feet
@@ -136,6 +150,7 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
 
     private static Map<String, String> parse(String code) {
         if (code == null || code.isEmpty()) return Map.of();
+        if (PARSED.size() > 256) PARSED.clear();                     // codes change with size etc.: keep it small
         return PARSED.computeIfAbsent(code, k -> {
             Map<String, String> out = new HashMap<>();
             for (String part : k.split(",")) {
@@ -155,14 +170,19 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
      * It leans back as you walk and sways a little.
      */
     private static void cape(MatrixStack matrices, OrderedRenderCommandQueue queue, ModelPart body, int light,
-                             Identifier tex, float limbDistance, float age) {
+                             Identifier tex, float limbDistance, float age, int frames) {
+        // animated capes: one frame every 90 ms, frames stacked top to bottom in the texture
+        int frame = frames <= 1 ? 0 : (int) ((System.currentTimeMillis() / 90) % frames);
+        final int fr = frame, fs = Math.max(1, frames);
         matrices.push();
         body.applyTransform(matrices);
         matrices.scale(1 / 16f, 1 / 16f, 1 / 16f);
         matrices.translate(0, 0, 2.05f);
         float lean = 0.12f + Math.min(1f, limbDistance) * 0.7f + (float) Math.sin(age * 0.09) * 0.04f;
         matrices.multiply(RotationAxis.POSITIVE_X.rotation(lean));
-        queue.submitCustom(matrices, RenderLayers.entityCutoutNoCull(tex), (e, vc) -> {
+        queue.submitCustom(matrices, dev.cobra.client.fabric.compat.Layers.cutout(tex), (e, vc) -> {
+            capeFrame = fr;                                       // (drawn later, so set it here)
+            capeFrames = fs;
             float x0 = -5, x1 = 5, y0 = 0, y1 = 16, z0 = 0, z1 = 1;
             // outside (seen from behind you)
             face(e, vc, light, x1, y0, z1, x0, y0, z1, x0, y1, z1, x1, y1, z1, 1, 1, 11, 17, 0, 0, 1);
@@ -177,12 +197,15 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
         matrices.pop();
     }
 
-    /** One textured face; u/v in pixels of a 64 x 32 cape image. */
+    private static int capeFrame, capeFrames = 1;
+
+    /** One textured face; u/v in pixels of a 64 x 32 cape image (of the current animation frame). */
     private static void face(MatrixStack.Entry e, VertexConsumer vc, int light,
                              float ax, float ay, float az, float bx, float by, float bz,
                              float cx, float cy, float cz, float dx, float dy, float dz,
                              float u0, float v0, float u1, float v1, float nx, float ny, float nz) {
-        float U0 = u0 / 64f, V0 = v0 / 32f, U1 = u1 / 64f, V1 = v1 / 32f;
+        float fh = 32f * capeFrames, off = 32f * capeFrame;
+        float U0 = u0 / 64f, V0 = (v0 + off) / fh, U1 = u1 / 64f, V1 = (v1 + off) / fh;
         vc.vertex(e, ax, ay, az).color(0xFFFFFFFF).texture(U0, V0).overlay(OverlayTexture.DEFAULT_UV).light(light).normal(e, nx, ny, nz);
         vc.vertex(e, bx, by, bz).color(0xFFFFFFFF).texture(U1, V0).overlay(OverlayTexture.DEFAULT_UV).light(light).normal(e, nx, ny, nz);
         vc.vertex(e, cx, cy, cz).color(0xFFFFFFFF).texture(U1, V1).overlay(OverlayTexture.DEFAULT_UV).light(light).normal(e, nx, ny, nz);
@@ -195,12 +218,12 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
 
     /** Draws in a model part's space (1 unit = 1 pixel of the skin, times the cosmetic size). */
     private static void part(MatrixStack matrices, OrderedRenderCommandQueue queue, ModelPart p, float size, Draw d) {
-        submit(matrices, queue, p, size, d, RenderLayers.entityCutoutNoCull(WHITE));   // opaque: no sorting flicker
+        submit(matrices, queue, p, size, d, dev.cobra.client.fabric.compat.Layers.cutout(WHITE));   // opaque: no sorting flicker
     }
 
     /** A soft glowing shell drawn see-through on top (the glow effect). */
     private static void glowPart(MatrixStack matrices, OrderedRenderCommandQueue queue, ModelPart p, float size, Draw d) {
-        submit(matrices, queue, p, size, d, RenderLayers.entityTranslucent(WHITE));
+        submit(matrices, queue, p, size, d, dev.cobra.client.fabric.compat.Layers.translucent(WHITE));
     }
 
     private static void submit(MatrixStack matrices, OrderedRenderCommandQueue queue, ModelPart p, float size, Draw d,

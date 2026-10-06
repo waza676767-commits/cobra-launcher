@@ -130,7 +130,7 @@ public final class Overlays {
         @Override
         public void paint(Graphics g0) {
             Graphics2D g = (Graphics2D) g0.create();
-            g.setComposite(AlphaComposite.SrcOver.derive((float) Math.max(0.01, fade.get())));
+            g.setComposite(Theme.fade(Math.max(0.01, fade.get())));
             super.paint(g);
             g.dispose();
         }
@@ -376,6 +376,12 @@ public final class Overlays {
                         error = ex.getMessage();
                         set(State.ERROR);
                     });
+                } catch (RuntimeException ex) {                // anything unexpected: show it, never hang on "loading"
+                    if (cancelled) return;
+                    SwingUtilities.invokeLater(() -> {
+                        error = "Sign-in failed (" + ex.getClass().getSimpleName() + "). Check your internet and try again.";
+                        set(State.ERROR);
+                    });
                 }
             }, name);
             t.setDaemon(true);
@@ -456,7 +462,7 @@ public final class Overlays {
                     yy = drawWrapped(g, "2. You'll land on a blank page. Copy its address (Ctrl+L, then Ctrl+C).",
                             c.x + 32, yy + 6, c.width - 64, Theme.SOFT);
                     g.setFont(small);
-                    drawWrapped(g, "Cobra picks it up from your clipboard by itself" + dots + " or paste it below.",
+                    drawWrapped(g, "Abyss picks it up from your clipboard by itself" + dots + " or paste it below.",
                             c.x + 32, yy + 8, c.width - 64, Theme.MUTED);
                 }
                 case FINISHING -> Theme.left(g, "Signing in to Minecraft" + dots, body, Theme.SOFT, c.x + 32, c.y + 100, 24);
@@ -477,16 +483,20 @@ public final class Overlays {
         private boolean isNew;
         private Consumer<Profiles.Profile> onDone;
         private final Components.Input name = new Components.Input("", "Profile name", null);
-        private final Components.Segmented version;
+        private final Components.Button version;
+        private GameVersion chosen = GameVersion.MODERN;
         private final Components.Button save, delete, cancel, pick, clearPic;
         private java.nio.file.Path pendingImage;
         private boolean clearImage;
         private java.awt.image.BufferedImage preview;
 
         public ProfileEditor() {
-            java.util.List<String> vs = new java.util.ArrayList<>();
-            for (GameVersion v : GameVersion.values()) vs.add(v.id);
-            version = new Components.Segmented(vs, 0, i -> {});
+            version = new Components.Button(GameVersion.MODERN.id, "chevron-down", Components.Variant.GHOST, null);
+            version.radius(12);
+            version.onClick(() -> VersionMenu.open(version, 300, chosen, v -> {
+                chosen = v;
+                version.setText(v.id + (v.hasCobra() ? "  ·  Abyss Client" : ""));
+            }));
             save = new Components.Button("Save", null, Components.Variant.PRIMARY, this::save);
             save.radius(14).font(Theme.font(Theme.MEDIUM, 14f));
             delete = new Components.Button("Delete profile", "trash", Components.Variant.DANGER, this::delete);
@@ -515,7 +525,8 @@ public final class Overlays {
             preview = p == null ? null : Profiles.icon(p);
             name.setText(p == null ? "" : p.name);
             GameVersion gv = p == null ? GameVersion.MODERN : p.gameVersion();
-            version.select(gv.ordinal());
+            chosen = gv;
+            version.setText(gv.id + (gv.hasCobra() ? "  ·  Abyss Client" : ""));
             delete.setVisible(!isNew && Profiles.all().size() > 1 && (p == null || !p.locked()));
             doLayout();
             appear();
@@ -534,12 +545,12 @@ public final class Overlays {
                 preview = img.getSubimage((img.getWidth() - side) / 2, (img.getHeight() - side) / 2, side, side);
                 repaint();
             } catch (Exception e) {
-                MainWindow.get().toast("That file isn't a picture Cobra can read (PNG, JPG, GIF, BMP).");
+                MainWindow.get().toast("That file isn't a picture Abyss can read (PNG, JPG, GIF, BMP).");
             }
         }
 
         private void save() {
-            GameVersion gv = GameVersion.values()[Math.max(0, versionIndex())];
+            GameVersion gv = chosen;
             Profiles.Profile p = editing;
             if (p == null) p = Profiles.create(name.getText(), gv);
             else {
@@ -559,9 +570,6 @@ public final class Overlays {
             });
         }
 
-        private int versionIndex() {
-            return version.selected();
-        }
 
         private void delete() {
             Profiles.Profile p = editing;
@@ -812,7 +820,7 @@ public final class Overlays {
         @Override
         public void paint(Graphics g0) {
             Graphics2D g = (Graphics2D) g0.create();
-            g.setComposite(AlphaComposite.SrcOver.derive((float) Math.max(0.01, fade.get())));
+            g.setComposite(Theme.fade(Math.max(0.01, fade.get())));
             g.translate(0, (1 - fade.get()) * 10);
             super.paint(g);
             g.dispose();

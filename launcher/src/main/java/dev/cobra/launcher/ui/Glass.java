@@ -212,7 +212,7 @@ public final class Glass {
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         g.drawImage(cur, 0, 0, w, h, null);
         g.dispose();
-        if (!frosted()) liquidize(((java.awt.image.DataBufferInt) out.getRaster().getDataBuffer()).getData(), w, h);
+        if (!frosted() && !Wallpaper.animated()) liquidize(((java.awt.image.DataBufferInt) out.getRaster().getDataBuffer()).getData(), w, h);
         ring = (ring + 1) % RING.length;
         src = new Source(((java.awt.image.DataBufferInt) out.getRaster().getDataBuffer()).getData(), w, h, ++stampGen);
         stamp++;
