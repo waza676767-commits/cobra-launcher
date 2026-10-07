@@ -446,26 +446,32 @@ public final class HudModules {
     // ---------------------------------------------------------------- Spotify
 
     /**
-     * Spotify: what's playing (song, artist, progress) in a corner, with keys for play / pause,
-     * next and previous. It talks to the Spotify app on your PC, no login needed: on Linux through
-     * playerctl (MPRIS), on Windows through the Spotify window and the media keys.
+     * Spotify: a little player like on a phone: the album cover, song and artist, a progress bar
+     * with the times, and the controls, plus keys for play / pause, next and previous. It talks
+     * to the Spotify app on your PC with no login and nothing to install: on Linux straight over
+     * D-Bus (MPRIS, the same thing playerctl uses), on Windows through the Spotify window and the
+     * media keys.
      */
     public static final class Spotify extends HudModule {
         private final Setting.Bind playPause = add(new Setting.Bind("playpause", "Play / pause", -1, null));
         private final Setting.Bind next = add(new Setting.Bind("next", "Next song", -1, null));
         private final Setting.Bind prev = add(new Setting.Bind("prev", "Previous song", -1, null));
-        private final Setting.Bool progress = add(new Setting.Bool("progress", "Progress bar", true));
+        private final Setting.Bool art = add(new Setting.Bool("art", "Album cover", true));
         private final Setting.Bool hideIdle = add(new Setting.Bool("hideidle", "Hide when nothing plays", false));
 
-        private volatile String title = "", artist = "", status = "", problem = null;
+        private volatile String title = "", artist = "", status = "", problem = null, artUrl = "";
+        private volatile byte[] artPng;
         private volatile long posMs, lenMs, polledAt;
         private boolean ppDown, nDown, pDown;
         private long nextPoll;
         private Thread poller;
+        private String artFor = "";
 
-        public Spotify() { super("spotify", "Spotify", "What's playing on Spotify, with play / pause / skip keys", false, 0.70f, 0.02f); }
+        public Spotify() { super("spotify", "Spotify", "A little Spotify player in a corner, with play / pause / skip keys", false, 0.70f, 0.02f); }
 
         private static boolean windows() { return System.getProperty("os.name", "").toLowerCase().contains("win"); }
+
+        private static final String DEST = "org.mpris.MediaPlayer2.spotify", PATH = "/org/mpris/MediaPlayer2";
 
         @Override
         public void onTick() {
@@ -480,9 +486,9 @@ public final class HudModules {
             boolean a = playPause.code() >= 0 && p().rawKeyDown(playPause.code());
             boolean b = next.code() >= 0 && p().rawKeyDown(next.code());
             boolean c = prev.code() >= 0 && p().rawKeyDown(prev.code());
-            if (a && !ppDown) control("play-pause", 0xB3);
-            if (b && !nDown) control("next", 0xB0);
-            if (c && !pDown) control("previous", 0xB1);
+            if (a && !ppDown) control("PlayPause", 0xB3);
+            if (b && !nDown) control("Next", 0xB0);
+            if (c && !pDown) control("Previous", 0xB1);
             ppDown = a;
             nDown = b;
             pDown = c;
@@ -495,66 +501,103 @@ public final class HudModules {
                         Spotify.run("powershell", "-NoProfile", "-Command",
                                 "$s='[DllImport(\"user32.dll\")] public static extern void keybd_event(byte b,byte s,uint f,System.UIntPtr e);';"
                                         + "$k=Add-Type -MemberDefinition $s -Name K -Namespace W -PassThru;$k::keybd_event(" + vk + ",0,0,[UIntPtr]::Zero);$k::keybd_event(" + vk + ",0,2,[UIntPtr]::Zero)");
-                    } else {
-                        Spotify.run("playerctl", "-p", "spotify", mpris);
+                    } else if (Spotify.run("gdbus", "call", "--session", "--dest", DEST, "--object-path", PATH, "--method", "org.mpris.MediaPlayer2.Player." + mpris) == null) {
+                        Spotify.run("playerctl", "-p", "spotify", mpris.equals("PlayPause") ? "play-pause" : mpris.toLowerCase());
                     }
-                    nextPoll = 0;                                    // show the change right away
+                    nextPoll = 0;
                 }
             }, "abyss-spotify-key");
             t.setDaemon(true);
             t.start();
         }
 
+        private static String prop(String name) {
+            return run("gdbus", "call", "--session", "--dest", DEST, "--object-path", PATH, "--method",
+                    "org.freedesktop.DBus.Properties.Get", "org.mpris.MediaPlayer2.Player", name);
+        }
+
+        private static String pick(String s, String pattern) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile(pattern).matcher(s);
+            return m.find() ? m.group(1) : "";
+        }
+
         private void poll() {
             try {
                 if (windows()) {
-                    String out = run("tasklist", "/v", "/fo", "csv", "/nh", "/fi", "imagename eq Spotify.exe");
-                    String found = null;
-                    for (String line : out.split("\\r?\\n")) {
-                        String[] f = line.split("\",\"");
-                        if (f.length < 9) continue;
-                        String wt = f[f.length - 1].replace("\"", "").trim();
-                        if (wt.contains(" - ")) found = wt;
-                        else if (found == null && (wt.startsWith("Spotify"))) found = "";
-                    }
-                    if (found == null) {
-                        status = "";
-                        problem = "Spotify isn't running";
-                    } else if (found.isEmpty()) {
-                        status = "Paused";
-                        problem = null;
-                    } else {
-                        int i = found.indexOf(" - ");
-                        artist = found.substring(0, i);
-                        title = found.substring(i + 3);
-                        status = "Playing";
-                        problem = null;
-                    }
-                    lenMs = 0;
-                } else {
-                    String out = run("playerctl", "-p", "spotify", "metadata", "--format",
-                            "{{status}}\t{{title}}\t{{artist}}\t{{position}}\t{{mpris:length}}");
-                    if (out == null) {
-                        problem = "Install playerctl to see Spotify";
-                        status = "";
-                        return;
-                    }
-                    String[] f = out.trim().split("\t", -1);
-                    if (f.length < 5 || f[0].isEmpty()) {
-                        problem = "Spotify isn't running";
-                        status = "";
-                        return;
-                    }
-                    status = f[0];
-                    title = f[1];
-                    artist = f[2];
-                    posMs = parse(f[3]) / 1000;
-                    lenMs = parse(f[4]) / 1000;
-                    polledAt = System.currentTimeMillis();
-                    problem = null;
+                    pollWindows();
+                    return;
+                }
+                String st = prop("PlaybackStatus");
+                if (st == null || !st.contains("'")) {
+                    status = "";
+                    problem = "Spotify isn't running";
+                    return;
+                }
+                status = pick(st, "'(\\w+)'");
+                String md = prop("Metadata");
+                if (md == null) md = "";
+                title = unescape(pick(md, "'xesam:title': <'((?:[^'\\\\]|\\\\.)*)'>"));
+                artist = unescape(pick(md, "'xesam:artist': <\\['((?:[^'\\\\]|\\\\.)*)'"));
+                String len = pick(md, "'mpris:length': <(?:uint64|int64) (\\d+)>");
+                lenMs = len.isEmpty() ? 0 : Long.parseLong(len) / 1000;
+                String url = pick(md, "'mpris:artUrl': <'([^']*)'>");
+                String pos = prop("Position");
+                posMs = pos == null ? 0 : parse(pick(pos, "(?:int64|uint64) (\\d+)")) / 1000;
+                polledAt = System.currentTimeMillis();
+                problem = null;
+                if (!url.equals(artUrl)) {                           // a new song: fetch its cover
+                    artUrl = url;
+                    artPng = url.startsWith("http") ? download(url) : null;
                 }
             } catch (Exception e) {
                 problem = "Can't reach Spotify";
+            }
+        }
+
+        private void pollWindows() {
+            String out = run("tasklist", "/v", "/fo", "csv", "/nh", "/fi", "imagename eq Spotify.exe");
+            String found = null;
+            if (out != null) {
+                for (String line : out.split("\\r?\\n")) {
+                    String[] f = line.split("\",\"");
+                    if (f.length < 9) continue;
+                    String wt = f[f.length - 1].replace("\"", "").trim();
+                    if (wt.contains(" - ")) found = wt;
+                    else if (found == null && wt.startsWith("Spotify")) found = "";
+                }
+            }
+            if (found == null) {
+                status = "";
+                problem = "Spotify isn't running";
+            } else if (found.isEmpty()) {
+                status = "Paused";
+                problem = null;
+            } else {
+                int i = found.indexOf(" - ");
+                artist = found.substring(0, i);
+                title = found.substring(i + 3);
+                status = "Playing";
+                problem = null;
+            }
+            lenMs = 0;
+        }
+
+        private static String unescape(String s) { return s.replace("\\'", "'").replace("\\\\", "\\"); }
+
+        private static byte[] download(String url) {
+            try {
+                java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                c.setConnectTimeout(4000);
+                c.setReadTimeout(6000);
+                java.io.InputStream in = c.getInputStream();
+                java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0 && b.size() < 2_000_000) b.write(buf, 0, n);
+                in.close();
+                return b.toByteArray();
+            } catch (Exception e) {
+                return null;
             }
         }
 
@@ -566,8 +609,8 @@ public final class HudModules {
             }
         }
 
-        /** Runs a command; its output, or null if the program isn't there. */
-        private static String run(String... cmd) {
+        /** Runs a command; its output, or null if it isn't there or failed. */
+        static String run(String... cmd) {
             try {
                 Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
                 java.io.InputStream in = p.getInputStream();
@@ -576,7 +619,7 @@ public final class HudModules {
                 int n;
                 while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
                 p.waitFor();
-                return p.exitValue() == 0 || b.size() > 0 ? b.toString("UTF-8") : null;
+                return p.exitValue() == 0 ? b.toString("UTF-8") : null;
             } catch (Exception e) {
                 return null;
             }
@@ -590,10 +633,13 @@ public final class HudModules {
         @Override
         public void draw(Render r, boolean editing) {
             String t = title, a = artist, st = status;
+            long len = lenMs, pos = posMs;
             if (editing && (t.isEmpty() || problem != null)) {
                 t = "Song title";
                 a = "Artist";
                 st = "Playing";
+                len = 200_000;
+                pos = 61_000;
             }
             if (!editing && (problem != null || t.isEmpty())) {
                 if (hideIdle.on() || problem == null) {
@@ -603,25 +649,58 @@ public final class HudModules {
                 textBox(r, problem);
                 return;
             }
-            int tw = Math.max(r.textWidth(t), r.textWidth(a)) + 32;
-            w = Math.max(120, Math.min(220, tw));
-            boolean bar = progress.on() && lenMs > 0;
-            h = bar ? 40 : 30;
-            bg(r, 0, 0, w, h);
-            // a little "playing" mark: three bars, or two for paused
             boolean playing = st.equalsIgnoreCase("Playing");
-            for (int i = 0; i < 3; i++) {
-                double tt = System.currentTimeMillis() / 160.0 + i;
-                int bh = playing ? 3 + (int) (5 * Math.abs(Math.sin(tt))) : 3;
-                r.rect(6 + i * 3, 13 - bh / 2, 2, bh, 0xFF1DB954);
+            if (playing && !editing && len > 0) pos = Math.min(len, pos + System.currentTimeMillis() - polledAt);
+            boolean cover = art.on();
+            int cs = cover ? 46 : 0;                                 // the cover, a rounded square on the left
+            w = 210;
+            h = 58;
+            // the card: dark and rounded like the phone's player
+            dev.cobra.client.core.ui.Draw.round(r, 0, 0, w, h, 8, 0xE6141416);
+            dev.cobra.client.core.ui.Draw.round(r, 0, 0, w, 1, 0, 0x22FFFFFF);
+            int x0 = 6;
+            if (cover) {
+                if (artPng != null && !editing) {
+                    if (!artUrl.equals(artFor)) artFor = artUrl;
+                    r.imagePng(artUrl, artPng, 6, 6, cs, cs);
+                } else {
+                    dev.cobra.client.core.ui.Draw.round(r, 6, 6, cs, cs, 5, 0xFF2C2C2E);
+                    r.texture("icon/signal", 6 + cs / 2f - 8, 6 + cs / 2f - 8, 16, 16, 0xFF8E8E93);
+                }
+                x0 = 6 + cs + 8;
             }
-            r.text(clip(r, t, w - 24), 18, 5, color.argb(), textShadow());
-            r.text(clip(r, a, w - 24), 18, 16, 0xFF9A9B9F, textShadow());
-            if (bar) {
-                long pos = posMs + (playing ? System.currentTimeMillis() - polledAt : 0);
-                float f = Math.max(0, Math.min(1, pos / (float) lenMs));
-                r.rect(6, 31, w - 12, 2, 0x55FFFFFF);
-                r.rect(6, 31, Math.round((w - 12) * f), 2, 0xFF1DB954);
+            int tw = w - x0 - 6;
+            r.text(clip(r, t, tw), x0, 7, 0xFFFFFFFF, false);
+            r.text(clip(r, a, tw), x0, 17, 0xFF8E8E93, false);
+            // progress bar with the times
+            if (len > 0) {
+                float f = Math.max(0, Math.min(1, pos / (float) len));
+                dev.cobra.client.core.ui.Draw.round(r, x0, 29, tw, 2, 1, 0x40FFFFFF);
+                dev.cobra.client.core.ui.Draw.round(r, x0, 29, Math.max(2, Math.round(tw * f)), 2, 1, 0xFFE5E5EA);
+                dev.cobra.client.core.ui.Draw.scaledText(r, time(pos), x0, 33, 0.6f, 0xFF8E8E93, false);
+                String rem = "-" + time(len - pos);
+                dev.cobra.client.core.ui.Draw.scaledText(r, rem, x0 + tw - r.textWidth(rem) * 0.6f, 33, 0.6f, 0xFF8E8E93, false);
+            }
+            // controls: previous, play / pause, next
+            int cy = 45, cx = x0 + tw / 2;
+            skip(r, cx - 22, cy, -1);
+            if (playing) {
+                r.rect(cx - 3, cy - 4, 2, 8, 0xFFFFFFFF);
+                r.rect(cx + 1, cy - 4, 2, 8, 0xFFFFFFFF);
+            } else {
+                for (int i = 0; i < 6; i++) r.rect(cx - 2 + i, cy - 4 + i * 2 / 3, 1, 8 - i * 4 / 3, 0xFFFFFFFF);
+            }
+            skip(r, cx + 16, cy, 1);
+        }
+
+        /** Two little triangles (◀◀ / ▶▶). */
+        private static void skip(Render r, int x, int cy, int dir) {
+            for (int k = 0; k < 2; k++) {
+                int ox = x + k * 4;
+                for (int i = 0; i < 4; i++) {
+                    int col = dir > 0 ? ox + i : ox + 3 - i;
+                    r.rect(col, cy - 3 + i * 3 / 4, 1, 6 - i * 3 / 2, 0xFFFFFFFF);
+                }
             }
         }
 

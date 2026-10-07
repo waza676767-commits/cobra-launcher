@@ -64,6 +64,9 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
         if (wear.containsKey("hat")) part(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.hat(e, vc, light, wear.get("hat")));
         if (wear.containsKey("antlers")) part(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.antlers(e, vc, light, CosmeticModels.colour(wear.get("antlers"))));
         if (wear.containsKey("orbit")) part(matrices, queue, m.head, k, (e, vc) -> CosmeticModels.orbit(e, vc, light, t, CosmeticModels.colour(wear.get("orbit"))));
+        if (wear.containsKey("flowers")) part(matrices, queue, m.head, 1f, (e, vc) -> CosmeticModels.flowers(e, vc, light, CosmeticModels.colour(wear.get("flowers"))));
+        if (wear.containsKey("bowtie")) part(matrices, queue, m.body, 1f, (e, vc) -> CosmeticModels.bowtie(e, vc, light, CosmeticModels.colour(wear.get("bowtie"))));
+        if (wear.containsKey("spikes")) part(matrices, queue, m.body, k, (e, vc) -> CosmeticModels.spikes(e, vc, light, CosmeticModels.colour(wear.get("spikes"))));
         if (wear.containsKey("scarf")) part(matrices, queue, m.body, 1f, (e, vc) -> CosmeticModels.scarf(e, vc, light, t, CosmeticModels.colour(wear.get("scarf"))));
         if (wear.containsKey("glasses")) part(matrices, queue, m.head, 1f, (e, vc) -> CosmeticModels.glasses(e, vc, light, CosmeticModels.colour(wear.get("glasses"))));
         if (wear.containsKey("headphones")) part(matrices, queue, m.head, 1f, (e, vc) -> CosmeticModels.headphones(e, vc, light, CosmeticModels.colour(wear.get("headphones"))));
@@ -87,16 +90,6 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
         if (wear.containsKey("katana")) {
             part(matrices, queue, m.body, k, (e, vc) -> CosmeticModels.katana(e, vc, light));
             if (glow) glowPart(matrices, queue, m.body, k, (e, vc) -> CosmeticModels.katanaGlow(e, vc, pulse));
-        }
-        // ---- your imported cape (Cobra players only)
-        if (wear.containsKey("cape")) {
-            MinecraftClient mc = MinecraftClient.getInstance();
-            Entity ent = mc.world == null ? null : mc.world.getEntityById(state.id);
-            if (ent != null) {
-                boolean self = mc.player != null && ent.getUuid().equals(mc.player.getUuid());
-                Identifier tex = CobraCapes.get(ent.getUuid().toString(), wear.get("cape"), self);
-                if (tex != null) cape(matrices, queue, m.body, light, tex, limbDistance, t, CobraCapes.frames(tex));
-            }
         }
         // ---- Cobra's own particles (always visible, whatever Minecraft's particle setting is)
         if (wear.containsKey("fx")) {

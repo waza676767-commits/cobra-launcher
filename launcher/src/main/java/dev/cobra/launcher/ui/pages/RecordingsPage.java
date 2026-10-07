@@ -32,7 +32,66 @@ public final class RecordingsPage extends Page {
             MainWindow.openUri(DIR.toUri().toString());
         });
         add(openFolder);
+        setup = new Components.Button("Set up smooth recording", "camera", Components.Variant.PRIMARY, this::setUp);
+        add(setup);
         add(scroll);
+        checkSetup();
+    }
+
+    private final Components.Button setup;
+    private volatile Boolean smooth;            // null = still checking
+
+    private static boolean windows() { return System.getProperty("os.name", "").toLowerCase().contains("win"); }
+
+    /** Is the smooth (graphics card) recorder there? Linux: gpu-screen-recorder. Windows: ffmpeg. */
+    private void checkSetup() {
+        new Thread(() -> {
+            boolean ok;
+            try {
+                Process p = new ProcessBuilder(windows() ? new String[]{"ffmpeg", "-version"} : new String[]{"gpu-screen-recorder", "--help"})
+                        .redirectErrorStream(true).start();
+                p.getInputStream().readAllBytes();
+                p.waitFor();
+                ok = true;
+            } catch (Exception e) {
+                ok = false;
+            }
+            smooth = ok;
+            SwingUtilities.invokeLater(() -> {
+                setup.setVisible(!smooth);
+                doLayout();
+                repaint();
+            });
+        }, "abyss-rec-check").start();
+    }
+
+    /** Installs the smooth recorder (asks for your password on Linux; winget on Windows). */
+    private void setUp() {
+        setup.setEnabled(false);
+        MainWindow.get().toast("Installing the smooth recorder… (this can take a minute)");
+        new Thread(() -> {
+            String msg;
+            try {
+                String[] cmd = windows()
+                        ? new String[]{"winget", "install", "--id", "Gyan.FFmpeg", "-e", "--accept-source-agreements", "--accept-package-agreements"}
+                        : new String[]{"pkexec", "dnf", "install", "-y", "gpu-screen-recorder"};
+                Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+                String out = new String(p.getInputStream().readAllBytes());
+                int code = p.waitFor();
+                msg = code == 0 ? "Smooth recording is ready: restart Minecraft and press your record key."
+                        : windows() ? "Couldn't install ffmpeg automatically. Install it from gyan.dev/ffmpeg and try again."
+                        : "Couldn't install it automatically. In a terminal:  sudo dnf install gpu-screen-recorder   (or from Flathub: com.dec05eba.gpu_screen_recorder)";
+                if (code != 0 && out.contains("No match")) msg = "Your Fedora doesn't have gpu-screen-recorder in its repos yet: enable RPM Fusion, or install it from Flathub (com.dec05eba.gpu_screen_recorder).";
+            } catch (Exception e) {
+                msg = "Couldn't run the installer: " + e.getMessage();
+            }
+            String m = msg;
+            SwingUtilities.invokeLater(() -> {
+                setup.setEnabled(true);
+                MainWindow.get().toast(m);
+                checkSetup();
+            });
+        }, "abyss-rec-setup").start();
     }
 
     @Override public String title() { return "Recordings"; }
@@ -81,6 +140,8 @@ public final class RecordingsPage extends Page {
         int w = getWidth(), h = getHeight();
         Dimension od = openFolder.getPreferredSize();
         openFolder.setBounds(w - od.width, 6, od.width, 40);
+        Dimension sd = setup.getPreferredSize();
+        setup.setBounds(w - od.width - 10 - sd.width, 6, sd.width, 40);
         scroll.setBounds(0, 80, w + 10, h - 80);
     }
 
@@ -90,6 +151,11 @@ public final class RecordingsPage extends Page {
         Theme.left(g, title(), Theme.font(Theme.REGULAR, 34f), Theme.TEXT, 0, 0, 42);
         Theme.left(g, "Screen Recorder in game: turn it on in Abyss's modules, then F9 start, F10 pause, F12 stop (changeable).",
                 Theme.font(Theme.REGULAR, 13.5f), Theme.SOFT, 0, 44, 22);
+        if (smooth != null) {
+            String st = smooth ? "Smooth recording ready (your graphics card records: full quality, no FPS loss)"
+                    : "Not set up: recordings use the game's frames, which is slower. Press Set up smooth recording.";
+            Theme.left(g, st, Theme.font(Theme.MEDIUM, 12f), smooth ? new Color(0x34C759) : new Color(0xFFB340), 0, 62, 18);
+        }
         g.dispose();
     }
 

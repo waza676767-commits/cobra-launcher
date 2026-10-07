@@ -221,4 +221,40 @@ public final class FabricRender implements Render {
             texture("icon/user", x, y, size, size, 0xFFFFFFFF);
         }
     }
+
+    // ------------------------------------------------------------------ pictures (album art)
+
+    private static final java.util.Map<String, Identifier> PICTURES = new java.util.HashMap<>();
+    private static final java.util.Map<Identifier, int[]> PICTURE_SIZE = new java.util.HashMap<>();
+
+    @Override
+    public void imagePng(String key, byte[] png, float x, float y, float w, float h) {
+        if (png == null || png.length == 0) return;
+        Identifier id = PICTURES.get(key);
+        if (id == null) {
+            try {
+                net.minecraft.client.texture.NativeImage img = net.minecraft.client.texture.NativeImage.read(new java.io.ByteArrayInputStream(png));
+                id = Identifier.of("cobra", "pictures/" + Integer.toHexString(key.hashCode()) + "_" + PICTURES.size());
+                MinecraftClient.getInstance().getTextureManager().registerTexture(id, new net.minecraft.client.texture.NativeImageBackedTexture(() -> "abyss picture", img));
+                PICTURE_SIZE.put(id, new int[]{img.getWidth(), img.getHeight()});
+                if (PICTURES.size() > 24) {                                  // keep only recent ones
+                    for (Identifier old : PICTURES.values()) MinecraftClient.getInstance().getTextureManager().destroyTexture(old);
+                    PICTURES.clear();
+                    PICTURE_SIZE.clear();
+                    PICTURE_SIZE.put(id, new int[]{img.getWidth(), img.getHeight()});
+                }
+                PICTURES.put(key, id);
+            } catch (Exception e) {
+                PICTURES.put(key, Identifier.of("cobra", "textures/gui/logo.png"));
+                return;
+            }
+        }
+        int[] sz = PICTURE_SIZE.get(id);
+        if (sz == null) return;
+        ctx.getMatrices().pushMatrix();
+        ctx.getMatrices().translate(x, y);
+        ctx.getMatrices().scale(w / sz[0], h / sz[1]);
+        ctx.drawTexture(net.minecraft.client.gl.RenderPipelines.GUI_TEXTURED, id, 0, 0, 0f, 0f, sz[0], sz[1], sz[0], sz[1], 0xFFFFFFFF);
+        ctx.getMatrices().popMatrix();
+    }
 }

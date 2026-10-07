@@ -199,7 +199,7 @@ public final class Glass {
             cur = scaled(cur, cur.getWidth() / 2, cur.getHeight() / 2, !first);   // first halving: nearest (fast, blurred later)
             first = false;
         }
-        if (cur != base) cur = boxBlur(cur);
+        if (cur != base) cur = boxBlur(boxBlur(cur));                 // two soft passes: smooth, no blockiness
         // up: doublings (a single big bilinear jump looks blocky), last step straight into the ring
         while (cur.getWidth() * 2 < w) cur = scaled(cur, cur.getWidth() * 2, cur.getHeight() * 2, true);
         BufferedImage out = RING[ring];
@@ -213,6 +213,7 @@ public final class Glass {
         g.drawImage(cur, 0, 0, w, h, null);
         g.dispose();
         if (!frosted() && !Wallpaper.animated()) liquidize(((java.awt.image.DataBufferInt) out.getRaster().getDataBuffer()).getData(), w, h);
+        else finish(((java.awt.image.DataBufferInt) out.getRaster().getDataBuffer()).getData(), w, h);
         ring = (ring + 1) % RING.length;
         src = new Source(((java.awt.image.DataBufferInt) out.getRaster().getDataBuffer()).getData(), w, h, ++stampGen);
         stamp++;
@@ -297,12 +298,53 @@ public final class Glass {
         return out;
     }
 
+    /** A small gaussian (5x5): softer and rounder than a box, so the frost has no square edges. */
     private static BufferedImage boxBlur(BufferedImage img) {
-        float[] k = new float[9];
-        java.util.Arrays.fill(k, 1f / 9f);
+        float[] g1 = {1, 4, 6, 4, 1};
+        float[] k = new float[25];
+        for (int y = 0; y < 5; y++) for (int x = 0; x < 5; x++) k[y * 5 + x] = g1[x] * g1[y] / 256f;
+        BufferedImage src = img.getType() == BufferedImage.TYPE_INT_RGB ? img : copyRgb(img);
         BufferedImage out = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_INT_RGB);
-        new java.awt.image.ConvolveOp(new java.awt.image.Kernel(3, 3, k), java.awt.image.ConvolveOp.EDGE_NO_OP, null).filter(img, out);
+        new java.awt.image.ConvolveOp(new java.awt.image.Kernel(5, 5, k), java.awt.image.ConvolveOp.EDGE_NO_OP, null).filter(src, out);
         return out;
+    }
+
+    private static BufferedImage copyRgb(BufferedImage img) {
+        BufferedImage o = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = o.createGraphics();
+        g.drawImage(img, 0, 0, null);
+        g.dispose();
+        return o;
+    }
+
+    private static int[] grain;
+
+    /**
+     * The finish on frosted glass: a touch more colour (vibrancy, like macOS) and a very fine grain
+     * so smooth gradients never show bands.
+     */
+    private static void finish(int[] px, int w, int h) {
+        if (grain == null) {
+            java.util.Random r = new java.util.Random(7);
+            grain = new int[64 * 64];
+            for (int i = 0; i < grain.length; i++) grain[i] = r.nextInt(7) - 3;
+        }
+        for (int y = 0; y < h; y++) {
+            int row = y * w, gr = (y & 63) * 64;
+            for (int x = 0; x < w; x++) {
+                int c = px[row + x];
+                int r = c >> 16 & 255, g = c >> 8 & 255, b = c & 255;
+                int l = (r * 77 + g * 151 + b * 28) >> 8;
+                int n = grain[gr + (x & 63)];
+                r = l + ((r - l) * 9 >> 3) + n;                   // saturation x1.125
+                g = l + ((g - l) * 9 >> 3) + n;
+                b = l + ((b - l) * 9 >> 3) + n;
+                r = r < 0 ? 0 : r > 255 ? 255 : r;
+                g = g < 0 ? 0 : g > 255 ? 255 : g;
+                b = b < 0 ? 0 : b > 255 ? 255 : b;
+                px[row + x] = 0xFF000000 | r << 16 | g << 8 | b;
+            }
+        }
     }
 
     /** No wallpaper: a calm charcoal (or ivory) field with soft light, so the glass has something to bend. */

@@ -72,15 +72,9 @@ public final class Profiles {
             } catch (Exception ignored) {}
             if (list == null) list = new ArrayList<>();
             migrateVersions();
-            if (list.stream().noneMatch(Profile::locked)) {   // the built-in FPS Boost profile, always there
-                Profile f = new Profile();
-                f.id = FPS_ID;
-                f.name = "FPS Boost";
-                f.created = System.currentTimeMillis();
-                list.add(f);
-                save();
-            }
-            if (list.stream().noneMatch(x -> !x.locked())) {
+            // the old built-in FPS Boost profile (Sodium & co.) is gone; its folder stays on disk
+            if (list.removeIf(Profile::locked)) save();
+            if (list.isEmpty()) {
                 // "default" maps onto the original instances/<version> folders, so nothing gets lost
                 Profile p = new Profile();
                 p.id = "default";

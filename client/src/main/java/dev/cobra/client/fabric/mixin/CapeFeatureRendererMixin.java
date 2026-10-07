@@ -10,22 +10,33 @@ import net.minecraft.client.render.entity.state.PlayerEntityRenderState;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.player.SkinTextures;
+import net.minecraft.util.AssetInfo;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** A player wearing a Cobra cape doesn't also get the normal cape drawn under it. */
+import java.util.Optional;
+
+/**
+ * An Abyss cape replaces the player's cape texture right before Minecraft draws the cape, so it
+ * gets the real cape model and physics (and nothing clips into the player).
+ */
 @Mixin(CapeFeatureRenderer.class)
 public abstract class CapeFeatureRendererMixin {
     @Inject(method = "render(Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;ILnet/minecraft/client/render/entity/state/PlayerEntityRenderState;FF)V",
-            at = @At("HEAD"), cancellable = true, require = 0)
+            at = @At("HEAD"), require = 0)
     private void cobra$ownCape(MatrixStack matrices, OrderedRenderCommandQueue queue, int light, PlayerEntityRenderState state,
-                               float limbAngle, float limbDistance, CallbackInfo ci) {
+                               float a, float b, CallbackInfo ci) {
         if (Cobra.platform == null) return;
         MinecraftClient mc = MinecraftClient.getInstance();
         Entity e = mc.world == null ? null : mc.world.getEntityById(state.id);
         if (!(e instanceof PlayerEntity p)) return;
-        if (CobraCapes.has(p.getUuid().toString(), CosmeticsFeature.wearingOf(p))) ci.cancel();
+        boolean self = mc.player != null && p.getUuid().equals(mc.player.getUuid());
+        AssetInfo.TextureAssetInfo cape = CobraCapes.asset(p.getUuid().toString(), CosmeticsFeature.wearingOf(p), self);
+        if (cape == null) return;
+        state.skinTextures = state.skinTextures.withOverride(SkinTextures.SkinOverride.create(Optional.empty(), Optional.of(cape), Optional.of(cape), Optional.empty()));
+        state.capeVisible = true;
     }
 }

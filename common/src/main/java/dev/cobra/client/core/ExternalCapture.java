@@ -72,7 +72,7 @@ public final class ExternalCapture {
         } else {
             boolean wayland = System.getenv("WAYLAND_DISPLAY") != null && !"x11".equals(System.getenv("XDG_SESSION_TYPE"));
             add(cmd, "gpu-screen-recorder", "-w", wayland ? "portal" : "focused", "-f", String.valueOf(fps), "-k", "h264",
-                    "-q", quality.equals("Small file") ? "medium" : quality.equals("Balanced") ? "high" : quality.equals("Ultra") ? "ultra" : "very_high",
+                    "-q", quality.equals("Small file") ? "high" : quality.equals("Balanced") ? "very_high" : "ultra",
                     "-a", "default_output", "-o", file.getAbsolutePath());
         }
         ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);

@@ -95,7 +95,7 @@ public final class SkinView extends JComponent {
     private static boolean steveLooked;
 
     /** The default Steve skin, read from a Minecraft client jar the launcher already downloaded. */
-    private static synchronized BufferedImage steve() {
+    public static synchronized BufferedImage steve() {
         if (steveCache != null || steveLooked) return steveCache;
         steveLooked = true;
         Path cached = Paths.CACHE.resolve("steve.png");
@@ -124,7 +124,7 @@ public final class SkinView extends JComponent {
     }
 
     /** Old 64x32 skins get their left arm and leg mirrored from the right, like the game does. */
-    private static BufferedImage to64(BufferedImage s) {
+    public static BufferedImage to64(BufferedImage s) {
         BufferedImage out = new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = out.createGraphics();
         if (s.getWidth() != 64 && s.getWidth() == s.getHeight()) {           // HD skin: scale down

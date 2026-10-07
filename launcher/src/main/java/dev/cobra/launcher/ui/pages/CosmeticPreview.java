@@ -18,7 +18,12 @@ import java.util.Map;
 final class CosmeticPreview {
     private CosmeticPreview() {}
 
-    private record Face(double[] xs, double[] ys, double depth, Color colour) {}
+    private record Face(double[] xs, double[] ys, double depth, Color colour, BufferedImage tex, float shade) {
+        Face(double[] xs, double[] ys, double depth, Color colour) { this(xs, ys, depth, colour, null, 1f); }
+    }
+
+    /** A skin face waiting to be projected: its top-left, top-right and bottom-left corners + texture. */
+    private record SkinFace(double[][] p, BufferedImage tex, double[] normal) {}
 
     /** Renders {@code code} (e.g. "wings:angel,halo:angel") on a player, turned {@code yawDeg} degrees. */
     static BufferedImage render(String code, int w, int h, double yawDeg, boolean withPlayer, BufferedImage skin) {
@@ -37,7 +42,16 @@ final class CosmeticPreview {
             colours.add(argb);
             normals.add(new double[]{nx, ny, nz});
         };
-        if (withPlayer) player(out, skin);
+        List<SkinFace> skinFaces = new ArrayList<>();
+        BufferedImage sk = skin != null ? dev.cobra.launcher.ui.SkinView.to64(skin) : null;
+        if (sk == null && withPlayer) {
+            BufferedImage steve = dev.cobra.launcher.ui.SkinView.steve();
+            if (steve != null) sk = dev.cobra.launcher.ui.SkinView.to64(steve);
+        }
+        if (withPlayer) {
+            if (sk != null) skinFaces(skinFaces, sk, dev.cobra.launcher.core.Settings.get().skinSlim && skin != null);
+            else player(out, skin);                                // no skin and no game files yet: plain shapes
+        }
         float t = 40;
         float k = wear.containsKey("size") ? parseSize(wear.get("size")) : 1f;
         CosmeticModels.M head = CosmeticModels.M.identity(), body = CosmeticModels.M.identity();
@@ -55,6 +69,9 @@ final class CosmeticPreview {
         if (wear.containsKey("horns")) CosmeticModels.horns(hk, out, 0, CosmeticModels.colour(wear.get("horns")));
         if (wear.containsKey("antlers")) CosmeticModels.antlers(hk, out, 0, CosmeticModels.colour(wear.get("antlers")));
         if (wear.containsKey("orbit")) CosmeticModels.orbit(hk, out, 0, t, CosmeticModels.colour(wear.get("orbit")));
+        if (wear.containsKey("flowers")) CosmeticModels.flowers(head, out, 0, CosmeticModels.colour(wear.get("flowers")));
+        if (wear.containsKey("bowtie")) CosmeticModels.bowtie(body, out, 0, CosmeticModels.colour(wear.get("bowtie")));
+        if (wear.containsKey("spikes")) CosmeticModels.spikes(bk, out, 0, CosmeticModels.colour(wear.get("spikes")));
         if (wear.containsKey("scarf")) CosmeticModels.scarf(body, out, 0, t, CosmeticModels.colour(wear.get("scarf")));
         if (wear.containsKey("glasses")) CosmeticModels.glasses(head, out, 0, CosmeticModels.colour(wear.get("glasses")));
         if (wear.containsKey("headphones")) CosmeticModels.headphones(head, out, 0, CosmeticModels.colour(wear.get("headphones")));
@@ -80,11 +97,11 @@ final class CosmeticPreview {
                 double x = -q[j][0], y = -q[j][1], z = q[j][2];
                 double rx = x * Math.cos(yaw) + z * Math.sin(yaw), rz = -x * Math.sin(yaw) + z * Math.cos(yaw);
                 double ry = y * Math.cos(pitch) - rz * Math.sin(pitch), rz2 = y * Math.sin(pitch) + rz * Math.cos(pitch);
-                xs[j] = rx;
+                xs[j] = -rx;                                           // a real camera: their right arm on your left
                 ys[j] = -ry;
                 depth += rz2;
-                minX = Math.min(minX, rx);
-                maxX = Math.max(maxX, rx);
+                minX = Math.min(minX, -rx);
+                maxX = Math.max(maxX, -rx);
                 minY = Math.min(minY, -ry);
                 maxY = Math.max(maxY, -ry);
             }
@@ -96,6 +113,31 @@ final class CosmeticPreview {
             Color lit = new Color(clamp(c.getRed() * light), clamp(c.getGreen() * light), clamp(c.getBlue() * light), c.getAlpha());
             faces.add(new Face(xs, ys, depth / 4, lit));
         }
+        // the skin's faces: real textures (projected the same way)
+        for (SkinFace sf : skinFaces) {
+            double[] xs = new double[3], ys = new double[3], ds = new double[3];
+            double depth = 0;
+            for (int j = 0; j < 3; j++) {
+                double x = -sf.p()[j][0], y = -sf.p()[j][1], z = sf.p()[j][2];
+                double rx = x * Math.cos(yaw) + z * Math.sin(yaw), rz = -x * Math.sin(yaw) + z * Math.cos(yaw);
+                double ry = y * Math.cos(pitch) - rz * Math.sin(pitch), rz2 = y * Math.sin(pitch) + rz * Math.cos(pitch);
+                xs[j] = -rx;                                           // a real camera: their right arm on your left
+                ys[j] = -ry;
+                ds[j] = rz2;
+                minX = Math.min(minX, -rx);
+                maxX = Math.max(maxX, -rx);
+                minY = Math.min(minY, -ry);
+                maxY = Math.max(maxY, -ry);
+            }
+            depth = (ds[1] + ds[2]) * 1.5;                              // the face's centre (TR-BL midpoint) x3
+            double[] n = sf.normal();
+            double wx = -n[0], wy = -n[1], wz = n[2];
+            double nz = -wx * Math.sin(yaw) + wz * Math.cos(yaw), nx = wx * Math.cos(yaw) + wz * Math.sin(yaw);
+            float light = (float) (0.70 + 0.30 * Math.max(0, -nz * 0.55 + wy * 0.6 + nx * 0.25));
+            // the fourth corner sits opposite the first: use the middle of the face for sorting
+            double cDepth = depth / 3 + 0.0;
+            faces.add(new Face(xs, ys, cDepth, null, sf.tex(), light));
+        }
         faces.sort((a, b) -> Double.compare(b.depth(), a.depth()));
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
         if (faces.isEmpty()) return img;
@@ -104,6 +146,33 @@ final class CosmeticPreview {
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         for (Face f : faces) {
+            if (f.tex() != null) {                                       // a skin face: the texture, mapped exactly
+                double ax = ox + f.xs()[0] * scale, ay = oy + f.ys()[0] * scale;
+                double e1x = (f.xs()[1] - f.xs()[0]) * scale, e1y = (f.ys()[1] - f.ys()[0]) * scale;
+                double e2x = (f.xs()[2] - f.xs()[0]) * scale, e2y = (f.ys()[2] - f.ys()[0]) * scale;
+                int tw = f.tex().getWidth(), th = f.tex().getHeight();
+                java.awt.geom.AffineTransform at = new java.awt.geom.AffineTransform(e1x / tw * 1.02, e1y / tw * 1.02, e2x / th * 1.02, e2y / th * 1.02,
+                        ax - (e1x + e2x) * 0.01, ay - (e1y + e2y) * 0.01);
+                Graphics2D tg = (Graphics2D) g.create();
+                tg.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                tg.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+                tg.drawImage(f.tex(), at, null);
+                if (f.shade() < 0.99f) {                                   // side faces a little darker
+                    Path2D sp = new Path2D.Double();
+                    sp.moveTo(ax, ay);
+                    sp.lineTo(ax + e1x, ay + e1y);
+                    sp.lineTo(ax + e1x + e2x, ay + e1y + e2y);
+                    sp.lineTo(ax + e2x, ay + e2y);
+                    sp.closePath();
+                    tg.setComposite(AlphaComposite.SrcAtop);
+                    tg.setColor(new Color(0, 0, 0, Math.round((1 - f.shade()) * 255)));
+                    tg.setClip(sp);
+                    tg.setComposite(AlphaComposite.SrcOver);
+                    tg.fill(sp);
+                }
+                tg.dispose();
+                continue;
+            }
             Path2D p = new Path2D.Double();
             p.moveTo(ox + f.xs()[0] * scale, oy + f.ys()[0] * scale);
             for (int j = 1; j < 4; j++) p.lineTo(ox + f.xs()[j] * scale, oy + f.ys()[j] * scale);
@@ -133,6 +202,46 @@ final class CosmeticPreview {
 
     private static int clamp(double v) {
         return (int) Math.max(0, Math.min(255, Math.round(v)));
+    }
+
+    /**
+     * The player as the real skin: every part textured (with the hat, jacket, sleeve and trouser
+     * layers), in the same space as the cosmetics (y down from the neck, face at -z).
+     */
+    private static void skinFaces(List<SkinFace> out, BufferedImage skin, boolean slim) {
+        int aw = slim ? 3 : 4;
+        int[][] boxes = {           // x, yTop(model, y down), z, w, h, d, u, v, inflate*100
+                {-4, -8, -4, 8, 8, 8, 0, 0, 0}, {-4, 0, -2, 8, 12, 4, 16, 16, 0},
+                {-4 - aw, 0, -2, aw, 12, 4, 40, 16, 0}, {4, 0, -2, aw, 12, 4, 32, 48, 0},
+                {-4, 12, -2, 4, 12, 4, 0, 16, 0}, {0, 12, -2, 4, 12, 4, 16, 48, 0},
+                {-4, -8, -4, 8, 8, 8, 32, 0, 50}, {-4, 0, -2, 8, 12, 4, 16, 32, 25},
+                {-4 - aw, 0, -2, aw, 12, 4, 40, 32, 25}, {4, 0, -2, aw, 12, 4, 48, 48, 25},
+                {-4, 12, -2, 4, 12, 4, 0, 32, 25}, {0, 12, -2, 4, 12, 4, 0, 48, 25}};
+        for (int[] b : boxes) {
+            double i = b[8] / 100.0;
+            double x0 = b[0] - i, x1 = b[0] + b[3] + i, y0 = b[1] - i, y1 = b[1] + b[4] + i, z0 = b[2] - i, z1 = b[2] + b[5] + i;
+            int u = b[6], v = b[7], w = b[3], h = b[4], d = b[5];
+            // y here runs down (y0 = top); the face is at -z (z0)
+            double[][][] f = {
+                    {{u + d, v + d, w, h}, {x0, y0, z0}, {x1, y0, z0}, {x0, y1, z0}, {0, 0, -1}},              // front
+                    {{u + d + w + d, v + d, w, h}, {x1, y0, z1}, {x0, y0, z1}, {x1, y1, z1}, {0, 0, 1}},       // back
+                    {{u, v + d, d, h}, {x0, y0, z1}, {x0, y0, z0}, {x0, y1, z1}, {-1, 0, 0}},                 // right side
+                    {{u + d + w, v + d, d, h}, {x1, y0, z0}, {x1, y0, z1}, {x1, y1, z0}, {1, 0, 0}},          // left side
+                    {{u + d, v, w, d}, {x0, y0, z1}, {x1, y0, z1}, {x0, y0, z0}, {0, -1, 0}},                 // top
+                    {{u + d + w, v, w, d}, {x0, y1, z0}, {x1, y1, z0}, {x0, y1, z1}, {0, 1, 0}}};             // bottom
+            for (double[][] face : f) {
+                int tu = (int) face[0][0], tv = (int) face[0][1], tw = (int) face[0][2], th = (int) face[0][3];
+                if (tw <= 0 || th <= 0 || tu + tw > 64 || tv + th > 64) continue;
+                BufferedImage tex = skin.getSubimage(tu, tv, tw, th);
+                if (b[8] > 0 && empty(tex)) continue;                 // no second layer drawn there
+                out.add(new SkinFace(new double[][]{face[1], face[2], face[3]}, tex, face[4]));
+            }
+        }
+    }
+
+    private static boolean empty(BufferedImage t) {
+        for (int y = 0; y < t.getHeight(); y++) for (int x = 0; x < t.getWidth(); x++) if ((t.getRGB(x, y) >>> 24) > 16) return false;
+        return true;
     }
 
     /** A player made of boxes, coloured from the skin's main areas when there is one. */

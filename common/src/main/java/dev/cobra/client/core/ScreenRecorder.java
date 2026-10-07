@@ -114,11 +114,15 @@ public final class ScreenRecorder {
      * (NVIDIA / Intel / AMD), then OpenH264, and mpeg4 as the always-there fallback. Each one is
      * tried on a tiny test clip once, so a listed-but-broken GPU encoder is skipped.
      */
+    /** What the last recording used (size, fps, encoder): shown when it's saved. */
+    public static volatile String lastInfo = "";
+
     static synchronized String pickEncoder(String ffmpeg) {
         if (ffmpeg.equals(encoderCmd) && encoderFor != null) return encoderFor;
         // the graphics card's own encoder first: it records almost for free, so the game doesn't lag;
         // then the CPU encoders (libx264 works everywhere but costs several CPU cores at 1080p60)
-        String[] order = {"h264_nvenc", "h264_amf", "h264_qsv", "h264_vaapi", "libx264", "libopenh264", "mpeg4"};
+        // (libsvtav1 before libopenh264: Fedora's ffmpeg has no libx264, and OpenH264 looks soft)
+        String[] order = {"h264_nvenc", "h264_amf", "h264_qsv", "h264_vaapi", "libx264", "libsvtav1", "libopenh264", "mpeg4"};
         String chosen = "mpeg4";
         for (String enc : order) {
             if (enc.equals("mpeg4") || works(ffmpeg, enc)) {
@@ -180,6 +184,7 @@ public final class ScreenRecorder {
         // H.264 MP4 with the best encoder this PC has (the GPU's own when possible)
         String encoder = pickEncoder(ffmpegCmd);
         boolean vaapi = encoder.equals("h264_vaapi");
+        lastInfo = w + "x" + h + " → " + (scale.equals("Window size") || h <= 0 ? h : Math.min(h, scale.equals("1440p") ? 1440 : scale.equals("1080p") ? 1080 : 720)) + "p, " + fps + " fps, " + encoder;
         add(cmd, ffmpegCmd, "-y", "-loglevel", "error");
         if (vaapi) add(cmd, "-vaapi_device", vaapiDevice());
         add(cmd, "-f", "rawvideo", "-pix_fmt", "bgra", "-s", w + "x" + h, "-r", String.valueOf(fps), "-i", "-");
@@ -202,8 +207,10 @@ public final class ScreenRecorder {
             add(cmd, "-preset", "veryfast", "-global_quality", String.valueOf(q + 4));
         } else if (encoder.endsWith("_amf")) {
             add(cmd, "-quality", "speed", "-rc", "cqp", "-qp_i", String.valueOf(q + 2), "-qp_p", String.valueOf(q + 4));
+        } else if (encoder.equals("libsvtav1")) {
+            add(cmd, "-preset", fps >= 60 ? "11" : "9", "-crf", String.valueOf(q + 12), "-svtav1-params", "tune=0");
         } else if (encoder.equals("libopenh264")) {
-            add(cmd, "-b:v", q <= 14 ? "30M" : q <= 18 ? "16M" : q <= 23 ? "10M" : "6M", "-allow_skip_frames", "1");
+            add(cmd, "-b:v", q <= 14 ? "40M" : q <= 18 ? "24M" : q <= 23 ? "14M" : "8M", "-maxrate", q <= 18 ? "40M" : "20M");
         } else {                                   // mpeg4: works with every ffmpeg, still an .mp4
             add(cmd, "-q:v", q <= 18 ? "2" : q <= 23 ? "4" : "6");
         }

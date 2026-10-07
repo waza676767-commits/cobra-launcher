@@ -24,7 +24,7 @@ final class CosmeticsGallery extends JPanel {
     private record Item(String key, String name, List<String> options, double yaw, String group) {
         Item(String key, String name, List<String> options, double yaw) {
             this(key, name, options, yaw, switch (key) {
-                case "wings", "wingstyle", "tail", "backpack", "katana", "scarf" -> "Back";
+                case "wings", "wingstyle", "tail", "backpack", "katana", "scarf", "spikes", "bowtie" -> "Back";
                 case "gloves", "feet" -> "Hands & feet";
                 case "particles", "trail" -> "Effects";
                 default -> "Head";
@@ -38,15 +38,18 @@ final class CosmeticsGallery extends JPanel {
 
     static final List<Item> ITEMS = List.of(
             new Item("wings", "Wings", List.of("Off", "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan", "Custom"), 200),
-            new Item("wingstyle", "Wing style", List.of("Feather", "Dragon", "Butterfly", "Demon", "Energy"), 200),
+            new Item("wingstyle", "Wing style", List.of("Feather", "Dragon", "Butterfly", "Demon", "Energy", "Fairy"), 200),
             new Item("halo", "Halo", List.of("Off", "Angel", "Red", "Custom"), 25),
-            new Item("hat", "Hat", List.of("Off", "Crown", "Top hat", "Witch"), 25),
+            new Item("hat", "Hat", List.of("Off", "Crown", "Top hat", "Witch", "Santa", "Viking"), 25),
             new Item("ears", "Cat ears", List.of("Off", "Black", "White", "Ginger", "Pink", "Custom"), 25),
             new Item("bunny", "Bunny ears", List.of("Off", "White", "Pink", "Black", "Brown", "Custom"), 25),
             new Item("horns", "Horns", List.of("Off", "Red", "Black", "White", "Gold", "Custom"), 25),
             new Item("antlers", "Antlers", List.of("Off", "Brown", "White", "Gold", "Custom"), 25),
             new Item("orbit", "Orbiting gems", List.of("Off", "Purple", "Cyan", "Red", "Gold", "Green", "Custom"), 25),
             new Item("scarf", "Scarf", List.of("Off", "Red", "Blue", "Green", "White", "Black", "Custom"), 200),
+            new Item("flowers", "Flower crown", List.of("Off", "Pink", "White", "Red", "Purple", "Gold", "Custom"), 25),
+            new Item("bowtie", "Bow tie", List.of("Off", "Red", "Black", "Blue", "Pink", "Gold", "Custom"), 20),
+            new Item("spikes", "Back spikes", List.of("Off", "Purple", "Red", "Black", "Green", "Gold", "Custom"), 200),
             new Item("glasses", "Sunglasses", List.of("Off", "Black", "Gold", "Pink", "Custom"), 20),
             new Item("headphones", "Headphones", List.of("Off", "Black", "White", "Pink", "Blue", "Custom"), 40),
             new Item("tail", "Tail", List.of("Off", "Black", "White", "Ginger", "Pink", "Fox", "Custom"), 215),
@@ -183,6 +186,9 @@ final class CosmeticsGallery extends JPanel {
             case "antlers" -> s.cosAntlers;
             case "orbit" -> s.cosOrbit;
             case "scarf" -> s.cosScarf;
+            case "flowers" -> s.cosFlowers;
+            case "bowtie" -> s.cosBowtie;
+            case "spikes" -> s.cosSpikes;
             case "katana" -> s.cosKatana ? "On" : "Off";
             case "feet" -> s.cosFeet ? "On" : "Off";
             case "particles" -> s.cosParticles == null ? "Off" : s.cosParticles;
@@ -212,6 +218,9 @@ final class CosmeticsGallery extends JPanel {
             case "antlers" -> s.cosAntlers = v;
             case "orbit" -> s.cosOrbit = v;
             case "scarf" -> s.cosScarf = v;
+            case "flowers" -> s.cosFlowers = v;
+            case "bowtie" -> s.cosBowtie = v;
+            case "spikes" -> s.cosSpikes = v;
             case "katana" -> s.cosKatana = !"Off".equals(v);
             case "feet" -> s.cosFeet = !"Off".equals(v);
             case "particles" -> s.cosParticles = v;
@@ -316,12 +325,16 @@ final class CosmeticsGallery extends JPanel {
 
     private static final Map<String, BufferedImage> CACHE = new HashMap<>();
 
+    /** Your skin, for the small previews too (set by the turntable when it loads it). */
+    private static volatile BufferedImage cardSkin;
+
     private static BufferedImage preview(String code, int w, int h, double yaw) {
-        String key = code + "|" + w + "|" + h + "|" + (int) yaw;
+        BufferedImage sk = cardSkin;
+        String key = code + "|" + w + "|" + h + "|" + (int) yaw + "|" + (sk == null ? 0 : System.identityHashCode(sk));
         BufferedImage img = CACHE.get(key);
         if (img == null) {
             if (CACHE.size() > 120) CACHE.clear();
-            img = CosmeticPreview.render(code, w, h, yaw, true, null);
+            img = CosmeticPreview.render(code, w, h, yaw, true, sk);
             CACHE.put(key, img);
         }
         return img;
@@ -390,6 +403,10 @@ final class CosmeticsGallery extends JPanel {
             if (now - skinAt > 5000) {
                 skin = Accessories.skin();
                 skinAt = now;
+                if (skin != cardSkin) {
+                    cardSkin = skin;
+                    for (Component c : cards.getComponents()) c.repaint();
+                }
             }
             BufferedImage img = CosmeticPreview.render(Settings.get().cosmeticsCode(), w - 20, h - 30, yaw, true, skin);
             g.drawImage(img, 10, 10, null);

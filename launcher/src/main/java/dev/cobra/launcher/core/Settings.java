@@ -61,7 +61,8 @@ public final class Settings {
     // ---- cosmetics (sent to Cobra Client at launch; only Cobra players see them)
     public String cosEars = "Off", cosWings = "Off", cosHalo = "Off", cosGloves = "Off";
     public String cosWingStyle = "Feather", cosHat = "Off", cosBunny = "Off", cosHorns = "Off", cosGlasses = "Off",
-            cosHeadphones = "Off", cosTailKind = "Off", cosBackpack = "Off", cosAntlers = "Off", cosOrbit = "Off", cosScarf = "Off";
+            cosHeadphones = "Off", cosTailKind = "Off", cosBackpack = "Off", cosAntlers = "Off", cosOrbit = "Off", cosScarf = "Off",
+            cosFlowers = "Off", cosBowtie = "Off", cosSpikes = "Off";
     public boolean cosTail = false, cosKatana = false, cosFeet = false, cosGlow = true;
     public int cosSize = 100;
     /** Built-in capes added to the library (1 = the first set). */
@@ -100,10 +101,10 @@ public final class Settings {
             }
         }
         cosWings = pretty(m.get("wings"), "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan");
-        cosWingStyle = m.containsKey("wingstyle") ? pretty(m.get("wingstyle"), "Feather", "Dragon", "Butterfly", "Demon", "Energy") : "Feather";
+        cosWingStyle = m.containsKey("wingstyle") ? pretty(m.get("wingstyle"), "Feather", "Dragon", "Butterfly", "Demon", "Energy", "Fairy") : "Feather";
         if ("Off".equals(cosWingStyle)) cosWingStyle = "Feather";
         cosHalo = pretty(m.get("halo"), "Angel", "Red");
-        cosHat = pretty(m.get("hat"), "Crown", "Top hat", "Witch");
+        cosHat = pretty(m.get("hat"), "Crown", "Top hat", "Witch", "Santa", "Viking");
         cosEars = pretty(m.get("ears"), "Black", "White", "Ginger", "Pink");
         cosBunny = pretty(m.get("bunny"), "White", "Pink", "Black", "Brown");
         cosHorns = pretty(m.get("horns"), "Red", "Black", "White", "Gold");
@@ -116,6 +117,9 @@ public final class Settings {
         cosAntlers = pretty(m.get("antlers"), "Brown", "White", "Gold");
         cosOrbit = pretty(m.get("orbit"), "Purple", "Cyan", "Red", "Gold", "Green");
         cosScarf = pretty(m.get("scarf"), "Red", "Blue", "Green", "White", "Black");
+        cosFlowers = pretty(m.get("flowers"), "Pink", "White", "Red", "Purple", "Gold");
+        cosBowtie = pretty(m.get("bowtie"), "Red", "Black", "Blue", "Pink", "Gold");
+        cosSpikes = pretty(m.get("spikes"), "Purple", "Red", "Black", "Green", "Gold");
         cosKatana = m.containsKey("katana");
         cosFeet = m.containsKey("feet");
         cosParticles = pretty(m.get("fx"), "Sparkles", "Hearts", "Flames", "Soul fire", "Snow", "Magic", "Petals", "Notes");
@@ -131,7 +135,8 @@ public final class Settings {
         if (cosTail && "Off".equals(cosTailKind)) cosTailKind = "Black";      // the old on/off tail
         String[][] modes = {{"wings", cosWings}, {"halo", cosHalo}, {"hat", cosHat}, {"ears", cosEars}, {"bunny", cosBunny},
                 {"horns", cosHorns}, {"glasses", cosGlasses}, {"headphones", cosHeadphones}, {"tail", cosTailKind},
-                {"backpack", cosBackpack}, {"gloves", cosGloves}, {"antlers", cosAntlers}, {"orbit", cosOrbit}, {"scarf", cosScarf}};
+                {"backpack", cosBackpack}, {"gloves", cosGloves}, {"antlers", cosAntlers}, {"orbit", cosOrbit}, {"scarf", cosScarf},
+                {"flowers", cosFlowers}, {"bowtie", cosBowtie}, {"spikes", cosSpikes}};
         StringBuilder b = new StringBuilder();
         for (String[] m : modes) if (m[1] != null && !"Off".equals(m[1])) b.append(m[0]).append(':').append(c(m[1])).append(',');
         if (!"Off".equals(cosWings) && cosWingStyle != null && !"Feather".equals(cosWingStyle)) b.append("wingstyle:").append(c(cosWingStyle)).append(',');

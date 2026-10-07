@@ -38,8 +38,13 @@ public abstract class HudModule extends Module {
             dev.cobra.client.core.ui.Draw.glassPanel(r, x, y, w, h, rounded.on() ? 4 : 2, bgColor.argb());
             return;
         }
-        if (rounded.on()) dev.cobra.client.core.ui.Draw.round(r, x, y, w, h, 3, bgColor.argb());
-        else r.rect(x, y, w, h, bgColor.argb());
+        // HUD glass strength also sets how see-through the classic background is
+        int c = bgColor.argb();
+        int a = Math.max(0, Math.min(255, Math.round((c >>> 24) * dev.cobra.client.core.ui.Draw.glassK)));
+        if (a == 0) return;
+        c = a << 24 | (c & 0xFFFFFF);
+        if (rounded.on()) dev.cobra.client.core.ui.Draw.round(r, x, y, w, h, 3, c);
+        else r.rect(x, y, w, h, c);
     }
 
     protected boolean textShadow() {

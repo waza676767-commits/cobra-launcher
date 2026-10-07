@@ -63,4 +63,7 @@ public interface Render {
     default void rectInverted(int x, int y, int w, int h) {
         rect(x, y, w, h, 0xFFFFFFFF);
     }
+
+    /** Draws a PNG picture (e.g. album art) w x h at (x, y); {@code key} identifies it so it's loaded once. */
+    default void imagePng(String key, byte[] png, float x, float y, float w, float h) {}
 }

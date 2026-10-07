@@ -200,13 +200,14 @@ public final class Draw {
      */
     public static void glassPanel(Render r, int x, int y, int w, int h, int radius, int tint) {
         if (w <= 0 || h <= 0) return;
+        float k = glassK;                                     // HUD glass strength: 0 = invisible, 2 = almost solid
+        if (k <= 0.01f) return;
         // floating shadow: three widening, fading layers, offset down
         for (int i = 3; i >= 1; i--) {
-            round(r, x - i + 1, y - i + 3, w + 2 * i - 2, h + 2 * i - 2, radius + i, (0x10 + 4 * (3 - i)) << 24);
+            round(r, x - i + 1, y - i + 3, w + 2 * i - 2, h + 2 * i - 2, radius + i, Math.round((0x10 + 4 * (3 - i)) * Math.min(1.5f, k)) << 24);
         }
-        float k = glassK;
-        int a = tint >>> 24;
-        int base = (Math.max(0x18, Math.min(0xE0, Math.round(Math.max(0x30, Math.min(0xB0, a)) * Math.max(0.3f, k)))) << 24) | (tint & 0xFFFFFF);
+        int a = Math.max(0x30, Math.min(0xB0, tint >>> 24));
+        int base = (Math.max(0, Math.min(0xF0, Math.round(a * k))) << 24) | (tint & 0xFFFFFF);
         round(r, x, y, w, h, radius, base);
         // depth: the top half a touch lighter, the bottom edge a touch darker
         int top = Math.max(1, h / 2);

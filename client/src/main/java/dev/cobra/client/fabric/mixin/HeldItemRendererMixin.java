@@ -21,6 +21,16 @@ public abstract class HeldItemRendererMixin {
     @org.spongepowered.asm.mixin.Unique
     private static final java.util.Map<net.minecraft.item.Item, String> TYPES = new java.util.IdentityHashMap<>();
 
+    /** View Model: hide the empty hand and/or the off-hand item. */
+    @Inject(method = "renderFirstPersonItem", at = @At("HEAD"), cancellable = true, require = 0)
+    private void cobra$hide(CallbackInfo ci, @Local(argsOnly = true) ItemStack item, @Local(argsOnly = true) Hand hand) {
+        if (Cobra.platform == null) return;
+        Features.ViewModel vm = Cobra.get(Features.ViewModel.class);
+        if (!vm.isEnabled()) return;
+        boolean empty = item == null || item.isEmpty();
+        if (empty && vm.hideHand.on() || hand == Hand.OFF_HAND && !empty && vm.hideOffhand.on()) ci.cancel();
+    }
+
     /** View Model: per item type position, rotation and size of what you hold (and the empty hand). */
     @Inject(method = "renderFirstPersonItem", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/util/math/MatrixStack;push()V", shift = At.Shift.AFTER, ordinal = 0))

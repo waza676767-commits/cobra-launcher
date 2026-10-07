@@ -79,6 +79,11 @@ public final class Cobra {
         MODULES.add(new Features.LowHealth());
         MODULES.add(new Features.HitSound());
         MODULES.add(new Features.AutoGG());
+        MODULES.add(new Features.TntTimer());
+        MODULES.add(new Features.DespawnTimer());
+        MODULES.add(new Features.ItemBeams());
+        MODULES.add(new Features.KillEffect());
+        MODULES.add(new Features.Rescale());
         MODULES.add(new HudModules.Saturation());
         MODULES.add(new HudModules.PackInfo());
         MODULES.add(new HudModules.Watermark());
@@ -113,7 +118,7 @@ public final class Cobra {
                 {"memory", "gauge"}, {"stopwatch", "clock"}, {"serveraddress", "globe"}, {"itemcounter", "list"}, {"teamview", "user"},
                 {"chunkborders", "mods"}, {"hitboxes", "crosshair"}, {"glint", "sparkle"}, {"hypixel", "link"},
                 {"tweaks", "flame"}, {"mousetrail", "sparkle"}, {"sky", "sun"}, {"cosmetics", "star"}, {"oldvisuals", "sword"}, {"oldsounds", "sliders"}, 
-                {"menublur", "eye"}, {"packorganizer", "packs"}, {"wavycapes", "flag"}, {"totem", "shield"}, {"colors", "sun"}, {"sprintindicator", "run"}, {"rotation", "compass"}, {"swapstreak", "sword"}, {"spotify", "signal"}, {"speedometer", "gauge"}, {"clock", "clock"}, {"lowhealth", "drop"}, {"hitsound", "sliders"}, {"autogg", "chat"}, {"saturation", "drop"},
+                {"menublur", "eye"}, {"packorganizer", "packs"}, {"wavycapes", "flag"}, {"totem", "shield"}, {"colors", "sun"}, {"sprintindicator", "run"}, {"rotation", "compass"}, {"swapstreak", "sword"}, {"spotify", "signal"}, {"speedometer", "gauge"}, {"clock", "clock"}, {"lowhealth", "drop"}, {"hitsound", "sliders"}, {"autogg", "chat"}, {"tnttimer", "clock"}, {"despawntimer", "clock"}, {"itembeams", "sun"}, {"killeffect", "flame"}, {"rescale", "aperture"}, {"saturation", "drop"},
                 {"packinfo", "packs"}, {"watermark", "star"}, {"recorder", "camera"}, {"blockoverlay", "crosshair"}, {"blockinfo", "search"}};
         for (Module m : MODULES) {
             for (String[] ic : icons) if (ic[0].equals(m.id)) m.icon = ic[1];
@@ -346,6 +351,7 @@ public final class Cobra {
     public static void onAttack(Object target, double reach) {
         get(HudModules.SwapStreak.class).attacked();
         get(Features.HitSound.class).hit();
+        get(Features.KillEffect.class).attacked(target);
         get(HudModules.Reach.class).hit(reach);
         get(HudModules.Combo.class).attacked(target);
         Features.Particles particles = get(Features.Particles.class);

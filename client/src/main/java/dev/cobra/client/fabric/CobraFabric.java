@@ -168,6 +168,8 @@ public final class CobraFabric implements ClientModInitializer {
         syncSky(mc);
         syncMenuBlur(mc);
         packKey(mc);
+        worldLabels(mc);
+        killEffect(mc);
         if (mc.world != null || mc.currentScreen != null) syncGlint(mc);
         Cobra.tick();
     }
@@ -236,6 +238,67 @@ public final class CobraFabric implements ClientModInitializer {
                 mc.world.addParticleClient(effect, false, false, x + (rnd.nextDouble() - 0.5) * 0.4, y + 0.1, z + (rnd.nextDouble() - 0.5) * 0.4, 0, 0.01, 0);
             }
         }
+    }
+
+    /** Entities we gave a label (TNT / item timers), so it can be taken off again. */
+    private static final java.util.Set<Integer> LABELLED = new java.util.HashSet<>();
+
+    /**
+     * TNT Timer and Despawn Timer: a label over lit TNT (seconds left) and over dropped items (time
+     * until they despawn). Shown only on your screen; nothing is sent to the server.
+     */
+    private static void worldLabels(MinecraftClient mc) {
+        if (mc.world == null || mc.player == null) {
+            LABELLED.clear();
+            return;
+        }
+        Features.TntTimer tnt = Cobra.get(Features.TntTimer.class);
+        Features.DespawnTimer items = Cobra.get(Features.DespawnTimer.class);
+        java.util.Set<Integer> now = new java.util.HashSet<>();
+        if (tnt.isEnabled() || items.isEnabled()) {
+            double r2 = Math.pow(items.range.f(), 2);
+            for (net.minecraft.entity.Entity e : mc.world.getEntities()) {
+                if (tnt.isEnabled() && e instanceof net.minecraft.entity.TntEntity t) {
+                    t.setCustomName(net.minecraft.text.Text.literal(tnt.label(t.getFuse())));
+                    t.setCustomNameVisible(true);
+                    now.add(e.getId());
+                } else if (items.isEnabled() && e instanceof net.minecraft.entity.ItemEntity it && it.squaredDistanceTo(mc.player) <= r2) {
+                    String time = items.label(it.getItemAge());
+                    String name = items.showName.on() ? "\u00a7f" + it.getStack().getName().getString() + "\u00a77 x" + it.getStack().getCount() + "  " : "";
+                    it.setCustomName(net.minecraft.text.Text.literal(name + time));
+                    it.setCustomNameVisible(true);
+                    now.add(e.getId());
+                }
+            }
+        }
+        // take the labels off things that no longer need one (module off, out of range)
+        for (Integer id : LABELLED) {
+            if (now.contains(id)) continue;
+            net.minecraft.entity.Entity e = mc.world.getEntityById(id);
+            if (e != null) {
+                e.setCustomName(null);
+                e.setCustomNameVisible(false);
+            }
+        }
+        LABELLED.clear();
+        LABELLED.addAll(now);
+    }
+
+    /** Kill Effect: when someone you hit in the last 3 s dies, a (harmless, client-only) lightning bolt there. */
+    private static void killEffect(MinecraftClient mc) {
+        Features.KillEffect k = Cobra.get(Features.KillEffect.class);
+        if (!k.isEnabled() || mc.world == null) return;
+        Object t = k.recentTarget();
+        if (!(t instanceof net.minecraft.entity.LivingEntity le)) return;
+        if (k.playersOnly.on() && !(le instanceof net.minecraft.entity.player.PlayerEntity)) return;
+        if (!le.isDead() && le.getHealth() > 0) return;
+        k.consumed();
+        net.minecraft.entity.Entity bolt = net.minecraft.entity.EntityType.LIGHTNING_BOLT.create(mc.world, net.minecraft.entity.SpawnReason.EVENT);
+        if (!(bolt instanceof net.minecraft.entity.LightningEntity l)) return;
+        l.setCosmetic(true);
+        l.refreshPositionAfterTeleport(le.getX(), le.getY(), le.getZ());
+        mc.world.addEntity(l);
+        if (k.sound.on()) mc.player.playSound(net.minecraft.sound.SoundEvents.ENTITY_LIGHTNING_BOLT_THUNDER, 0.6f, 1f);
     }
 
     /** Menu Blur: keeps the game's menu blur at the chosen strength while the module is on. */

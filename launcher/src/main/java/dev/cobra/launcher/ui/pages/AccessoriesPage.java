@@ -26,10 +26,13 @@ public final class AccessoriesPage extends Page {
     private final Timer animate = new Timer(90, e -> { if (capeCard.isShowing()) capeCard.repaint(); });
     private final CosmeticsGallery gallery = new CosmeticsGallery();
     private final Components.Button upload;
+    private final Components.Button officialCapes;
 
     public AccessoriesPage() {
         upload = new Components.Button("Apply to my Minecraft account", "external", Components.Variant.GHOST, this::upload);
         skinCard.extra(upload);
+        officialCapes = new Components.Button("Your Minecraft capes", "flag", Components.Variant.GHOST, this::officialCapes);
+        capeCard.extra(officialCapes);
         stack.add(skinCard);
         stack.add(capeCard);
         stack.add(gallery);                       // cosmetics, right below: just scroll down
@@ -343,6 +346,48 @@ public final class AccessoriesPage extends Page {
         int fy = frames > 1 ? (int) ((System.currentTimeMillis() / 90) % frames) * 32 * k : 0;
         g.drawImage(c, ox, oy, ox + 10 * u, oy + 16 * u, k, k + fy, 11 * k, 17 * k + fy, null);   // the outside face of the cape
         g.dispose();
+    }
+
+    /** Your official Minecraft capes: pick the one everyone sees (or none), like on minecraft.net. */
+    private void officialCapes() {
+        dev.cobra.launcher.auth.Account acc = MainWindow.get().account();
+        officialCapes.setEnabled(false);
+        new Thread(() -> {
+            try {
+                List<dev.cobra.launcher.core.MinecraftCapes.Cape> capes = dev.cobra.launcher.core.MinecraftCapes.list(acc);
+                SwingUtilities.invokeLater(() -> {
+                    officialCapes.setEnabled(true);
+                    if (capes.isEmpty()) {
+                        MainWindow.get().toast("Your account has no official Minecraft capes.");
+                        return;
+                    }
+                    List<String> names = new java.util.ArrayList<>();
+                    int cur = capes.size();
+                    for (int i = 0; i < capes.size(); i++) {
+                        names.add(capes.get(i).name());
+                        if (capes.get(i).active()) cur = i;
+                    }
+                    names.add("No cape");
+                    MainWindow.get().ask("Your Minecraft capes", "The cape everyone sees on your account (on every launcher and server).", names, cur, i ->
+                            new Thread(() -> {
+                                String msg;
+                                try {
+                                    dev.cobra.launcher.core.MinecraftCapes.wear(acc, i < capes.size() ? capes.get(i).id() : null);
+                                    msg = i < capes.size() ? "Now wearing " + capes.get(i).name() + "." : "Cape hidden on your account.";
+                                } catch (Exception ex) {
+                                    msg = ex.getMessage();
+                                }
+                                String m = msg;
+                                SwingUtilities.invokeLater(() -> MainWindow.get().toast(m));
+                            }, "abyss-mc-cape").start());
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> {
+                    officialCapes.setEnabled(true);
+                    MainWindow.get().toast(ex.getMessage());
+                });
+            }
+        }, "abyss-mc-capes").start();
     }
 
     private void upload() {

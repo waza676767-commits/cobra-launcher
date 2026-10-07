@@ -190,7 +190,30 @@ public final class CosmeticModels {
     /** Hats: a gold crown, a black top hat with a red band, or a purple witch hat. */
     public static void hat(M e, Out vc, int light, String kind) {
         String kd = kind == null ? "" : kind;
-        if (kd.equals("tophat")) {
+        if (kd.equals("santa")) {
+            box(e, vc, light, 0xFFF4F4F4, -4.6f, -9.6f, -4.6f, 4.6f, -8f, 4.6f);                 // white rim
+            float[][] tiers = {{4.2f, -11.5f}, {3.4f, -13f}, {2.4f, -14.2f}};
+            float y = -9.6f;
+            for (int i = 0; i < tiers.length; i++) {
+                float[] tr = tiers[i];
+                box(e, vc, light, 0xFFC8202C, -tr[0] + i * 0.8f, tr[1], -tr[0], tr[0] + i * 0.8f, y, tr[0]);   // leans to one side
+                y = tr[1];
+            }
+            box(e, vc, light, 0xFFC8202C, 2.4f, -14.8f, -1.2f, 4.6f, -13.2f, 1.2f);                // the tip flops over
+            box(e, vc, light, 0xFFFFFFFF, 4.2f, -15.2f, -1.2f, 6.2f, -13f, 1.2f);                  // pom-pom
+        } else if (kd.equals("viking")) {
+            int steel = 0xFF9AA3AD, dark = 0xFF6B737C;
+            box(e, vc, light, steel, -4.6f, -10.6f, -4.6f, 4.6f, -7.6f, 4.6f);
+            box(e, vc, light, dark, -4.7f, -8.4f, -4.7f, 4.7f, -7.6f, 4.7f);                      // band
+            box(e, vc, light, dark, -0.5f, -11f, -4.8f, 0.5f, -7.6f, 4.8f);                       // ridge
+            box(e, vc, light, dark, -0.5f, -7.6f, -4.9f, 0.5f, -5.2f, -4.6f);                     // nose guard
+            for (int s = -1; s <= 1; s += 2) {                                                     // horns
+                M h = moved(e, s * 4.6f, -9.4f, 0, 0, 0, s * 0.5f);
+                box(h, vc, light, 0xFFEDE3C8, 0, -1f, -0.9f, s * 2.4f, 0.8f, 0.9f);
+                M h2 = moved(h, s * 2.2f, -0.2f, 0, 0, 0, s * -0.9f);
+                box(h2, vc, light, 0xFFF4EDDA, 0, -0.7f, -0.6f, s * 2.2f, 0.5f, 0.6f);
+            }
+        } else if (kd.equals("tophat")) {
                 box(e, vc, light, 0xFF18181C, -6f, -8.8f, -6f, 6f, -8f, 6f);           // brim
                 box(e, vc, light, 0xFF18181C, -4.2f, -15f, -4.2f, 4.2f, -8.8f, 4.2f);  // crown
                 box(e, vc, light, 0xFFB3202C, -4.35f, -10.4f, -4.35f, 4.35f, -9f, 4.35f); // band
@@ -257,6 +280,40 @@ public final class CosmeticModels {
         box(tail, vc, light, dark, -1.3f, 7f, 0f, 1.3f, 7.8f, 0.5f);                             // fringe
     }
 
+    /** A crown of little flowers round the head, in your colour with leaves between. */
+    public static void flowers(M e, Out vc, int light, int c) {
+        int n = 12;
+        for (int i = 0; i < n; i++) {
+            double a = Math.PI * 2 * i / n;
+            float x = (float) Math.cos(a) * 4.7f, z = (float) Math.sin(a) * 4.7f;
+            if (i % 2 == 0) {
+                box(e, vc, light, c, x - 0.9f, -9.1f, z - 0.9f, x + 0.9f, -7.9f, z + 0.9f);
+                box(e, vc, light, 0xFFFFE066, x - 0.35f, -9.3f, z - 0.35f, x + 0.35f, -9f, z + 0.35f);   // the middle
+            } else {
+                box(e, vc, light, 0xFF4CAF50, x - 0.6f, -8.6f, z - 0.6f, x + 0.6f, -8f, z + 0.6f);        // a leaf
+            }
+        }
+    }
+
+    /** A bow tie under the chin. */
+    public static void bowtie(M e, Out vc, int light, int c) {
+        box(e, vc, light, shade(c, 0.85f), -0.7f, 0.4f, -2.45f, 0.7f, 1.6f, -2.05f);               // knot
+        for (int s = -1; s <= 1; s += 2) {
+            box(e, vc, light, c, s < 0 ? -2.6f : 0.7f, 0f, -2.4f, s < 0 ? -0.7f : 2.6f, 2.0f, -2.05f);
+            box(e, vc, light, shade(c, 1.1f), s < 0 ? -2.9f : 2.6f, 0.3f, -2.38f, s < 0 ? -2.6f : 2.9f, 1.7f, -2.06f);
+        }
+    }
+
+    /** A row of dragon spikes down your back, biggest between the shoulders. */
+    public static void spikes(M e, Out vc, int light, int c) {
+        float[] sizes = {1.4f, 1.9f, 2.2f, 1.9f, 1.5f, 1.1f};
+        for (int i = 0; i < sizes.length; i++) {
+            float y = 0.8f + i * 1.9f, s = sizes[i];
+            box(e, vc, light, c, -0.6f, y, 2f, 0.6f, y + 1.2f, 2f + s);
+            box(e, vc, light, shade(c, 1.12f), -0.35f, y + 0.2f, 2f + s, 0.35f, y + 0.9f, 2f + s + 0.8f);
+        }
+    }
+
     /** Sunglasses on the face. */
     public static void glasses(M e, Out vc, int light, int c) {
         box(e, vc, light, c, -3.9f, -5.2f, -4.45f, 3.9f, -4.7f, -4.2f);                // bridge bar
@@ -307,7 +364,22 @@ public final class CosmeticModels {
         for (int s = -1; s <= 1; s += 2) {
             // out to the side, then swept BACK (+z) — the model is mirrored, so the sweep is -s
             M w = moved(e, s * 1.5f, 2.5f, 2.4f, -s * (0.55f + flap), 0, -s * 0.32f);
-            if (style.equals("demon")) {
+            if (style.equals("fairy")) {
+                // four delicate panes (two big top, two small bottom) with darker veins and a bright rim
+                float[][] panes = {{0f, -9f, 13f, 0.5f, 0.55f}, {0f, 0.5f, 9f, 8.5f, 0.45f}};
+                for (int k = 0; k < panes.length; k++) {
+                    float[] pn = panes[k];
+                    int n = 7;
+                    for (int i = 0; i < n; i++) {
+                        float f = i / (float) (n - 1);
+                        float half = (float) Math.sin(f * Math.PI) * (pn[3] - pn[1]) / 2;
+                        float cy = (pn[1] + pn[3]) / 2, x0 = f * pn[2], x1 = x0 + pn[2] / n + 0.1f;
+                        int col = tint(shade(c, 0.95f + 0.1f * (i % 2)), shell ? a : 0xFF);
+                        wbox(w, vc, light, col, s, x0 - g, cy - half - g, 0.1f * k - g, x1 + g, cy + half + g, 0.1f * k + 0.25f + g);
+                    }
+                    if (!shell) wbox(w, vc, light, tint(shade(c, 0.6f), 0xFF), s, 0.2f, (pn[1] + pn[3]) / 2 - 0.15f, -0.05f, pn[2] * 0.95f, (pn[1] + pn[3]) / 2 + 0.15f, 0.35f);
+                }
+            } else if (style.equals("demon")) {
                 // three long curved blades per side, sweeping out and up like scythes
                 for (int b = 0; b < 3; b++) {
                     M blade = moved(w, 0, -1f + b * 3.2f, 0.2f * b, 0, 0, s * (-0.15f + b * 0.55f) * -1f);

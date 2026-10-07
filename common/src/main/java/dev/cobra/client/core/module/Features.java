@@ -64,7 +64,7 @@ public final class Features {
         /** Speed of the menu animations (100 = normal). */
         public final Setting.Number menuSpeed = add(new Setting.Number("menuspeed", "Menu animation speed", 100, 50, 200, 10, "%"));
         /** How strong the Liquid Glass HUD panels are (tint + shine). */
-        public final Setting.Number hudGlass = add(new Setting.Number("hudglass", "HUD glass strength", 100, 0, 200, 10, "%"));
+        public final Setting.Number hudGlass = add(new Setting.Number("hudglass", "HUD background strength", 100, 0, 200, 10, "%"));
         /** Hide Cobra's HUD while the F3 debug screen is open (hitboxes / chunk borders never hide it). */
         public final Setting.Bool hideHudOnF3 = add(new Setting.Bool("hidehudf3", "Hide HUD while F3 is open", true));
         /** Look of HUD element backgrounds: plain boxes, or Liquid Glass panels. */
@@ -145,6 +145,8 @@ public final class Features {
             }
         }
 
+        private boolean tipShown;
+
         private void tickKeys(boolean s, boolean p, boolean x) {
             if (s && !sDown && !dev.cobra.client.core.ExternalCapture.running() && external()) {
                 problem = null;
@@ -183,6 +185,12 @@ public final class Features {
                 problem = null;
                 rec.start(Integer.parseInt(fps.get()));
                 Cobra.platform.chat("\u00a7c\u25cf\u00a7r Recording (" + fps.get() + " fps, " + resolution.get() + ")");
+                if (!tipShown) {                                   // the smooth way is the graphics card
+                    tipShown = true;
+                    boolean win = System.getProperty("os.name", "").toLowerCase().contains("win");
+                    Cobra.platform.chat("\u00a7eTip:\u00a7r recording from the game's frames costs FPS. For smooth, full-quality video "
+                            + (win ? "let the launcher's Recordings page set up ffmpeg." : "install gpu-screen-recorder (Recordings page → Set up smooth recording)."));
+                }
             }
             if (p && !pDown && rec.state() != dev.cobra.client.core.ScreenRecorder.State.IDLE) {
                 rec.togglePause();
@@ -191,6 +199,7 @@ public final class Features {
             if (x && !xDown && rec.state() != dev.cobra.client.core.ScreenRecorder.State.IDLE) {
                 java.io.File f = rec.stop();
                 Cobra.platform.chat("Recording saved" + (f != null ? ": " + f.getName() : "") + " (open the launcher's Recordings)");
+                Cobra.platform.chat("\u00a77" + dev.cobra.client.core.ScreenRecorder.lastInfo);
             }
             String err = rec.takeError();
             if (err != null) {
@@ -480,6 +489,93 @@ public final class Features {
         }
     }
 
+    /** TNT Timer: the seconds left above lit TNT, going from green to red. */
+    public static final class TntTimer extends Module {
+        public final Setting.Number decimals = add(new Setting.Number("decimals", "Decimals", 2, 0, 2, 1, ""));
+
+        public TntTimer() { super("tnttimer", "TNT Timer", "Shows how long until lit TNT explodes", Category.VISUAL, false); }
+
+        /** The label for a fuse of {@code ticks}: "§a3.25s" … "§c0.40s". */
+        public String label(int ticks) {
+            float s = Math.max(0, ticks) / 20f;
+            String col = s > 2.5f ? "\u00a7a" : s > 1.2f ? "\u00a7e" : s > 0.6f ? "\u00a76" : "\u00a7c";
+            return col + String.format(java.util.Locale.ROOT, "%." + decimals.i() + "fs", s);
+        }
+    }
+
+    /** Despawn Timer: how long until dropped items (and blocks) on the ground disappear (5 minutes). */
+    public static final class DespawnTimer extends Module {
+        public final Setting.Number range = add(new Setting.Number("range", "Range", 16, 4, 64, 1, " blocks"));
+        public final Setting.Bool showName = add(new Setting.Bool("name", "Show the item's name too", true));
+
+        public DespawnTimer() { super("despawntimer", "Despawn Timer", "How long until dropped items disappear", Category.VISUAL, false); }
+
+        /** "4:32" for an item that's {@code age} ticks old (it goes at 6000). */
+        public String label(int age) {
+            int left = Math.max(0, 6000 - age) / 20;
+            String col = left > 60 ? "\u00a7a" : left > 20 ? "\u00a7e" : "\u00a7c";
+            return col + (left / 60) + ":" + (left % 60 < 10 ? "0" : "") + (left % 60);
+        }
+    }
+
+    /** Item Beams: a soft beam of light rising from dropped items, so you spot them from afar. */
+    public static final class ItemBeams extends Module {
+        public final Setting.Mode colour = add(new Setting.Mode("colourmode", "Colour", "Custom", "Custom", "Rainbow"));
+        public final Setting.Color custom = add(new Setting.Color("colour", "Beam colour", 0xFF8BD5FF),
+                new Setting.Cond() { public boolean ok() { return colour.is("Custom"); } });
+        public final Setting.Number height = add(new Setting.Number("height", "Height", 3, 1, 8, 0.5, " blocks"));
+        public final Setting.Number width = add(new Setting.Number("width", "Width", 0.08, 0.03, 0.3, 0.01, ""));
+
+        public ItemBeams() { super("itembeams", "Item Beams", "Beams of light above dropped items", Category.VISUAL, false); }
+
+        public int argb() {
+            if (colour.is("Rainbow")) return 0xFF000000 | java.awt.Color.HSBtoRGB((System.currentTimeMillis() % 4000) / 4000f, 0.7f, 1f);
+            return custom.argb();
+        }
+    }
+
+    /** Kill Effect: a lightning strike (just for you, it doesn't hurt anything) where you kill someone. */
+    public static final class KillEffect extends Module {
+        public final Setting.Bool playersOnly = add(new Setting.Bool("players", "Only for players", false));
+        public final Setting.Bool sound = add(new Setting.Bool("sound", "Thunder sound", true));
+        private Object target;
+        private long hitAt;
+
+        public KillEffect() { super("killeffect", "Kill Effect", "Lightning strikes where you kill someone", Category.VISUAL, false); }
+
+        public void attacked(Object t) {
+            target = t;
+            hitAt = System.currentTimeMillis();
+        }
+
+        /** The entity you hit in the last 3 seconds (the platform checks if it died). */
+        public Object recentTarget() {
+            return target != null && System.currentTimeMillis() - hitAt < 3000 ? target : null;
+        }
+
+        public void consumed() { target = null; }
+    }
+
+    /** Rescale: a stretched resolution: the world drawn for another shape (e.g. 4:3) and stretched to fill your screen. */
+    public static final class Rescale extends Module {
+        public final Setting.Mode aspect = add(new Setting.Mode("aspect", "Shape", "4:3", "4:3", "5:4", "3:2", "16:10", "Custom"));
+        public final Setting.Number cw = add(new Setting.Number("cw", "Custom width", 1440, 640, 3840, 10, ""),
+                new Setting.Cond() { public boolean ok() { return aspect.is("Custom"); } });
+        public final Setting.Number ch = add(new Setting.Number("ch", "Custom height", 1080, 480, 2160, 10, ""),
+                new Setting.Cond() { public boolean ok() { return aspect.is("Custom"); } });
+
+        public Rescale() { super("rescale", "Rescale", "Stretched resolution: play 4:3 (or any shape) stretched to your screen", Category.VISUAL, false); }
+
+        /** The width ÷ height the world is drawn for. */
+        public float target() {
+            if (aspect.is("5:4")) return 5f / 4f;
+            if (aspect.is("3:2")) return 3f / 2f;
+            if (aspect.is("16:10")) return 16f / 10f;
+            if (aspect.is("Custom")) return cw.f() / Math.max(1f, ch.f());
+            return 4f / 3f;
+        }
+    }
+
     /** Wavy capes: capes ripple in the wind and swing more naturally. */
     public static final class WavyCapes extends Module {
         public final Setting.Number wind = add(new Setting.Number("wind", "Wind", 1, 0, 3, 0.1, "x"));
@@ -496,11 +592,11 @@ public final class Features {
         public final Setting.Mode wings = add(new Setting.Mode("wings", "Wings", "Off", "Off", "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan", "Custom"));
         public final Setting.Color wingsColour = add(new Setting.Color("wings_colour", "  custom colour", 0xFF8B5CF6),
                 new Setting.Cond() { public boolean ok() { return wings.is("Custom"); } });
-        public final Setting.Mode wingStyle = add(new Setting.Mode("wingstyle", "Wing style", "Feather", "Feather", "Dragon", "Butterfly", "Demon", "Energy"));
+        public final Setting.Mode wingStyle = add(new Setting.Mode("wingstyle", "Wing style", "Feather", "Feather", "Dragon", "Butterfly", "Demon", "Energy", "Fairy"));
         public final Setting.Mode halo = add(new Setting.Mode("halo", "Halo", "Off", "Off", "Angel", "Red", "Custom"));
         public final Setting.Color haloColour = add(new Setting.Color("halo_colour", "  custom colour", 0xFF8B5CF6),
                 new Setting.Cond() { public boolean ok() { return halo.is("Custom"); } });
-        public final Setting.Mode hat = add(new Setting.Mode("hat", "Hat", "Off", "Off", "Crown", "Top hat", "Witch"));
+        public final Setting.Mode hat = add(new Setting.Mode("hat", "Hat", "Off", "Off", "Crown", "Top hat", "Witch", "Santa", "Viking"));
         public final Setting.Mode ears = add(new Setting.Mode("ears", "Cat ears", "Off", "Off", "Black", "White", "Ginger", "Pink", "Custom"));
         public final Setting.Color earsColour = add(new Setting.Color("ears_colour", "  custom colour", 0xFF8B5CF6),
                 new Setting.Cond() { public boolean ok() { return ears.is("Custom"); } });
@@ -525,6 +621,15 @@ public final class Features {
         public final Setting.Mode scarf = add(new Setting.Mode("scarf", "Scarf", "Off", "Off", "Red", "Blue", "Green", "White", "Black", "Custom"));
         public final Setting.Color scarfColour = add(new Setting.Color("scarf_colour", "  custom colour", 0xFF8B5CF6),
                 new Setting.Cond() { public boolean ok() { return scarf.is("Custom"); } });
+        public final Setting.Mode flowers = add(new Setting.Mode("flowers", "Flower crown", "Off", "Off", "Pink", "White", "Red", "Purple", "Gold", "Custom"));
+        public final Setting.Color flowersColour = add(new Setting.Color("flowers_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return flowers.is("Custom"); } });
+        public final Setting.Mode bowtie = add(new Setting.Mode("bowtie", "Bow tie", "Off", "Off", "Red", "Black", "Blue", "Pink", "Gold", "Custom"));
+        public final Setting.Color bowtieColour = add(new Setting.Color("bowtie_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return bowtie.is("Custom"); } });
+        public final Setting.Mode spikes = add(new Setting.Mode("spikes", "Back spikes", "Off", "Off", "Purple", "Red", "Black", "Green", "Gold", "Custom"));
+        public final Setting.Color spikesColour = add(new Setting.Color("spikes_colour", "  custom colour", 0xFF8B5CF6),
+                new Setting.Cond() { public boolean ok() { return spikes.is("Custom"); } });
         public final Setting.Mode tail = add(new Setting.Mode("tailkind", "Tail", "Off", "Off", "Black", "White", "Ginger", "Pink", "Fox", "Custom"));
         public final Setting.Color tailColour = add(new Setting.Color("tailkind_colour", "  custom colour", 0xFF8B5CF6),
                 new Setting.Cond() { public boolean ok() { return tail.is("Custom"); } });
@@ -545,9 +650,10 @@ public final class Features {
         public Cosmetics() {
             super("cosmetics", "Cosmetics", "Wings, halos, hats, ears, tails and more (only Abyss players see them)", Category.VISUAL, false);
             // fold-out groups so the list stays short; searching opens the right one
-            group(new Setting.Group("g_back", "Wings & back"), wings, wingsColour, wingStyle, tail, tailColour, backpack, backpackColour, katana, scarf, scarfColour);
+            group(new Setting.Group("g_back", "Wings & back"), wings, wingsColour, wingStyle, tail, tailColour, backpack, backpackColour, katana, scarf, scarfColour,
+                    spikes, spikesColour, bowtie, bowtieColour);
             group(new Setting.Group("g_head", "Head"), halo, haloColour, hat, ears, earsColour, bunny, bunnyColour, horns, hornsColour,
-                    antlers, antlersColour, orbit, orbitColour, glasses, glassesColour, headphones, headphonesColour);
+                    antlers, antlersColour, orbit, orbitColour, flowers, flowersColour, glasses, glassesColour, headphones, headphonesColour);
             group(new Setting.Group("g_hands", "Hands & feet"), gloves, glovesColour, feet);
             group(new Setting.Group("g_fx", "Effects & size"), glow, particles, trail, size);
         }
@@ -560,9 +666,9 @@ public final class Features {
         public String serialize() {
             if (!isEnabled()) return "";
             StringBuilder b = new StringBuilder();
-            Setting.Mode[] modes = {wings, halo, hat, ears, bunny, horns, glasses, headphones, tail, backpack, gloves, antlers, orbit, scarf};
-            String[] keys = {"wings", "halo", "hat", "ears", "bunny", "horns", "glasses", "headphones", "tail", "backpack", "gloves", "antlers", "orbit", "scarf"};
-            Setting.Color[] colours = {wingsColour, haloColour, null, earsColour, bunnyColour, hornsColour, glassesColour, headphonesColour, tailColour, backpackColour, glovesColour, antlersColour, orbitColour, scarfColour};
+            Setting.Mode[] modes = {wings, halo, hat, ears, bunny, horns, glasses, headphones, tail, backpack, gloves, antlers, orbit, scarf, flowers, bowtie, spikes};
+            String[] keys = {"wings", "halo", "hat", "ears", "bunny", "horns", "glasses", "headphones", "tail", "backpack", "gloves", "antlers", "orbit", "scarf", "flowers", "bowtie", "spikes"};
+            Setting.Color[] colours = {wingsColour, haloColour, null, earsColour, bunnyColour, hornsColour, glassesColour, headphonesColour, tailColour, backpackColour, glovesColour, antlersColour, orbitColour, scarfColour, flowersColour, bowtieColour, spikesColour};
             for (int i = 0; i < modes.length; i++) {
                 if (modes[i].is("Off")) continue;
                 String v = modes[i].is("Custom") ? "x" + String.format("%06x", colours[i].argb() & 0xFFFFFF) : code(modes[i].get());
@@ -592,10 +698,10 @@ public final class Features {
                 int i = part.indexOf(':');
                 m.put(i < 0 ? part : part.substring(0, i), i < 0 ? "" : part.substring(i + 1));
             }
-            Setting.Mode[] modes = {wings, halo, hat, ears, bunny, horns, glasses, headphones, tail, backpack, gloves, antlers, orbit, scarf};
-            String[] keys = {"wings", "halo", "hat", "ears", "bunny", "horns", "glasses", "headphones", "tail", "backpack", "gloves", "antlers", "orbit", "scarf"};
+            Setting.Mode[] modes = {wings, halo, hat, ears, bunny, horns, glasses, headphones, tail, backpack, gloves, antlers, orbit, scarf, flowers, bowtie, spikes};
+            String[] keys = {"wings", "halo", "hat", "ears", "bunny", "horns", "glasses", "headphones", "tail", "backpack", "gloves", "antlers", "orbit", "scarf", "flowers", "bowtie", "spikes"};
             boolean any = false;
-            Setting.Color[] colours = {wingsColour, haloColour, null, earsColour, bunnyColour, hornsColour, glassesColour, headphonesColour, tailColour, backpackColour, glovesColour, antlersColour, orbitColour, scarfColour};
+            Setting.Color[] colours = {wingsColour, haloColour, null, earsColour, bunnyColour, hornsColour, glassesColour, headphonesColour, tailColour, backpackColour, glovesColour, antlersColour, orbitColour, scarfColour, flowersColour, bowtieColour, spikesColour};
             for (int i = 0; i < modes.length; i++) {
                 String v = m.get(keys[i]);
                 if (v != null && v.length() == 7 && v.charAt(0) == 'x') {        // a custom colour from the launcher
@@ -766,15 +872,34 @@ public final class Features {
         public final Setting.Bool noEquip = add(new Setting.Bool("noequip", "No item switch animation", false));
         public final Setting.Number swingSpeed = add(new Setting.Number("swingspeed", "Swing speed", 1, 0.3, 3, 0.1, "x"));
         public final Setting.Bool noBob = add(new Setting.Bool("nobob", "No view bobbing (hand and camera)", false));
+        public final Setting.Bool hideHand = add(new Setting.Bool("hidehand", "Hide your empty hand", false));
+        public final Setting.Bool hideOffhand = add(new Setting.Bool("hideoffhand", "Hide the off-hand item", false));
         public final Setting.Action reset = add(new Setting.Action("reset", "Reset this type", new Runnable() {
             public void run() {
                 int t = indexOf(editing.get());
                 for (Setting.Number n : values[t]) n.reset();
             }
         }));
+        // one-click looks for "All items" (x, y, z, rotation x/y/z, size); tweak from there
+        public final Setting.Action presetSmall = add(new Setting.Action("preset_small", "Preset: small & tidy", preset(0.08, -0.06, -0.10, 0, 0, 0, 0.75)));
+        public final Setting.Action presetLow = add(new Setting.Action("preset_low", "Preset: lowered", preset(0.04, -0.18, -0.06, 0, 0, 0, 0.9)));
+        public final Setting.Action presetOld = add(new Setting.Action("preset_old", "Preset: 1.8 PvP", preset(0.02, -0.06, 0.08, 0, -6, 0, 0.85)));
+        public final Setting.Action presetCenter = add(new Setting.Action("preset_center", "Preset: centred", preset(-0.32, -0.08, -0.10, 0, 12, 0, 0.8)));
+        public final Setting.Action presetFar = add(new Setting.Action("preset_far", "Preset: far away", preset(0.10, 0.02, -0.45, 0, 0, 0, 0.9)));
+
+        /** A preset sets "All items" (and leaves your per-type tweaks on top). */
+        private Runnable preset(final double x, final double y, final double z, final double rx, final double ry, final double rz, final double size) {
+            return new Runnable() {
+                public void run() {
+                    double[] v = {x, y, z, rx, ry, rz, size};
+                    for (int k = 0; k < 7; k++) values[0][k].set(v[k]);
+                    editing.set(TYPES[0]);
+                }
+            };
+        }
 
         public ViewModel() {
-            super("viewmodel", "View Model", "Position, rotate and size each item type (or several at once), plus fire height", Category.VISUAL, false);
+            super("viewmodel", "View Model", "Presets, then position, rotate and size each item type (or several at once)", Category.VISUAL, false);
             // insert the per-type rows right after "Editing" so they read as its page
             List<Setting<?>> rows = new java.util.ArrayList<Setting<?>>();
             for (int t = 0; t < KEYS.length; t++) {
@@ -807,6 +932,19 @@ public final class Features {
             settings.removeAll(ticks);
             settings.addAll(1, rows);
             settings.addAll(1, ticks);
+            // tidy groups: presets first, the extras last (Editing + its sliders stay open)
+            group(new Setting.Group("g_presets", "Presets"), presetSmall, presetLow, presetOld, presetCenter, presetFar);
+            group(new Setting.Group("g_extras", "Hands, swing & fire"), hideHand, hideOffhand, mirror, noEquip, swingSpeed, noBob, fire);
+            // presets at the top
+            Setting<?> pg = null;
+            for (Setting<?> st : settings) if (st.id.equals("g_presets")) pg = st;
+            if (pg != null) {
+                List<Setting<?>> block = new java.util.ArrayList<Setting<?>>();
+                int i = settings.indexOf(pg);
+                for (int k = 0; k < 6; k++) block.add(settings.get(i + k));
+                settings.removeAll(block);
+                settings.addAll(0, block);
+            }
         }
 
         private Setting.Number n(String id, String name, double def, double min, double max, double step, String suffix, Setting.Cond when) {
