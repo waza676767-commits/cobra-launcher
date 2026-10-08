@@ -23,6 +23,8 @@ public final class ExternalCapture {
     private static boolean paused;
     private static long pid = -1;
     private static Boolean gsr;
+    /** gpu-screen-recorder's --help text: newer options are only passed when this version has them. */
+    private static String gsrHelp = "";
 
     private ExternalCapture() {}
 
@@ -37,9 +39,12 @@ public final class ExternalCapture {
             try {
                 Process p = new ProcessBuilder("gpu-screen-recorder", "--help").redirectErrorStream(true).start();
                 java.io.InputStream in = p.getInputStream();
+                java.io.ByteArrayOutputStream all = new java.io.ByteArrayOutputStream();
                 byte[] b = new byte[4096];
-                while (in.read(b) > 0) { /* drain */ }
+                int n;
+                while ((n = in.read(b)) > 0) if (all.size() < 200_000) all.write(b, 0, n);
                 p.waitFor();
+                gsrHelp = all.toString("UTF-8");
                 gsr = true;
             } catch (Exception e) {
                 gsr = false;
@@ -62,18 +67,28 @@ public final class ExternalCapture {
         file = new File(dir, "Abyss " + new SimpleDateFormat("yyyy-MM-dd HH-mm-ss").format(new Date()) + ".mp4");
         List<String> cmd = new ArrayList<String>();
         if (windows()) {
-            String enc = ScreenRecorder.pickEncoder(ffmpeg);
+            String enc = ScreenRecorder.pickEncoder(ffmpeg, encoderPref);
             if (enc.equals("h264_vaapi")) enc = "libx264";
+            int q = ScreenRecorder.qualityNumber(quality);
             add(cmd, ffmpeg, "-y", "-loglevel", "error", "-filter_complex",
-                    "ddagrab=output_idx=0:framerate=" + fps + ",hwdownload,format=bgra", "-c:v", enc);
-            if (enc.equals("libx264")) add(cmd, "-preset", "veryfast", "-crf", quality.equals("Ultra") ? "15" : quality.equals("High") ? "18" : "23");
-            else add(cmd, "-b:v", quality.equals("Ultra") ? "40M" : quality.equals("High") ? "25M" : "12M");
-            add(cmd, "-pix_fmt", "yuv420p", "-movflags", "+faststart", file.getAbsolutePath());
+                    "ddagrab=output_idx=0:framerate=" + fps + ",hwdownload,format=bgra,scale=iw:ih:" + ScreenRecorder.COLOUR + ",format=yuv420p",
+                    "-c:v", enc);
+            cmd.addAll(ScreenRecorder.encoderArgs(enc, q, fps, false));
+            add(cmd, "-pix_fmt", "yuv420p");
+            ScreenRecorder.colourTags(cmd);
+            add(cmd, "-movflags", "+faststart", file.getAbsolutePath());
         } else {
             boolean wayland = System.getenv("WAYLAND_DISPLAY") != null && !"x11".equals(System.getenv("XDG_SESSION_TYPE"));
             add(cmd, "gpu-screen-recorder", "-w", wayland ? "portal" : "focused", "-f", String.valueOf(fps), "-k", "h264",
-                    "-q", quality.equals("Small file") ? "high" : quality.equals("Balanced") ? "very_high" : "ultra",
-                    "-a", "default_output", "-o", file.getAbsolutePath());
+                    "-q", quality.equals("Small file") ? "high" : quality.equals("Balanced") ? "very_high" : "ultra");
+            // newer versions: constant frame rate (smooth in every player / editor), the right colour
+            // range, quality-based bitrate, and the cursor left out of game footage
+            if (has("-fm")) add(cmd, "-fm", "cfr");
+            if (has("-cr")) add(cmd, "-cr", "limited");
+            if (has("-bm")) add(cmd, "-bm", "qp");
+            if (has("-cursor")) add(cmd, "-cursor", "no");
+            if (has("-tune")) add(cmd, "-tune", "quality");
+            add(cmd, "-a", "default_output", "-o", file.getAbsolutePath());
         }
         ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
         String root = System.getProperty("cobra.root");
@@ -151,6 +166,13 @@ public final class ExternalCapture {
         } catch (Exception e) {
             return -1;
         }
+    }
+
+    /** The Recorder's Encoder setting (Windows: which encoder ffmpeg uses). */
+    public static volatile String encoderPref = "Auto";
+
+    private static boolean has(String option) {
+        return gsrHelp.contains(option + " ") || gsrHelp.contains(option + "\n") || gsrHelp.contains("[" + option);
     }
 
     private static void add(List<String> cmd, String... parts) {

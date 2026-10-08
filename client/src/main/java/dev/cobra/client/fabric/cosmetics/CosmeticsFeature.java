@@ -224,10 +224,22 @@ public final class CosmeticsFeature extends FeatureRenderer<PlayerEntityRenderSt
         matrices.push();
         p.applyTransform(matrices);
         matrices.scale(size / 16f, size / 16f, size / 16f);
-        queue.submitCustom(matrices, layer, (entry, vc) -> d.draw(CosmeticModels.M.identity(), (pts, nx, ny, nz, argb, light) -> {
-            for (int i = 0; i < 4; i++) {
-                vc.vertex(entry, pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2]).color(argb).texture(i == 2 || i == 3 ? 1 : 0, i == 1 || i == 2 ? 1 : 0)
-                        .overlay(OverlayTexture.DEFAULT_UV).light(light).normal(entry, nx, ny, nz);
+        queue.submitCustom(matrices, layer, (entry, vc) -> d.draw(CosmeticModels.M.identity(), new CosmeticModels.Out() {
+            @Override
+            public void quad(float[] pts, float nx, float ny, float nz, int argb, int light) {
+                for (int i = 0; i < 4; i++) {
+                    vc.vertex(entry, pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2]).color(argb).texture(i == 2 || i == 3 ? 1 : 0, i == 1 || i == 2 ? 1 : 0)
+                            .overlay(OverlayTexture.DEFAULT_UV).light(light).normal(entry, nx, ny, nz);
+                }
+            }
+
+            /** Every corner its own colour: the GPU blends them across the face (smooth gradients). */
+            @Override
+            public void quad4(float[] pts, float nx, float ny, float nz, int[] argb, int light) {
+                for (int i = 0; i < 4; i++) {
+                    vc.vertex(entry, pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2]).color(argb[i]).texture(i == 2 || i == 3 ? 1 : 0, i == 1 || i == 2 ? 1 : 0)
+                            .overlay(OverlayTexture.DEFAULT_UV).light(light).normal(entry, nx, ny, nz);
+                }
             }
         }));
         matrices.pop();

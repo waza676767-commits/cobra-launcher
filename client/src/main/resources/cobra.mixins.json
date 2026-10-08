@@ -24,6 +24,7 @@
     "HeldItemRendererMixin",
     "InGameHudMixin",
     "InGameOverlayRendererMixin",
+    "ItemEntityRenderStateMixin",
     "ItemEntityRendererMixin",
     "LavaFogMixin",
     "LivingEntitySwingMixin",

@@ -460,12 +460,25 @@ public final class HudModules {
         private final Setting.Bool hideIdle = add(new Setting.Bool("hideidle", "Hide when nothing plays", false));
 
         private volatile String title = "", artist = "", status = "", problem = null, artUrl = "";
-        private volatile byte[] artPng;
+        /** The cover being shown: a key (which song) and the picture as a rounded PNG, swapped together. */
+        private static final class Art {
+            final String key;
+            final byte[] png;
+            final int accent;
+
+            Art(String key, byte[] png, int accent) {
+                this.key = key;
+                this.png = png;
+                this.accent = accent;
+            }
+        }
+
+        private volatile Art cover;
+        private volatile String coverFor = "";
         private volatile long posMs, lenMs, polledAt;
         private boolean ppDown, nDown, pDown;
         private long nextPoll;
         private Thread poller;
-        private String artFor = "";
 
         public Spotify() { super("spotify", "Spotify", "A little Spotify player in a corner, with play / pause / skip keys", false, 0.70f, 0.02f); }
 
@@ -545,10 +558,8 @@ public final class HudModules {
                 posMs = pos == null ? 0 : parse(pick(pos, "(?:int64|uint64) (\\d+)")) / 1000;
                 polledAt = System.currentTimeMillis();
                 problem = null;
-                if (!url.equals(artUrl)) {                           // a new song: fetch its cover
-                    artUrl = url;
-                    artPng = url.startsWith("http") ? download(url) : null;
-                }
+                artUrl = url;
+                fetchCover(url, artist, title);
             } catch (Exception e) {
                 problem = "Can't reach Spotify";
             }
@@ -578,8 +589,144 @@ public final class HudModules {
                 title = found.substring(i + 3);
                 status = "Playing";
                 problem = null;
+                fetchCover("", artist, title);                       // Windows: no cover link, look it up
             }
             lenMs = 0;
+        }
+
+        /**
+         * Gets the song's cover once per song: from Spotify's own link (Linux), or, when there is
+         * none (Windows, local files), by looking the song up by artist and title. The picture is
+         * turned into a small PNG with rounded corners (Spotify sends JPEGs, which Minecraft can't
+         * load: that's why the cover used to stay empty) and its main colour is picked out for
+         * the progress bar.
+         */
+        private void fetchCover(String url, String artistNow, String titleNow) {
+            String key = !url.isEmpty() ? url : "song:" + artistNow + "|" + titleNow;
+            if (key.equals(coverFor) || (url.isEmpty() && titleNow.isEmpty())) return;
+            coverFor = key;
+            byte[] raw = null;
+            if (url.startsWith("http")) {
+                // older Spotify builds hand out open.spotify.com/image/... links that no longer work
+                String fixed = url.replace("://open.spotify.com/image/", "://i.scdn.co/image/");
+                raw = download(fixed);
+            } else if (url.startsWith("file://")) {
+                raw = readFile(url.substring(7));
+            }
+            if (raw == null && !titleNow.isEmpty()) raw = lookUp(artistNow, titleNow);
+            if (raw == null) {
+                cover = null;
+                return;
+            }
+            Art a = toRoundedPng(key, raw);
+            cover = a;
+        }
+
+        /** Finds the cover by artist + title (Apple's free search, no account needed). */
+        private static byte[] lookUp(String artistNow, String titleNow) {
+            try {
+                String q = java.net.URLEncoder.encode((artistNow + " " + titleNow).trim(), "UTF-8");
+                byte[] json = download("https://itunes.apple.com/search?media=music&entity=song&limit=1&term=" + q);
+                if (json == null) return null;
+                String art = pick(new String(json, "UTF-8"), "\"artworkUrl100\"\\s*:\\s*\"([^\"]+)\"");
+                if (art.isEmpty()) return null;
+                return download(art.replace("100x100bb", "300x300bb"));
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        private static byte[] readFile(String path) {
+            try {
+                java.io.File f = new java.io.File(java.net.URLDecoder.decode(path, "UTF-8"));
+                if (!f.isFile() || f.length() > 8_000_000) return null;
+                java.io.InputStream in = new java.io.FileInputStream(f);
+                java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
+                in.close();
+                return b.toByteArray();
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        /** Any picture (JPEG, PNG, WebP if supported) → 128 px PNG with rounded corners + its main colour. */
+        static Art toRoundedPng(String key, byte[] raw) {
+            try {
+                java.awt.image.BufferedImage src = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(raw));
+                if (src == null) return isPng(raw) ? new Art(key, raw, 0) : null;
+                int n = 128;
+                java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(n, n, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                java.awt.Graphics2D g = img.createGraphics();
+                g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                // centre-crop to a square, then a smooth rounded mask
+                int side = Math.min(src.getWidth(), src.getHeight());
+                int sx = (src.getWidth() - side) / 2, sy = (src.getHeight() - side) / 2;
+                g.setClip(new java.awt.geom.RoundRectangle2D.Float(0, 0, n, n, 26, 26));
+                g.drawImage(src, 0, 0, n, n, sx, sy, sx + side, sy + side, null);
+                g.dispose();
+                softenCorners(img, 13);
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                javax.imageio.ImageIO.write(img, "png", out);
+                return new Art(key, out.toByteArray(), mainColour(img));
+            } catch (Throwable t) {                                  // no image support in this Java: PNGs still work
+                return isPng(raw) ? new Art(key, raw, 0) : null;
+            }
+        }
+
+        private static boolean isPng(byte[] b) {
+            return b != null && b.length > 8 && (b[0] & 255) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G';
+        }
+
+        /** Anti-aliased corners (the clip above is hard-edged): alpha from the distance to the rounded edge. */
+        private static void softenCorners(java.awt.image.BufferedImage img, int r) {
+            int n = img.getWidth();
+            for (int y = 0; y < n; y++) {
+                for (int x = 0; x < n; x++) {
+                    float cx = x < r ? r : x >= n - r ? n - r - 1 : x, cy = y < r ? r : y >= n - r ? n - r - 1 : y;
+                    if (cx == x && cy == y) continue;
+                    float d = (float) Math.hypot(x + 0.5f - (cx + 0.5f), y + 0.5f - (cy + 0.5f));
+                    float a = Math.max(0, Math.min(1, r - d + 0.5f));
+                    int c = img.getRGB(x, y);
+                    if (a < 1 && (c >>> 24) > 0) img.setRGB(x, y, Math.round((c >>> 24) * a) << 24 | (c & 0xFFFFFF));
+                }
+            }
+        }
+
+        /** The cover's most striking colour (saturated, not too dark / light), for the progress bar. */
+        private static int mainColour(java.awt.image.BufferedImage img) {
+            float bestScore = -1;
+            int best = 0;
+            int[] bins = new int[36 * 3];
+            long[][] sum = new long[36 * 3][3];
+            for (int y = 0; y < img.getHeight(); y += 3) {
+                for (int x = 0; x < img.getWidth(); x += 3) {
+                    int c = img.getRGB(x, y);
+                    if ((c >>> 24) < 200) continue;
+                    float[] hsb = java.awt.Color.RGBtoHSB(c >> 16 & 255, c >> 8 & 255, c & 255, null);
+                    if (hsb[1] < 0.25f || hsb[2] < 0.25f) continue;
+                    int bin = Math.min(35, (int) (hsb[0] * 36)) * 3 + Math.min(2, (int) (hsb[2] * 3));
+                    bins[bin]++;
+                    sum[bin][0] += c >> 16 & 255;
+                    sum[bin][1] += c >> 8 & 255;
+                    sum[bin][2] += c & 255;
+                }
+            }
+            for (int i = 0; i < bins.length; i++) {
+                if (bins[i] == 0) continue;
+                int rr = (int) (sum[i][0] / bins[i]), gg = (int) (sum[i][1] / bins[i]), bb = (int) (sum[i][2] / bins[i]);
+                float[] hsb = java.awt.Color.RGBtoHSB(rr, gg, bb, null);
+                float score = bins[i] * (0.4f + hsb[1]);
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = java.awt.Color.HSBtoRGB(hsb[0], Math.min(0.85f, Math.max(0.45f, hsb[1])), Math.max(0.75f, hsb[2]));
+                }
+            }
+            return best == 0 ? 0 : 0xFF000000 | best;
         }
 
         private static String unescape(String s) { return s.replace("\\'", "'").replace("\\\\", "\\"); }
@@ -589,6 +736,8 @@ public final class HudModules {
                 java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
                 c.setConnectTimeout(4000);
                 c.setReadTimeout(6000);
+                c.setRequestProperty("User-Agent", "Mozilla/5.0 (Cobra Client)");
+                c.setInstanceFollowRedirects(true);
                 java.io.InputStream in = c.getInputStream();
                 java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
                 byte[] buf = new byte[8192];
@@ -651,18 +800,21 @@ public final class HudModules {
             }
             boolean playing = st.equalsIgnoreCase("Playing");
             if (playing && !editing && len > 0) pos = Math.min(len, pos + System.currentTimeMillis() - polledAt);
-            boolean cover = art.on();
-            int cs = cover ? 46 : 0;                                 // the cover, a rounded square on the left
+            boolean showCover = art.on();
+            Art a0 = cover;
+            int accent = a0 != null && a0.accent != 0 ? a0.accent : 0xFFE5E5EA;
+            int cs = showCover ? 46 : 0;                             // the cover, a rounded square on the left
             w = 210;
             h = 58;
-            // the card: dark and rounded like the phone's player
+            // the card: dark and rounded like the phone's player, faintly tinted with the cover's colour
             dev.cobra.client.core.ui.Draw.round(r, 0, 0, w, h, 8, 0xE6141416);
+            if (a0 != null && a0.accent != 0) dev.cobra.client.core.ui.Draw.round(r, 0, 0, w, h, 8, dev.cobra.client.core.ui.Draw.alpha(a0.accent, 0.10f));
             dev.cobra.client.core.ui.Draw.round(r, 0, 0, w, 1, 0, 0x22FFFFFF);
             int x0 = 6;
-            if (cover) {
-                if (artPng != null && !editing) {
-                    if (!artUrl.equals(artFor)) artFor = artUrl;
-                    r.imagePng(artUrl, artPng, 6, 6, cs, cs);
+            if (showCover) {
+                if (a0 != null && !editing) {
+                    dev.cobra.client.core.ui.Draw.round(r, 5, 7, cs + 2, cs + 1, 6, 0x50000000);   // soft shadow
+                    r.imagePng(a0.key, a0.png, 6, 6, cs, cs);
                 } else {
                     dev.cobra.client.core.ui.Draw.round(r, 6, 6, cs, cs, 5, 0xFF2C2C2E);
                     r.texture("icon/signal", 6 + cs / 2f - 8, 6 + cs / 2f - 8, 16, 16, 0xFF8E8E93);
@@ -676,7 +828,7 @@ public final class HudModules {
             if (len > 0) {
                 float f = Math.max(0, Math.min(1, pos / (float) len));
                 dev.cobra.client.core.ui.Draw.round(r, x0, 29, tw, 2, 1, 0x40FFFFFF);
-                dev.cobra.client.core.ui.Draw.round(r, x0, 29, Math.max(2, Math.round(tw * f)), 2, 1, 0xFFE5E5EA);
+                dev.cobra.client.core.ui.Draw.round(r, x0, 29, Math.max(2, Math.round(tw * f)), 2, 1, accent);
                 dev.cobra.client.core.ui.Draw.scaledText(r, time(pos), x0, 33, 0.6f, 0xFF8E8E93, false);
                 String rem = "-" + time(len - pos);
                 dev.cobra.client.core.ui.Draw.scaledText(r, rem, x0 + tw - r.textWidth(rem) * 0.6f, 33, 0.6f, 0xFF8E8E93, false);

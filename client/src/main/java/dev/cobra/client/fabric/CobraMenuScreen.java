@@ -17,6 +17,11 @@ public final class CobraMenuScreen extends Screen {
         this.parent = parent;
     }
 
+    /** Opens on the Waypoints tab, ready to type the name of a waypoint that was just added. */
+    public void nameWaypoint(dev.cobra.client.core.module.Features.Waypoints.Point pt) {
+        menu.nameWaypoint(pt);
+    }
+
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         FabricRender r = CobraFabric.RENDER.with(context);

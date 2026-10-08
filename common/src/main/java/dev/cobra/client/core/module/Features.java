@@ -116,6 +116,7 @@ public final class Features {
         public final Setting.Mode fps = add(new Setting.Mode("fps", "Frame rate", "60", "30", "60", "120"));
         public final Setting.Mode resolution = add(new Setting.Mode("resolution", "Resolution", "Window size", "Window size", "1440p", "1080p", "720p"));
         public final Setting.Mode quality = add(new Setting.Mode("quality", "Quality", "High", "Ultra", "High", "Balanced", "Small file"));
+        public final Setting.Mode encoder = add(new Setting.Mode("encoder", "Encoder", "Auto", "Auto", "Graphics card", "CPU (sharpest)"));
         public final Setting.Bool indicator = add(new Setting.Bool("indicator", "Show REC in the corner", true));
         /** Auto: record with the graphics card outside the game when possible (no FPS loss). */
         public final Setting.Mode capture = add(new Setting.Mode("capture", "Capture", "Auto (lightest)", "Auto (lightest)", "Game frames"));
@@ -132,6 +133,8 @@ public final class Features {
 
         @Override
         public void onTick() {
+            rec.encoderPref = encoder.get();
+            dev.cobra.client.core.ExternalCapture.encoderPref = encoder.get();
             boolean menus = Cobra.platform.screenOpen();
             boolean s = !menus && start.code() >= 0 && Cobra.platform.rawKeyDown(start.code());
             boolean p = !menus && pause.code() >= 0 && Cobra.platform.rawKeyDown(pause.code());
@@ -1080,10 +1083,11 @@ public final class Features {
         public HurtCam() { super("hurtcam", "No Hurt Camera", "Removes the screen shake when you take damage", Category.VISUAL, false); }
     }
 
+    /** Drawing is done by the client's item renderer (ItemPhysicsFx); these are its options. */
     public static final class ItemPhysics extends Module {
-        public final Setting.Number speed = add(new Setting.Number("speed", "Turn speed", 0, 0, 3, 0.1, "x"));
+        public final Setting.Number airSpin = add(new Setting.Number("airspin", "Tumble in the air", 1, 0, 3, 0.1, "x"));
 
-        public ItemPhysics() { super("itemphysics", "Item Physics", "Dropped items lie flat on the ground, no bobbing", Category.VISUAL, false); }
+        public ItemPhysics() { super("itemphysics", "Item Physics", "Dropped items fall over, tumble and lie flat like real objects", Category.VISUAL, false); }
     }
 
     public static final class Zoom extends Module {
@@ -1279,8 +1283,11 @@ public final class Features {
 
     public static final class Waypoints extends Module {
         public static final class Point {
-            public final String name, server, dim;
-            public final int x, y, z, color;
+            /** Name and colour can be changed in the Right Shift menu (Waypoints tab). */
+            public String name;
+            public int color;
+            public final String server, dim;
+            public final int x, y, z;
 
             Point(String name, int x, int y, int z, int color, String server, String dim) {
                 this.name = name;
@@ -1293,18 +1300,37 @@ public final class Features {
             }
         }
 
-        private static final int[] COLORS = {0xFF4CD964, 0xFF3DDCFF, 0xFFFF9F43, 0xFFB86BFF, 0xFFFF6BCB, 0xFFFFD93D};
+        public static final int[] COLORS = {0xFF4CD964, 0xFF3DDCFF, 0xFFFF9F43, 0xFFB86BFF, 0xFFFF6BCB, 0xFFFFD93D, 0xFFFF4D4D, 0xFF4D7CFF};
+        public static final int NAME_MAX = 24;
         public final List<Point> points = new ArrayList<Point>();
         public final Setting.Bool distance = add(new Setting.Bool("distance", "Show distance", true));
+        public final Setting.Bool beam = add(new Setting.Bool("beam", "Marker line down to the spot", true));
+        public final Setting.Bool nameOnAdd = add(new Setting.Bool("nameonadd", "Name it when you add one", true));
+        public final Setting.Number labelSize = add(new Setting.Number("labelsize", "Label size", 1, 0.6, 1.6, 0.05, "x"));
         public final Setting.Bind key = add(new Setting.Bind("key", "Add waypoint key", -1, "waypoint"));
+
+        /** A waypoint just added with the key that still wants a name (the client opens the menu for it). */
+        public volatile Point toName;
 
         public void remove(Point pt) {
             points.remove(pt);
             Cobra.save();
         }
 
+        public void rename(Point pt, String name) {
+            String n = name == null ? "" : name.replace("|", "").trim();
+            if (n.length() > NAME_MAX) n = n.substring(0, NAME_MAX);
+            pt.name = n.isEmpty() ? "Waypoint" : n;
+            Cobra.save();
+        }
+
+        public void recolor(Point pt, int argb) {
+            pt.color = 0xFF000000 | (argb & 0xFFFFFF);
+            Cobra.save();
+        }
+
         public Waypoints() {
-            super("waypoints", "Waypoints", "Press B to mark your position", Category.UTILITY, true);
+            super("waypoints", "Waypoints", "Press B to mark your position, then name and colour it", Category.UTILITY, true);
             add(new Setting.Action("add", "Add waypoint here", new Runnable() {
                 @Override public void run() { addHere(); }
             }));
@@ -1313,14 +1339,22 @@ public final class Features {
             }));
         }
 
-        public void addHere() {
-            if (!p().inWorld()) return;
+        /** Adds a waypoint where you stand; returns it (null when not in a world). */
+        public Point addHere() {
+            if (!p().inWorld()) return null;
             int n = here().size() + 1;
             Point pt = new Point("Waypoint " + n, (int) Math.floor(p().x()), (int) Math.floor(p().y()), (int) Math.floor(p().z()),
                     COLORS[points.size() % COLORS.length], p().server(), p().dimension());
             points.add(pt);
             p().chat("\u00a77[\u00a7fCobra\u00a77] Added \u00a7f" + pt.name + "\u00a77 at " + pt.x + ", " + pt.y + ", " + pt.z);
             Cobra.save();
+            return pt;
+        }
+
+        /** The add-waypoint key: adds one and (if wanted) asks for its name. */
+        public void addFromKey() {
+            Point pt = addHere();
+            if (pt != null && nameOnAdd.on()) toName = pt;
         }
 
         public void clearHere() {
@@ -1340,7 +1374,10 @@ public final class Features {
             return out;
         }
 
-        /** Projects each waypoint onto the screen and draws a label (visible through walls). */
+        /**
+         * Projects each waypoint onto the screen (visible through walls): a diamond in the
+         * waypoint's colour with a line down to the spot, and a label with its name and distance.
+         */
         public void render(Render r) {
             double[] cam = p().camera();
             if (cam == null) return;
@@ -1349,6 +1386,7 @@ public final class Features {
             double rx = -Math.cos(yaw), rz = -Math.sin(yaw);
             double ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy; // up = right x forward
             double focal = (r.height() / 2.0) / Math.tan(Math.toRadians(cam[5]) / 2);
+            float k = labelSize.f();
             for (Point pt : here()) {
                 double dx = pt.x + 0.5 - cam[0], dy = pt.y + 1.2 - cam[1], dz = pt.z + 0.5 - cam[2];
                 double zc = dx * fx + dy * fy + dz * fz;
@@ -1356,11 +1394,38 @@ public final class Features {
                 double xc = dx * rx + dz * rz, yc = dx * ux + dy * uy + dz * uz;
                 float sx = (float) (r.width() / 2.0 + xc / zc * focal), sy = (float) (r.height() / 2.0 - yc / zc * focal);
                 double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                String label = pt.name + (distance.on() ? "  " + Math.round(dist) + "m" : "");
-                int tw = r.textWidth(label);
-                r.rect(Math.round(sx) - 2, Math.round(sy) - 14, 4, 4, pt.color);
-                r.rect(Math.round(sx - tw / 2f) - 3, Math.round(sy) - 8, tw + 6, 11, 0x80000000);
-                r.text(label, sx - tw / 2f, sy - 6, 0xFFFFFFFF, false);
+                // the spot on the ground, for the line down to it
+                double gy = pt.y - cam[1], gz = dx * fx + gy * fy + dz * fz;
+                float groundY = gz > 0.1 ? (float) (r.height() / 2.0 - (dx * ux + gy * uy + dz * uz) / gz * focal) : sy;
+                int c = 0xFF000000 | (pt.color & 0xFFFFFF);
+                // fades a little when you're right on top of it, so it doesn't block your view
+                float near = (float) Math.max(0.35, Math.min(1, (dist - 2) / 6));
+                if (beam.on() && groundY > sy + 4) r.rect(Math.round(sx), Math.round(sy), 1, Math.round(groundY - sy), dev.cobra.client.core.ui.Draw.alpha(c, 0.55f * near));
+
+                r.push();
+                r.translate(sx, sy);
+                r.scale(k);
+                // diamond marker: a dark outline, the colour, and a bright core
+                diamond(r, 0, -9, 5, dev.cobra.client.core.ui.Draw.alpha(0xFF000000, 0.55f * near));
+                diamond(r, 0, -9, 4, dev.cobra.client.core.ui.Draw.alpha(c, near));
+                diamond(r, 0, -9, 1, dev.cobra.client.core.ui.Draw.alpha(0xFFFFFFFF, 0.9f * near));
+                String d = distance.on() ? (dist >= 1000 ? String.format(java.util.Locale.ROOT, "%.1fkm", dist / 1000) : Math.round(dist) + "m") : "";
+                int nw = r.textWidth(pt.name), dw = d.isEmpty() ? 0 : r.textWidth(d);
+                int w = 9 + nw + (dw > 0 ? 6 + dw : 0) + 5;
+                int x0 = -w / 2, y0 = -1;
+                dev.cobra.client.core.ui.Draw.round(r, x0, y0, w, 13, 4, dev.cobra.client.core.ui.Draw.alpha(0xD0101014, near));
+                dev.cobra.client.core.ui.Draw.round(r, x0 + 2, y0 + 3, 3, 7, 1, dev.cobra.client.core.ui.Draw.alpha(c, near));               // colour tab
+                r.text(pt.name, x0 + 8, y0 + 3, dev.cobra.client.core.ui.Draw.alpha(0xFFFFFFFF, near), false);
+                if (dw > 0) r.text(d, x0 + 8 + nw + 6, y0 + 3, dev.cobra.client.core.ui.Draw.alpha(dev.cobra.client.core.ui.Draw.mix(c, 0xFFFFFFFF, 0.45f), near), false);
+                r.pop();
+            }
+        }
+
+        /** A filled diamond (rhombus) centred on (cx, cy), {@code s} pixels from the middle to a corner. */
+        private static void diamond(Render r, int cx, int cy, int s, int argb) {
+            for (int i = -s; i <= s; i++) {
+                int half = s - Math.abs(i);
+                r.rect(cx - half, cy + i, half * 2 + 1, 1, argb);
             }
         }
 

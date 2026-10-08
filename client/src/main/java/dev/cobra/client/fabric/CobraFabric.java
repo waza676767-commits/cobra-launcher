@@ -128,7 +128,17 @@ public final class CobraFabric implements ClientModInitializer {
         }
         while (WAYPOINT.wasPressed()) {
             Features.Waypoints wp = Cobra.get(Features.Waypoints.class);
-            if (wp.isEnabled()) wp.addHere();
+            if (wp.isEnabled()) wp.addFromKey();
+        }
+        Features.Waypoints wpName = Cobra.get(Features.Waypoints.class);
+        if (wpName.toName != null) {                       // just added with the key: type its name
+            Features.Waypoints.Point pt = wpName.toName;
+            wpName.toName = null;
+            if (mc.currentScreen == null && mc.world != null) {
+                CobraMenuScreen screen = new CobraMenuScreen(null);
+                screen.nameWaypoint(pt);
+                mc.setScreen(screen);
+            }
         }
 
         // Freelook: third-person camera that turns independently of the player
@@ -415,7 +425,7 @@ public final class CobraFabric implements ClientModInitializer {
     // ------------------------------------------------------------------ screen recorder
 
     private static final java.util.concurrent.atomic.AtomicInteger inFlight = new java.util.concurrent.atomic.AtomicInteger();
-    private static long nextCapture, lastRequest;
+    private static long nextCapture, lastRequest, frameSeq;
     private static final java.util.concurrent.ExecutorService FRAME_COPY = java.util.concurrent.Executors.newFixedThreadPool(2, run -> {
         Thread t = new Thread(run, "cobra-recorder-copy");
         t.setDaemon(true);
@@ -443,12 +453,13 @@ public final class CobraFabric implements ClientModInitializer {
         int down = fb.textureHeight >= 2160 && r.resolution.is("1080p") ? 2 : 1;   // 4K screens: halve on the GPU
         inFlight.incrementAndGet();
         lastRequest = now;
+        final long seq = ++frameSeq;                    // frames can finish copying out of order
         try {
             net.minecraft.client.util.ScreenshotRecorder.takeScreenshot(fb, down, image -> FRAME_COPY.execute(() -> {
                 // the 8 MB copy happens here, off the render thread, so recording doesn't cost FPS
                 try {
                     int[] px = image.copyPixelsArgb();
-                    r.rec.offer(px, image.getWidth(), image.getHeight(), r.ffmpeg(), r.folder(), r.resolution.get(), r.quality.get());
+                    r.rec.offer(px, image.getWidth(), image.getHeight(), r.ffmpeg(), r.folder(), r.resolution.get(), r.quality.get(), seq);
                 } finally {
                     image.close();
                     inFlight.updateAndGet(v -> Math.max(0, v - 1));

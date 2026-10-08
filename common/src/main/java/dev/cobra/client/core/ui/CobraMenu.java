@@ -83,7 +83,7 @@ public final class CobraMenu {
 
     private int modsBtnY() { return lastH / 2 - modsBtnW() / 2; }
 
-    public boolean typing() { return searchFocus || textFocus != null || listening != null; }
+    public boolean typing() { return searchFocus || textFocus != null || listening != null || nameEdit != null; }
 
     public void setRender(Render r) { lastRender = r; }
 
@@ -455,28 +455,97 @@ public final class CobraMenu {
         r.noScissor();
     }
 
+    // ------------------------------------------------------------------ waypoints tab
+
+    private static final int WP_ROW = 24;
+    /** The waypoint whose name is being typed, and what's typed so far. */
+    private Features.Waypoints.Point nameEdit;
+    private String nameBuf = "";
+    /** Set when the menu was opened just to name a new waypoint: Enter / Esc closes it again. */
+    private boolean closeAfterName;
+    /** The colour wheel edits this stand-in, which is copied onto the waypoint being recoloured. */
+    private final Setting.Color wpColor = new Setting.Color("wpcolor", "Colour", 0xFFFFFFFF);
+    private Features.Waypoints.Point colorFor;
+
+    /** Opens straight on the Waypoints tab with this waypoint's name ready to type (the B key). */
+    public void nameWaypoint(Features.Waypoints.Point pt) {
+        editing = false;
+        tab = 2;
+        appear = Math.max(appear, 0.6f);
+        startName(pt);
+        closeAfterName = true;
+    }
+
+    private void startName(Features.Waypoints.Point pt) {
+        nameEdit = pt;
+        nameBuf = pt.name;
+    }
+
+    private void commitName() {
+        if (nameEdit == null) return;
+        Cobra.get(Features.Waypoints.class).rename(nameEdit, nameBuf);
+        nameEdit = null;
+    }
+
     private void renderWaypoints(Render r, int mx, int my) {
         Features.Waypoints wp = Cobra.get(Features.Waypoints.class);
+        if (colorFor != null) {                                    // live preview while the wheel is open
+            if (picker.isOpen()) colorFor.color = 0xFF000000 | (wpColor.argb() & 0xFFFFFF);
+            else {
+                wp.recolor(colorFor, wpColor.argb());
+                colorFor = null;
+            }
+        }
         r.text("Waypoints", cx0, cy0 + 4, Draw.FG, false);
         wideButton(r, cx0 + cw0 - 104, cy0, 104, 15, "ADD HERE", mx, my, true);
         List<Features.Waypoints.Point> list = wp.here();
-        Draw.scaledText(r, Cobra.platform.inWorld() ? list.size() + " on this server and dimension. Press "
-                + Cobra.platform.keyName(Cobra.platform.bindCode("waypoint")) + " in game to add one." : "Join a world to see its waypoints.",
+        Draw.scaledText(r, Cobra.platform.inWorld() ? list.size() + " here. Click a name to rename it, the colour to change it. Key: "
+                + Cobra.platform.keyName(Cobra.platform.bindCode("waypoint")) : "Join a world to see its waypoints.",
                 cx0, cy0 + 20, 0.72f, soft(), false);
-        int top = cy0 + 32;
+        int top = cy0 + 32, areaH = ch0 - 32;
+        scrollTarget = Math.max(0, Math.min(Math.max(0, list.size() * WP_ROW - areaH), scrollTarget));
+        r.scissor(cx0 - 2, top - 1, cw0 + 4, areaH + 2);
+        boolean mouseIn = in(mx, my, cx0, top, cw0, areaH) && !picker.isOpen();
+        double[] cam = Cobra.platform.camera();
         for (int i = 0; i < list.size(); i++) {
             Features.Waypoints.Point pt = list.get(i);
-            int y = top + i * 20;
-            if (y > cy0 + ch0 - 18) break;
-            Draw.box(r, cx0, y, cw0, 17, 3, card(), line());
-            r.rect(cx0 + 5, y + 5, 7, 7, pt.color);
-            r.text(pt.name, cx0 + 17, y + 5, Draw.FG, false);
-            String c = pt.x + ", " + pt.y + ", " + pt.z;
-            r.text(c, cx0 + cw0 - 26 - r.textWidth(c), y + 5, soft(), false);
-            boolean hd = in(mx, my, cx0 + cw0 - 19, y + 2, 14, 13);
-            if (hd) Draw.round(r, cx0 + cw0 - 19, y + 2, 14, 13, 3, 0xFFC7404F);
-            r.texture("icon/trash", cx0 + cw0 - 16, y + 4, 8, 8, hd ? 0xFFFFFFFF : soft());
+            int yBase = top + i * WP_ROW - Math.round(scroll);
+            if (yBase + WP_ROW < top - 2 || yBase > top + areaH) continue;
+            int y = yBase + Math.round(rise(i, 18));
+            boolean hovRow = mouseIn && in(mx, my, cx0, y, cw0, WP_ROW - 3);
+            int c = 0xFF000000 | (pt.color & 0xFFFFFF);
+            Draw.box(r, cx0, y, cw0, WP_ROW - 3, 4, hovRow ? cardHov() : card(), hovRow ? Draw.alpha(c, 0.7f) : line());
+            Draw.round(r, cx0 + 1, y + 4, 2, WP_ROW - 11, 1, c);                    // colour stripe
+            // colour swatch (opens the colour wheel)
+            boolean hs = mouseIn && in(mx, my, cx0 + 7, y + 3, 15, 15);
+            Draw.round(r, cx0 + 7, y + 3, 15, 15, 4, hs ? Draw.FG : line());
+            Draw.round(r, cx0 + 8, y + 4, 13, 13, 3, c);
+            Draw.round(r, cx0 + 10, y + 6, 4, 3, 1, 0x50FFFFFF);                     // a little shine
+            // the name: click to type a new one
+            String coords = pt.x + ", " + pt.y + ", " + pt.z;
+            if (cam != null) {
+                double dx = pt.x + 0.5 - cam[0], dy = pt.y - cam[1], dz = pt.z + 0.5 - cam[2];
+                coords += "   " + Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz)) + "m";
+            }
+            int coordsW = Math.round(r.textWidth(coords) * 0.72f);
+            int nx = cx0 + 28, nw = cw0 - 28 - coordsW - 34;
+            boolean editingThis = nameEdit == pt;
+            boolean hn = mouseIn && in(mx, my, nx - 3, y + 3, nw + 6, 15);
+            if (editingThis) Draw.box(r, nx - 3, y + 3, nw + 6, 15, 3, panel() | 0xFF000000, accent());
+            else if (hn) Draw.round(r, nx - 3, y + 3, nw + 6, 15, 3, Draw.alpha(Draw.FG, 0.06f));
+            String shown = editingThis ? nameBuf + ((System.currentTimeMillis() / 500) % 2 == 0 ? "_" : "") : pt.name;
+            if (editingThis && nameBuf.isEmpty()) r.text("Type a name...", nx, y + 7, muted(), false);
+            if (!editingThis || !nameBuf.isEmpty()) r.text(clip(r, shown, nw), nx, y + 7, Draw.FG, false);
+            if (hn && !editingThis) {
+                String hint = "rename";
+                Draw.scaledText(r, hint, nx + nw - r.textWidth(hint) * 0.65f, y + 8, 0.65f, muted(), false);
+            }
+            Draw.scaledText(r, coords, cx0 + cw0 - 26 - coordsW, y + 8, 0.72f, soft(), false);
+            boolean hd = mouseIn && in(mx, my, cx0 + cw0 - 20, y + 3, 15, 15);
+            if (hd) Draw.round(r, cx0 + cw0 - 20, y + 3, 15, 15, 3, 0xFFC7404F);
+            r.texture("icon/trash", cx0 + cw0 - 16, y + 7, 8, 8, hd ? 0xFFFFFFFF : soft());
         }
+        r.noScissor();
         if (list.isEmpty() && Cobra.platform.inWorld()) Draw.centered(r, "No waypoints here yet", cx0 + cw0 / 2f, top + 20, muted(), false);
     }
 
@@ -668,6 +737,10 @@ public final class CobraMenu {
         }
         searchFocus = false;
         textFocus = null;
+        if (nameEdit != null) {                                   // clicking anywhere finishes the name
+            commitName();
+            closeAfterName = false;
+        }
         if (!in(mx, my, px, py, pw, ph)) return false;
         if (in(mx, my, px + pw - 23, py + 6, 17, 17)) {
             Cobra.save();
@@ -819,18 +892,29 @@ public final class CobraMenu {
     private boolean clickWaypoints(int mx, int my) {
         Features.Waypoints wp = Cobra.get(Features.Waypoints.class);
         if (in(mx, my, cx0 + cw0 - 104, cy0, 104, 15)) {
-            wp.addHere();
+            Features.Waypoints.Point pt = wp.addHere();
+            if (pt != null) startName(pt);                       // straight into naming it
             return true;
         }
         List<Features.Waypoints.Point> list = wp.here();
         int top = cy0 + 32;
+        if (my < top) return true;
         for (int i = 0; i < list.size(); i++) {
-            int y = top + i * 20;
-            if (in(mx, my, cx0 + cw0 - 19, y + 2, 14, 13)) {
-                wp.points.remove(list.get(i));
-                Cobra.save();
+            Features.Waypoints.Point pt = list.get(i);
+            int y = top + i * WP_ROW - Math.round(scroll);
+            if (!in(mx, my, cx0, y, cw0, WP_ROW - 3)) continue;
+            if (in(mx, my, cx0 + cw0 - 20, y + 3, 15, 15)) {
+                wp.remove(pt);
                 return true;
             }
+            if (in(mx, my, cx0 + 5, y + 1, 19, 19)) {
+                colorFor = pt;
+                wpColor.set(0xFF000000 | (pt.color & 0xFFFFFF));
+                picker.open(wpColor, cx0 + 6, y + WP_ROW, lastW, lastH);
+                return true;
+            }
+            startName(pt);                                        // anywhere else on the row: rename
+            return true;
         }
         return true;
     }
@@ -898,6 +982,19 @@ public final class CobraMenu {
             Cobra.save();
             return false;
         }
+        if (nameEdit != null) {
+            if (key == KEY_BACKSPACE && !nameBuf.isEmpty()) nameBuf = nameBuf.substring(0, nameBuf.length() - 1);
+            if (key == KEY_ENTER || key == KEY_ESCAPE) {
+                if (key == KEY_ENTER || !nameBuf.trim().isEmpty()) commitName();
+                else nameEdit = null;                             // Esc with nothing typed: keep the old name
+                if (closeAfterName) {
+                    closeAfterName = false;
+                    Cobra.save();
+                    return true;
+                }
+            }
+            return false;
+        }
         if (textFocus != null) {
             if (key == KEY_BACKSPACE && !textFocus.get().isEmpty()) textFocus.set(textFocus.get().substring(0, textFocus.get().length() - 1));
             if (key == KEY_ENTER || key == KEY_ESCAPE) textFocus = null;
@@ -940,6 +1037,10 @@ public final class CobraMenu {
 
     public void charTyped(char c) {
         if (c < 32 || c == 127 || listening != null) return;
+        if (nameEdit != null) {
+            if (nameBuf.length() < Features.Waypoints.NAME_MAX && c != '|') nameBuf += c;
+            return;
+        }
         if (textFocus != null) {
             if (textFocus.get().length() < textFocus.maxLength && c != '|') textFocus.set(textFocus.get() + c);
             return;

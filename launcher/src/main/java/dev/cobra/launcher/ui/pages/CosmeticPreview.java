@@ -18,8 +18,9 @@ import java.util.Map;
 final class CosmeticPreview {
     private CosmeticPreview() {}
 
-    private record Face(double[] xs, double[] ys, double depth, Color colour, BufferedImage tex, float shade) {
-        Face(double[] xs, double[] ys, double depth, Color colour) { this(xs, ys, depth, colour, null, 1f); }
+    private record Face(double[] xs, double[] ys, double depth, Color colour, BufferedImage tex, float shade, Color[] corners) {
+        Face(double[] xs, double[] ys, double depth, Color colour) { this(xs, ys, depth, colour, null, 1f, null); }
+        Face(double[] xs, double[] ys, double depth, Color colour, BufferedImage tex, float shade) { this(xs, ys, depth, colour, tex, shade, null); }
     }
 
     /** A skin face waiting to be projected: its top-left, top-right and bottom-left corners + texture. */
@@ -29,18 +30,26 @@ final class CosmeticPreview {
     static BufferedImage render(String code, int w, int h, double yawDeg, boolean withPlayer, BufferedImage skin) {
         Map<String, String> wear = parse(code);
         List<double[][]> quads = new ArrayList<>();
-        List<Integer> colours = new ArrayList<>();
+        List<int[]> colours = new ArrayList<>();
         List<double[]> normals = new ArrayList<>();
-        CosmeticModels.Out out = (p, nx, ny, nz, argb, light) -> {
-            double[][] q = new double[4][3];
-            for (int i = 0; i < 4; i++) {
-                q[i][0] = p[i * 3];
-                q[i][1] = p[i * 3 + 1];
-                q[i][2] = p[i * 3 + 2];
+        CosmeticModels.Out out = new CosmeticModels.Out() {
+            @Override
+            public void quad(float[] p, float nx, float ny, float nz, int argb, int light) {
+                quad4(p, nx, ny, nz, new int[]{argb, argb, argb, argb}, light);
             }
-            quads.add(q);
-            colours.add(argb);
-            normals.add(new double[]{nx, ny, nz});
+
+            @Override
+            public void quad4(float[] p, float nx, float ny, float nz, int[] argb, int light) {
+                double[][] q = new double[4][3];
+                for (int i = 0; i < 4; i++) {
+                    q[i][0] = p[i * 3];
+                    q[i][1] = p[i * 3 + 1];
+                    q[i][2] = p[i * 3 + 2];
+                }
+                quads.add(q);
+                colours.add(argb.clone());
+                normals.add(new double[]{nx, ny, nz});
+            }
         };
         List<SkinFace> skinFaces = new ArrayList<>();
         BufferedImage sk = skin != null ? dev.cobra.launcher.ui.SkinView.to64(skin) : null;
@@ -109,9 +118,15 @@ final class CosmeticPreview {
             double wx = -n[0], wy = -n[1], wz = n[2];
             double nz = -wx * Math.sin(yaw) + wz * Math.cos(yaw), nx = wx * Math.cos(yaw) + wz * Math.sin(yaw);
             double light = 0.62 + 0.38 * Math.max(0, -nz * 0.55 + wy * 0.6 + nx * 0.25);
-            Color c = new Color(colours.get(i), true);
-            Color lit = new Color(clamp(c.getRed() * light), clamp(c.getGreen() * light), clamp(c.getBlue() * light), c.getAlpha());
-            faces.add(new Face(xs, ys, depth / 4, lit));
+            int[] cs = colours.get(i);
+            Color[] lits = new Color[4];
+            boolean same = true;
+            for (int j = 0; j < 4; j++) {
+                Color c = new Color(cs[j], true);
+                lits[j] = new Color(clamp(c.getRed() * light), clamp(c.getGreen() * light), clamp(c.getBlue() * light), c.getAlpha());
+                if (cs[j] != cs[0]) same = false;
+            }
+            faces.add(new Face(xs, ys, depth / 4, lits[0], null, 1f, same ? null : lits));
         }
         // the skin's faces: real textures (projected the same way)
         for (SkinFace sf : skinFaces) {
@@ -177,7 +192,16 @@ final class CosmeticPreview {
             p.moveTo(ox + f.xs()[0] * scale, oy + f.ys()[0] * scale);
             for (int j = 1; j < 4; j++) p.lineTo(ox + f.xs()[j] * scale, oy + f.ys()[j] * scale);
             p.closePath();
-            g.setColor(f.colour());
+            if (f.corners() != null) {                     // colours blending across the face
+                int lo = 0, hi = 0;
+                for (int j = 1; j < 4; j++) {
+                    if (lum(f.corners()[j]) < lum(f.corners()[lo])) lo = j;
+                    if (lum(f.corners()[j]) > lum(f.corners()[hi])) hi = j;
+                }
+                double x0 = ox + f.xs()[lo] * scale, y0 = oy + f.ys()[lo] * scale, x1 = ox + f.xs()[hi] * scale, y1 = oy + f.ys()[hi] * scale;
+                if (Math.hypot(x1 - x0, y1 - y0) > 0.5) g.setPaint(new GradientPaint((float) x0, (float) y0, f.corners()[lo], (float) x1, (float) y1, f.corners()[hi]));
+                else g.setColor(f.colour());
+            } else g.setColor(f.colour());
             g.fill(p);
             g.draw(p);                                  // closes hairline gaps between faces
         }
@@ -198,6 +222,10 @@ final class CosmeticPreview {
         } catch (NumberFormatException e) {
             return 1f;
         }
+    }
+
+    private static int lum(Color c) {
+        return c.getRed() * 299 + c.getGreen() * 587 + c.getBlue() * 114;
     }
 
     private static int clamp(double v) {
