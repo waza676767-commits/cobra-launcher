@@ -1,0 +1,224 @@
+package dev.life.launcher.ui.pages;
+
+import dev.life.launcher.core.Paths;
+import dev.life.launcher.ui.*;
+
+import javax.swing.*;
+import java.awt.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.stream.Stream;
+
+/**
+ * Your Life Client screen recordings (Screen Recorder module in game: start / pause / stop keys,
+ * 1080p at 30, 60 or 120 fps). Newest first; play, show in folder or delete.
+ */
+public final class RecordingsPage extends Page {
+    public static final Path DIR = Paths.ROOT.resolve("recordings");
+
+    private final Components.Stack list = new Components.Stack(10);
+    private final JScrollPane scroll = Components.scroll(list);
+    private final Components.Button openFolder;
+
+    public RecordingsPage() {
+        openFolder = new Components.Button("Open folder", "folder", Components.Variant.GHOST, () -> {
+            try {
+                Files.createDirectories(DIR);
+            } catch (Exception ignored) {}
+            MainWindow.openUri(DIR.toUri().toString());
+        });
+        add(openFolder);
+        setup = new Components.Button("Set up smooth recording", "camera", Components.Variant.PRIMARY, this::setUp);
+        add(setup);
+        add(scroll);
+        checkSetup();
+    }
+
+    private final Components.Button setup;
+    private volatile Boolean smooth;            // null = still checking
+
+    private static boolean windows() { return System.getProperty("os.name", "").toLowerCase().contains("win"); }
+
+    /** Is the smooth (graphics card) recorder there? Linux: gpu-screen-recorder. Windows: ffmpeg. */
+    private void checkSetup() {
+        new Thread(() -> {
+            boolean ok;
+            try {
+                Process p = new ProcessBuilder(windows() ? new String[]{"ffmpeg", "-version"} : new String[]{"gpu-screen-recorder", "--help"})
+                        .redirectErrorStream(true).start();
+                p.getInputStream().readAllBytes();
+                p.waitFor();
+                ok = true;
+            } catch (Exception e) {
+                ok = false;
+            }
+            smooth = ok;
+            SwingUtilities.invokeLater(() -> {
+                setup.setVisible(!smooth);
+                doLayout();
+                repaint();
+            });
+        }, "life-rec-check").start();
+    }
+
+    /** Installs the smooth recorder (asks for your password on Linux; winget on Windows). */
+    private void setUp() {
+        setup.setEnabled(false);
+        MainWindow.get().toast("Installing the smooth recorder… (this can take a minute)");
+        new Thread(() -> {
+            String msg;
+            try {
+                String[] cmd = windows()
+                        ? new String[]{"winget", "install", "--id", "Gyan.FFmpeg", "-e", "--accept-source-agreements", "--accept-package-agreements"}
+                        : new String[]{"pkexec", "dnf", "install", "-y", "gpu-screen-recorder"};
+                Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+                String out = new String(p.getInputStream().readAllBytes());
+                int code = p.waitFor();
+                msg = code == 0 ? "Smooth recording is ready: restart Minecraft and press your record key."
+                        : windows() ? "Couldn't install ffmpeg automatically. Install it from gyan.dev/ffmpeg and try again."
+                        : "Couldn't install it automatically. In a terminal:  sudo dnf install gpu-screen-recorder   (or from Flathub: com.dec05eba.gpu_screen_recorder)";
+                if (code != 0 && out.contains("No match")) msg = "Your Fedora doesn't have gpu-screen-recorder in its repos yet: enable RPM Fusion, or install it from Flathub (com.dec05eba.gpu_screen_recorder).";
+            } catch (Exception e) {
+                msg = "Couldn't run the installer: " + e.getMessage();
+            }
+            String m = msg;
+            SwingUtilities.invokeLater(() -> {
+                setup.setEnabled(true);
+                MainWindow.get().toast(m);
+                checkSetup();
+            });
+        }, "life-rec-setup").start();
+    }
+
+    @Override public String title() { return "Recordings"; }
+    @Override public String icon() { return "camera"; }
+
+    @Override
+    public void onShow() {
+        refresh();
+    }
+
+    private void refresh() {
+        tidyLogs();
+        list.removeAll();
+        List<Path> files = new ArrayList<>();
+        try {
+            if (Files.isDirectory(DIR)) {
+                try (Stream<Path> s = Files.list(DIR)) {
+                    s.filter(p -> p.getFileName().toString().endsWith(".mp4")).forEach(files::add);
+                }
+            }
+        } catch (Exception ignored) {}
+        files.sort((a, b) -> Long.compare(b.toFile().lastModified(), a.toFile().lastModified()));
+        if (files.isEmpty()) list.add(new Empty());
+        for (Path p : files) list.add(new Row(p));
+        list.animateIn();
+        list.revalidate();
+        list.repaint();
+        repaint();
+    }
+
+    /** Older builds left ffmpeg logs next to the videos: move them to the launcher's logs. */
+    private static void tidyLogs() {
+        if (!Files.isDirectory(DIR)) return;
+        Path to = Paths.LOGS.resolve("recorder");
+        try (Stream<Path> s = Files.list(DIR)) {
+            for (Path f : s.toList()) {
+                if (!f.getFileName().toString().endsWith(".log")) continue;
+                Files.createDirectories(to);
+                Files.move(f, to.resolve(f.getFileName()), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void doLayout() {
+        int w = getWidth(), h = getHeight();
+        Dimension od = openFolder.getPreferredSize();
+        openFolder.setBounds(w - od.width, 6, od.width, 40);
+        Dimension sd = setup.getPreferredSize();
+        setup.setBounds(w - od.width - 10 - sd.width, 6, sd.width, 40);
+        scroll.setBounds(0, 80, w + 10, h - 80);
+    }
+
+    @Override
+    protected void paintComponent(Graphics g0) {
+        Graphics2D g = Theme.aa(g0.create());
+        Theme.left(g, title(), Theme.font(Theme.REGULAR, 34f), Theme.TEXT, 0, 0, 42);
+        Theme.left(g, "Screen Recorder in game: turn it on in Life's modules, then F9 start, F10 pause, F12 stop (changeable).",
+                Theme.font(Theme.REGULAR, 13.5f), Theme.SOFT, 0, 44, 22);
+        if (smooth != null) {
+            String st = smooth ? "Smooth recording ready (your graphics card records: full quality, no FPS loss)"
+                    : "Not set up: recordings use the game's frames, which is slower. Press Set up smooth recording.";
+            Theme.left(g, st, Theme.font(Theme.MEDIUM, 12f), smooth ? new Color(0x34C759) : new Color(0xFFB340), 0, 62, 18);
+        }
+        g.dispose();
+    }
+
+    private final class Empty extends JComponent {
+        @Override public Dimension getPreferredSize() { return new Dimension(100, 150); }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            int w = getWidth(), h = getHeight();
+            Theme.surface(g, this, 0, 0, w, h, 24, 0, 0.1);
+            Icons.paint(g, "camera", w / 2.0 - 12, h / 2.0 - 46, 24, Theme.MUTED);
+            Theme.center(g, "No recordings yet", Theme.font(Theme.MEDIUM, 15f), Theme.TEXT, 0, h / 2.0 - 12, w, 22);
+            Theme.center(g, "In game: Screen Recorder module → press F9 to start.", Theme.font(Theme.REGULAR, 13f), Theme.MUTED, 0, h / 2.0 + 12, w, 20);
+            g.dispose();
+        }
+    }
+
+    private final class Row extends JPanel {
+        private final Path file;
+
+        Row(Path file) {
+            super(null);
+            this.file = file;
+            setOpaque(false);
+            Components.Button play = new Components.Button("Play", "play", Components.Variant.PRIMARY, () -> MainWindow.openUri(file.toUri().toString()));
+            Components.Button folder = new Components.Button("Show", "folder", Components.Variant.GHOST, () -> MainWindow.openUri(DIR.toUri().toString()));
+            Components.Button del = new Components.Button("", "trash", Components.Variant.GHOST, () -> {
+                try {
+                    Files.deleteIfExists(file);
+                } catch (Exception ignored) {}
+                refresh();
+            });
+            add(play);
+            add(folder);
+            add(del);
+        }
+
+        @Override public Dimension getPreferredSize() { return new Dimension(100, 66); }
+
+        @Override
+        public void doLayout() {
+            int w = getWidth();
+            Component[] c = getComponents();
+            c[2].setBounds(w - 44 - 12, 13, 44, 40);
+            c[1].setBounds(w - 44 - 12 - 8 - 96, 13, 96, 40);
+            c[0].setBounds(w - 44 - 12 - 8 - 96 - 8 - 96, 13, 96, 40);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            int w = getWidth(), h = getHeight();
+            Theme.surface(g, this, 0, 0, w, h, 18, 0, 0.1);
+            Theme.fill(g, 14, 13, 40, 40, 10, Theme.alpha(Theme.ACCENT, 0.18));
+            Icons.paint(g, "camera", 24, 23, 20, Theme.ACCENT);
+            String name = file.getFileName().toString().replaceFirst("\\.mp4$", "");
+            long size = file.toFile().length();
+            String meta = new SimpleDateFormat("d MMM yyyy, HH:mm").format(new Date(file.toFile().lastModified()))
+                    + "  ·  " + (size > 1 << 30 ? String.format("%.1f GB", size / (double) (1 << 30)) : String.format("%.0f MB", size / (double) (1 << 20)));
+            Theme.left(g, name, Theme.font(Theme.MEDIUM, 14.5f), Theme.TEXT, 68, 12, 22);
+            Theme.left(g, meta, Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 68, 34, 20);
+            g.dispose();
+        }
+    }
+}

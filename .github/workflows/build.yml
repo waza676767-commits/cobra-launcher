@@ -1,6 +1,6 @@
 # Builds both downloads on GitHub's machines whenever you push (or press "Run workflow"):
-#   CobraLauncher-linux   -> CobraLauncher-x86_64.AppImage (+ cobra-launcher.jar used for updates)
-#   CobraLauncher-windows -> installer "Abyss Launcher-<version>.exe" + portable zip
+#   LifeLauncher-linux   -> LifeLauncher-x86_64.AppImage (+ life-launcher.jar used for updates)
+#   LifeLauncher-windows -> installer "Life Launcher-<version>.exe" + portable zip
 # Get them from the repo's Actions tab → the latest run → Artifacts.
 #
 # Run it with publish = true (the launcher's "Publish update" button does that) and it also makes a
@@ -36,13 +36,13 @@ jobs:
         run: |
           chmod +x build-appimage.sh gradlew client/gradlew
           ./build-appimage.sh
-          cp launcher/build/libs/cobra-launcher.jar .
+          cp launcher/build/libs/life-launcher.jar .
       - uses: actions/upload-artifact@v5
         with:
-          name: CobraLauncher-linux
+          name: LifeLauncher-linux
           path: |
-            CobraLauncher-x86_64.AppImage
-            cobra-launcher.jar
+            LifeLauncher-x86_64.AppImage
+            life-launcher.jar
             build/client-errors.txt
           if-no-files-found: warn
 
@@ -68,13 +68,13 @@ jobs:
         run: call build-windows.bat
       - name: Zip the portable app too
         shell: pwsh
-        run: Compress-Archive -Path "dist/Abyss Launcher" -DestinationPath "dist/Abyss-Launcher-portable.zip"
+        run: Compress-Archive -Path "dist/Life Launcher" -DestinationPath "dist/Life-Launcher-portable.zip"
       - uses: actions/upload-artifact@v5
         with:
-          name: CobraLauncher-windows
+          name: LifeLauncher-windows
           path: |
             dist/*.exe
-            dist/Abyss-Launcher-portable.zip
+            dist/Life-Launcher-portable.zip
 
   release:
     if: github.event_name == 'workflow_dispatch' && inputs.publish
@@ -91,12 +91,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           shopt -s nullglob
-          # never ship a launcher without Abyss Client inside
-          if ! unzip -l out/CobraLauncher-linux/cobra-launcher.jar | grep "bundled/cobra-client-1.21.11.jar" >/dev/null; then
-            echo "::error::Abyss Client didn't build, so nothing was published. See build/client-errors.txt in the linux artifact."
+          # never ship a launcher without Life Client inside
+          if ! unzip -l out/LifeLauncher-linux/life-launcher.jar | grep "bundled/life-client-1.21.11.jar" >/dev/null; then
+            echo "::error::Life Client didn't build, so nothing was published. See build/client-errors.txt in the linux artifact."
             exit 1
           fi
-          files=(out/CobraLauncher-linux/CobraLauncher-x86_64.AppImage out/CobraLauncher-linux/cobra-launcher.jar out/CobraLauncher-windows/*.exe out/CobraLauncher-windows/*.zip)
+          # launchers installed before the rename look for the update under their old file name:
+          # this copy lets them update to Life once. Delete these two lines when everyone is on Life.
+          cp out/LifeLauncher-linux/life-launcher.jar out/cobra-launcher.jar
+          files=(out/LifeLauncher-linux/LifeLauncher-x86_64.AppImage out/LifeLauncher-linux/life-launcher.jar out/cobra-launcher.jar out/LifeLauncher-windows/*.exe out/LifeLauncher-windows/*.zip)
           gh release create "b${GITHUB_RUN_NUMBER}" "${files[@]}" --repo "$GITHUB_REPOSITORY" \
-            --title "Abyss Launcher build ${GITHUB_RUN_NUMBER}" \
+            --title "Life Launcher build ${GITHUB_RUN_NUMBER}" \
             --notes "Everyone's launcher updates to this the next time it's opened."

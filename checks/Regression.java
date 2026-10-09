@@ -1,5 +1,5 @@
-import dev.cobra.client.core.ScreenRecorder;
-import dev.cobra.client.core.module.Features;
+import dev.life.client.core.ScreenRecorder;
+import dev.life.client.core.module.Features;
 import java.io.File;
 public class Regression {
   static void check(boolean v, String m) { if (!v) throw new AssertionError(m); }

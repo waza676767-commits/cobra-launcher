@@ -1,4 +1,4 @@
-import dev.cobra.client.core.ScreenRecorder;
+import dev.life.client.core.ScreenRecorder;
 import java.io.*;
 public class FailRecorder {
  public static void main(String[] args) throws Exception {

@@ -10,8 +10,8 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
 }
 
-rootProject.name = 'CobraLauncher'
+rootProject.name = 'LifeLauncher'
 
-// The Cobra Client mod (client/) is its own Gradle build (Minecraft 1.21.11 needs a newer
+// The Life Client mod (client/) is its own Gradle build (Minecraft 1.21.11 needs a newer
 // Loom and Gradle than the launcher). build-appimage.sh builds it first and the launcher bundles it.
 include 'launcher'

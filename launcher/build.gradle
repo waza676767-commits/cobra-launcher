@@ -3,7 +3,7 @@ plugins {
     id 'application'
 }
 
-group = 'dev.cobra'
+group = 'dev.life'
 version = '1.0.0'
 
 java {
@@ -21,17 +21,17 @@ dependencies {
 }
 
 application {
-    mainClass = 'dev.cobra.launcher.CobraLauncher'
+    mainClass = 'dev.life.launcher.LifeLauncher'
     applicationDefaultJvmArgs = ['--add-opens=java.desktop/sun.awt.X11=ALL-UNNAMED']
 }
 
-// Bundle the Cobra Client mod (built separately by client/gradlew build; build-appimage.sh does
+// Bundle the Life Client mod (built separately by client/gradlew build; build-appimage.sh does
 // it for you) so the launcher can install it into each profile.
-// The cosmetics' 3D models are shared with Cobra Client (common/): copied in so the launcher can
+// The cosmetics' 3D models are shared with Life Client (common/): copied in so the launcher can
 // show real previews of them.
 def cosmeticsSrc = layout.buildDirectory.dir('generated/cosmetics')
 tasks.register('copyCosmetics', Copy) {
-    from(rootProject.file('common/src/main/java')) { include 'dev/cobra/client/core/cosmetics/**' }
+    from(rootProject.file('common/src/main/java')) { include 'dev/life/client/core/cosmetics/**' }
     into(cosmeticsSrc)
 }
 sourceSets.main.java.srcDir(cosmeticsSrc)
@@ -59,17 +59,17 @@ tasks.named('processResources', ProcessResources) {
         into 'bundled/skies'
     }
     from(rootProject.file('client/build/libs')) {
-        include 'cobra-client-*-*.jar'                           // one per Minecraft version that built
+        include 'life-client-*-*.jar'                           // one per Minecraft version that built
         exclude '*-sources.jar', '*-dev.jar'
         into 'bundled'
-        rename { String n -> n.replaceAll(/^cobra-client-(.+)-[^-]+\.jar$/, 'cobra-client-$1.jar') }
+        rename { String n -> n.replaceAll(/^life-client-(.+)-[^-]+\.jar$/, 'life-client-$1.jar') }
     }
 }
 
 tasks.named('jar', Jar) {
-    archiveFileName = 'cobra-launcher.jar'
+    archiveFileName = 'life-launcher.jar'
     manifest {
-        attributes('Main-Class': 'dev.cobra.launcher.CobraLauncher', 'Add-Opens': 'java.desktop/sun.awt.X11')
+        attributes('Main-Class': 'dev.life.launcher.LifeLauncher', 'Add-Opens': 'java.desktop/sun.awt.X11')
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }

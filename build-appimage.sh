@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds CobraLauncher-x86_64.AppImage:
-#   1. client/   -> cobra-client-1.21.11 jar  (the Abyss Client mod, Fabric 1.21.11)
+# Builds LifeLauncher-x86_64.AppImage:
+#   1. client/   -> life-client-1.21.11 jar  (the Life Client mod, Fabric 1.21.11)
 #   2. launcher fat jar with the client jar bundled inside
 #   3. a trimmed Java 21 runtime (jlink) + AppDir + appimagetool
 #
@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")"
 ROOT="$PWD"
 OUT="$ROOT/build/appimage"
-APPDIR="$OUT/CobraLauncher.AppDir"
+APPDIR="$OUT/LifeLauncher.AppDir"
 TOOLS="$ROOT/build/tools"
 
 step() { printf '\n\033[1;37m==> %s\033[0m\n' "$*"; }
@@ -44,30 +44,30 @@ else
     ERRORS="$ROOT/build/client-errors.txt"
     LOG="$ROOT/build/client-build.log"
     : > "$ERRORS"
-    rm -f client/build/libs/cobra-client-*.jar
+    rm -f client/build/libs/life-client-*.jar
     BUILT=""; SKIPPED=""
     if [[ -z "${SKIP_CLIENTS:-}" ]]; then
         chmod +x client/gradlew
         FIRST=1
-        # one Abyss Client per Minecraft version in client/versions.txt
+        # one Life Client per Minecraft version in client/versions.txt
         while read -r MCV; do
             [[ -z "$MCV" || "$MCV" == \#* ]] && continue
-            step "Building Abyss Client for Minecraft $MCV"
+            step "Building Life Client for Minecraft $MCV"
             if (cd client && ./gradlew --no-daemon build -Pmc="$MCV" 2>&1 | tee "$LOG.$MCV"; exit "${PIPESTATUS[0]}"); then
                 BUILT="$BUILT $MCV"
             else
-                rm -f client/build/libs/cobra-client-"$MCV"-*.jar
+                rm -f client/build/libs/life-client-"$MCV"-*.jar
                 if [[ -n "$FIRST" ]]; then
                     cp "$LOG.$MCV" "$LOG"
                     grep -E "error:|warning: \[|Mixin|What went wrong|> Could not|FAILED" -A3 "$LOG" | head -n 150 > "$ERRORS"
-                    printf '\n\033[1;31m==> Abyss Client for %s failed to build. The errors:\033[0m\n' "$MCV"
+                    printf '\n\033[1;31m==> Life Client for %s failed to build. The errors:\033[0m\n' "$MCV"
                     grep -E "error:" -A2 "$LOG" | head -n 40 || tail -n 40 "$LOG"
                     if command -v wl-copy >/dev/null; then wl-copy < "$LOG" && echo "(the whole log is copied to your clipboard: paste it to get it fixed)"
                     elif command -v xclip >/dev/null; then xclip -selection clipboard < "$LOG" && echo "(the whole log is copied to your clipboard: paste it to get it fixed)"; fi
-                    die "Abyss Client build failed. Send $LOG to get it fixed. No AppImage was packaged."
+                    die "Life Client build failed. Send $LOG to get it fixed. No AppImage was packaged."
                 fi
                 SKIPPED="$SKIPPED $MCV"
-                printf '\033[1;33m==> Abyss Client for %s did not build: that version runs without Cobra (log: %s)\033[0m\n' "$MCV" "$LOG.$MCV"
+                printf '\033[1;33m==> Life Client for %s did not build: that version runs without Life (log: %s)\033[0m\n' "$MCV" "$LOG.$MCV"
             fi
             FIRST=""
         done < client/versions.txt
@@ -77,17 +77,17 @@ else
     step "Building the launcher"
     chmod +x gradlew
     ./gradlew --no-daemon :launcher:clean :launcher:jar
-    JAR="$ROOT/launcher/build/libs/cobra-launcher.jar"
+    JAR="$ROOT/launcher/build/libs/life-launcher.jar"
 fi
 [[ -f "$JAR" ]] || die "Launcher jar not found at $JAR"
 
 # ---------------------------------------------------------------- report
-LISTED=$(unzip -l "$JAR" 2>/dev/null | grep -oE "bundled/cobra-client-[0-9.]+\.jar" | sed -E 's#bundled/cobra-client-(.*)\.jar#\1#' | sort -Vr | tr '\n' ' ' || true)
+LISTED=$(unzip -l "$JAR" 2>/dev/null | grep -oE "bundled/life-client-[0-9.]+\.jar" | sed -E 's#bundled/life-client-(.*)\.jar#\1#' | sort -Vr | tr '\n' ' ' || true)
 if [[ -n "$LISTED" ]]; then
-    printf '\n\033[1;32m==> Abyss Client built in for: %s\033[0m\n' "$LISTED"
-    [[ -n "${SKIPPED:-}" ]] && printf '\033[1;33m==> Without Abyss Client (did not build):%s\033[0m\n' "$SKIPPED"
+    printf '\n\033[1;32m==> Life Client built in for: %s\033[0m\n' "$LISTED"
+    [[ -n "${SKIPPED:-}" ]] && printf '\033[1;33m==> Without Life Client (did not build):%s\033[0m\n' "$SKIPPED"
 else
-    printf '\n\033[1;31m==> Abyss Client: FAILED to build\033[0m (the launcher still works, the game runs without Cobra)\n'
+    printf '\n\033[1;31m==> Life Client: FAILED to build\033[0m (the launcher still works, the game runs without Life)\n'
     if [[ -s "${ERRORS:-/nonexistent}" ]]; then
         printf '    Send this file so it can be fixed:  %s\n' "$ERRORS"
         command -v wl-copy >/dev/null && wl-copy < "$ERRORS" && echo "    (it's copied to your clipboard: just paste it)"
@@ -98,7 +98,7 @@ fi
 step "Assembling AppDir"
 rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr/lib" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
-cp "$JAR" "$APPDIR/usr/lib/cobra-launcher.jar"
+cp "$JAR" "$APPDIR/usr/lib/life-launcher.jar"
 
 step "Creating trimmed Java runtime (jlink)"
 "$JAVA_HOME/bin/jlink" \
@@ -107,22 +107,22 @@ step "Creating trimmed Java runtime (jlink)"
     --output "$APPDIR/usr/runtime"
 
 ICON="$ROOT/launcher/src/main/resources/img/icon_256.png"
-cp "$ICON" "$APPDIR/cobra-launcher.png"
-cp "$ICON" "$APPDIR/usr/share/icons/hicolor/256x256/apps/cobra-launcher.png"
-ln -sf cobra-launcher.png "$APPDIR/.DirIcon"
+cp "$ICON" "$APPDIR/life-launcher.png"
+cp "$ICON" "$APPDIR/usr/share/icons/hicolor/256x256/apps/life-launcher.png"
+ln -sf life-launcher.png "$APPDIR/.DirIcon"
 
-cat > "$APPDIR/cobra-launcher.desktop" << 'DESKTOP'
+cat > "$APPDIR/life-launcher.desktop" << 'DESKTOP'
 [Desktop Entry]
 Type=Application
-Name=Abyss Launcher
-Comment=Minecraft launcher for Abyss Client
-Exec=cobra-launcher
-Icon=cobra-launcher
+Name=Life Launcher
+Comment=Minecraft launcher for Life Client
+Exec=life-launcher
+Icon=life-launcher
 Categories=Game;
-StartupWMClass=cobra-launcher
+StartupWMClass=life-launcher
 Terminal=false
 DESKTOP
-cp "$APPDIR/cobra-launcher.desktop" "$APPDIR/usr/share/applications/"
+cp "$APPDIR/life-launcher.desktop" "$APPDIR/usr/share/applications/"
 
 cat > "$APPDIR/AppRun" << 'APPRUN'
 #!/bin/sh
@@ -149,7 +149,7 @@ exec "$HERE/usr/runtime/bin/java" \
     -Dawt.useSystemAAFontSettings=on -Dswing.aatext=true \
     -Dsun.java2d.xrender=false -Dswing.bufferPerWindow=false \
     --add-opens=java.desktop/sun.awt.X11=ALL-UNNAMED \
-    -jar "$HERE/usr/lib/cobra-launcher.jar" "$@"
+    -jar "$HERE/usr/lib/life-launcher.jar" "$@"
 APPRUN
 chmod +x "$APPDIR/AppRun"
 
@@ -161,40 +161,43 @@ if [[ ! -x "$TOOL" ]]; then
     curl -fL --retry 3 -o "$TOOL" "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
     chmod +x "$TOOL"
 fi
-TARGET="$ROOT/CobraLauncher-x86_64.AppImage"
+TARGET="$ROOT/LifeLauncher-x86_64.AppImage"
 rm -f "$TARGET"
 # APPIMAGE_EXTRACT_AND_RUN avoids needing FUSE for the tool itself
 ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" --no-appstream "$APPDIR" "$TARGET"
 chmod +x "$TARGET"
 
-# install as an app: ~/Applications + a menu entry you can search for ("Cobra")
+# install as an app: ~/Applications + a menu entry you can search for ("Life")
 if [ "${1:-}" != "--no-install" ]; then
     step "Installing to ~/Applications"
     mkdir -p "$HOME/Applications"
     rm -f "$HOME/Applications/KitLauncher.AppImage"        # remove the Kit test build if it's there
-    cp -f "$TARGET" "$HOME/Applications/CobraLauncher.AppImage"
-    chmod +x "$HOME/Applications/CobraLauncher.AppImage"
+    # the launcher's builds from before it was called Life, and their menu entry
+    rm -f "$HOME/Applications/CobraLauncher.AppImage" "$HOME/Desktop/CobraLauncher.AppImage" \
+          "${XDG_DATA_HOME:-$HOME/.local/share}/applications/cobra-launcher.desktop"
+    cp -f "$TARGET" "$HOME/Applications/LifeLauncher.AppImage"
+    chmod +x "$HOME/Applications/LifeLauncher.AppImage"
     DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
     for s in 32 48 64 128 256 512; do
         mkdir -p "$DATA/icons/hicolor/${s}x${s}/apps"
-        cp -f "$ROOT/launcher/src/main/resources/img/icon_$s.png" "$DATA/icons/hicolor/${s}x${s}/apps/cobra-launcher.png" 2>/dev/null || true
+        cp -f "$ROOT/launcher/src/main/resources/img/icon_$s.png" "$DATA/icons/hicolor/${s}x${s}/apps/life-launcher.png" 2>/dev/null || true
     done
     mkdir -p "$DATA/applications"
-    cat > "$DATA/applications/cobra-launcher.desktop" << EOF
+    cat > "$DATA/applications/life-launcher.desktop" << EOF
 [Desktop Entry]
 Type=Application
-Name=Abyss Launcher
+Name=Life Launcher
 GenericName=Minecraft Launcher
-Comment=Minecraft launcher for Abyss Client
-Exec="$HOME/Applications/CobraLauncher.AppImage" %U
-TryExec=$HOME/Applications/CobraLauncher.AppImage
-Icon=cobra-launcher
+Comment=Minecraft launcher for Life Client
+Exec="$HOME/Applications/LifeLauncher.AppImage" %U
+TryExec=$HOME/Applications/LifeLauncher.AppImage
+Icon=life-launcher
 Categories=Game;
-Keywords=minecraft;cobra;launcher;pvp;client;
-StartupWMClass=cobra-launcher
+Keywords=minecraft;life;launcher;pvp;client;
+StartupWMClass=life-launcher
 Terminal=false
 EOF
-    chmod +x "$DATA/applications/cobra-launcher.desktop"
+    chmod +x "$DATA/applications/life-launcher.desktop"
     command -v update-desktop-database >/dev/null && update-desktop-database "$DATA/applications" 2>/dev/null || true
     command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 >/dev/null 2>&1 || true
 fi
@@ -202,7 +205,7 @@ fi
 step "Done"
 echo "  $TARGET ($(du -h "$TARGET" | cut -f1))"
 if [ "${1:-}" != "--no-install" ]; then
-    echo "  Installed: search \"Abyss\" in your app menu, or run ~/Applications/CobraLauncher.AppImage"
+    echo "  Installed: search \"Life\" in your app menu, or run ~/Applications/LifeLauncher.AppImage"
 else
-    echo "  Run it with: ./CobraLauncher-x86_64.AppImage"
+    echo "  Run it with: ./LifeLauncher-x86_64.AppImage"
 fi

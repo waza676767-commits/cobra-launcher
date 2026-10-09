@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "id": "cobra",
+  "id": "life",
   "version": "${version}",
-  "name": "Abyss Client",
-  "description": "Abyss Client: custom menu, HUD editor (Right Shift) and PvP quality-of-life modules.",
+  "name": "Life Client",
+  "description": "Life Client: custom menu, HUD editor (Right Shift) and PvP quality-of-life modules.",
   "authors": ["ItzLucaPK"],
   "license": "All-Rights-Reserved",
-  "icon": "assets/cobra/textures/gui/logo.png",
+  "icon": "assets/life/textures/gui/brand.png",
   "environment": "client",
   "entrypoints": {
-    "client": ["dev.cobra.client.fabric.CobraFabric"]
+    "client": ["dev.life.client.fabric.LifeFabric"]
   },
-  "mixins": ["cobra.mixins.json"],
+  "mixins": ["life.mixins.json"],
   "depends": {
     "fabricloader": ">=0.18.0",
     "fabric-api": "*",

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Abyss: publish the code in this folder to GitHub and build the Linux AppImage + Windows .exe there.
+# Life: publish the code in this folder to GitHub and build the Linux AppImage + Windows .exe there.
 # Every step says what it does and stops with a clear message if something is wrong.
 cd "$(dirname "$0")" || exit 1
 ok()   { printf '\033[1;32m✔ %s\033[0m\n' "$*"; }
@@ -26,7 +26,7 @@ git add -A
 if git diff --cached --quiet; then
     ok "Nothing new to commit (uploading what's there)"
 else
-    git commit -qm "Abyss update $(date +%F-%H%M)" || fail "Commit failed"
+    git commit -qm "Life update $(date +%F-%H%M)" || fail "Commit failed"
     ok "Committed"
 fi
 git push -q origin HEAD:main || fail "Upload (push) failed. Run:  gh auth setup-git   and try again"

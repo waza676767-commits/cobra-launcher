@@ -9,7 +9,7 @@ plugins {
 def mc = (project.findProperty('mc') ?: project.minecraft_version).toString()
 def fetchJson = { String url ->
     def c = new URL(url).openConnection()
-    c.setRequestProperty('User-Agent', 'cobra-client-build')
+    c.setRequestProperty('User-Agent', 'life-client-build')
     c.connectTimeout = 15000
     c.readTimeout = 30000
     new groovy.json.JsonSlurper().parse(c.inputStream)
@@ -26,17 +26,17 @@ try {
 }
 // small version-specific pieces (e.g. render layers moved in 1.21.11) live in versions/<x>/java
 def compat = mc == '1.21.11' ? '1.21.11' : '1.21.9'
-println "Cobra Client for Minecraft ${mc}: yarn ${yarn}, loader ${loaderV}, Fabric API ${api}, compat ${compat}"
+println "Life Client for Minecraft ${mc}: yarn ${yarn}, loader ${loaderV}, Fabric API ${api}, compat ${compat}"
 
 version = project.mod_version
-group = 'dev.cobra'
-base { archivesName = "cobra-client-${mc}" }
+group = 'dev.life'
+base { archivesName = "life-client-${mc}" }
 
 loom {
     mixin {
         // Loom 1.14 turned the Mixin annotation processor off by default; keep it (refmap for yarn names)
         useLegacyMixinAp = true
-        defaultRefmapName = 'cobra.refmap.json'
+        defaultRefmapName = 'life.refmap.json'
     }
 }
 

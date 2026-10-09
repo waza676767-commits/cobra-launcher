@@ -1,0 +1,1072 @@
+package dev.life.launcher.ui.pages;
+
+import dev.life.launcher.core.Paths;
+import dev.life.launcher.core.Settings;
+import dev.life.launcher.ui.*;
+
+import javax.swing.*;
+import java.awt.*;
+import java.util.List;
+
+public final class SettingsPage extends Page {
+    private final Settings s = Settings.get();
+    private final Components.Stack stack = new Components.Stack(14);
+    private final JScrollPane scroll = Components.scroll(stack);
+    private final Components.Button accountButton;
+
+    public SettingsPage() {
+        add(scroll);
+
+        // ---------------------------------------------------------------- Game
+        Components.Slider ram = new Components.Slider(1024, roundDown(Settings.maxRamMb()), 512, s.ramMb,
+                v -> String.format("%.1f GB", v / 1024.0), v -> { s.ramMb = v.intValue(); s.save(); });
+
+        JPanel size = new JPanel(null);
+        size.setOpaque(false);
+        Components.Input width = new Components.Input(String.valueOf(s.width), "1280", null);
+        Components.Input height = new Components.Input(String.valueOf(s.height), "720", null);
+        width.onChange(() -> { s.width = parse(width.getText(), 1280); s.save(); });
+        height.onChange(() -> { s.height = parse(height.getText(), 720); s.save(); });
+        Components.Text x = new Components.Text("×", Theme.font(Theme.REGULAR, 15f), Theme.MUTED);
+        size.add(width);
+        size.add(x);
+        size.add(height);
+        width.setBounds(0, 0, 92, 40);
+        x.setBounds(102, 0, 14, 40);
+        height.setBounds(124, 0, 92, 40);
+
+        Components.Toggle fullscreen = new Components.Toggle(s.fullscreen, v -> { s.fullscreen = v; s.save(); });
+        Components.Input jvm = new Components.Input(s.jvmArgs, "e.g. -XX:+UseZGC", null);
+        jvm.onChange(() -> { s.jvmArgs = jvm.getText(); s.save(); });
+
+        Components.Toggle[] vulkanRef = new Components.Toggle[1];
+        vulkanRef[0] = new Components.Toggle(s.superOptimization, v -> {
+            if (v) {
+                vulkanRef[0].setOn(false, false);   // only after the warning is accepted
+                MainWindow.get().ask("Super optimization (Vulkan)",
+                        "Adds VulkanMod: a new graphics engine with much higher FPS on many PCs.\n"
+                        + "It does NOT work together with: Sodium, Iris / shaders, OptiFine, Embeddium, Indium, "
+                        + "Continuity, Distant Horizons, Nvidium, Canvas, Immersive Portals, Replay Mod and other "
+                        + "mods that change rendering. Remove those, or keep this off.\n"
+                        + "While it's on, the launcher also saves power: Solid style, no animations, still wallpaper. "
+                        + "Turning it off puts everything back.",
+                        List.of("Turn it on anyway"), 0, i -> {
+                            vulkanRef[0].setOn(true, false);
+                            MainWindow.get().setSuperOptimization(true);
+                            refilter();
+                        });
+            } else {
+                MainWindow.get().setSuperOptimization(false);
+                refilter();
+            }
+        });
+        Components.Toggle vulkan = vulkanRef[0];
+        Components.Toggle lite = new Components.Toggle(s.moreOptimization, v -> MainWindow.get().setMoreOptimization(v));
+        stack.add(new Section("Performance", new Row[]{
+                new Row("More optimization", "Plain colours instead of wallpaper and glass, no blur, no animations. The lightest launcher.", lite, 50),
+                new Row("Super optimization (Vulkan)", "VulkanMod + EntityCulling, FerriteCore, MoreCulling, Clumps. Also turns off costly launcher effects. Off undoes it all.", vulkan, 50)}));
+        Components.Input join = new Components.Input(s.quickJoin, "e.g. hypixel.net", "globe");
+        join.onChange(() -> { s.quickJoin = join.getText().trim(); s.save(); });
+        Components.Toggle voice = new Components.Toggle(s.voiceChat, v -> { s.voiceChat = v; s.save(); });
+        stack.add(new Section("Game", new Row[]{
+                new Row("Voice chat", "Simple Voice Chat in every profile (press V in game to talk). Works on servers that have the Simple Voice Chat plugin or mod.", voice, 50),
+                new Row("Quick join server", "Go straight into this server when the game starts. Empty = main menu.", join, 260),
+                new Row("Memory", "Maximum RAM Minecraft may use. 4–6 GB suits most setups.", ram, 380),
+                new Row("Window size", "Starting size of the game window.", size, 216),
+                new Row("Fullscreen", "Start the game in fullscreen.", fullscreen, 50),
+                new Row("Java arguments", "Extra JVM flags, added after the defaults.", jvm, 380)}));
+
+        // ---------------------------------------------------------- Appearance
+        Components.Slider frost = new Components.Slider(0, 100, 5, s.frost, v -> Math.round(v) + "%",
+                v -> MainWindow.get().setFrost(v.intValue()));
+        Components.Toggle anim = new Components.Toggle(s.animations, v -> MainWindow.get().setAnimations(v));
+        WallpaperRow wallpaperRow = new WallpaperRow();
+        Components.Slider dim = new Components.Slider(0, 90, 5, s.wallpaperDim, v -> Math.round(v) + "%",
+                v -> MainWindow.get().setWallpaperDim(v.intValue()));
+        stack.add(new Section("Wallpaper & colours", new Row[]{
+                wallpaperRow,
+                new AccentRow(),
+                new Row("Use the accent in game", "Life Client's menus take the launcher's accent colour (next launch).",
+                        new Components.Toggle(s.themeInGame, v -> { s.themeInGame = v; s.save(); }), 50),
+                gradientRow(s),
+                gradientColorsRow(s),
+                gradientStrengthRow(s),
+                new Row("Tint wallpaper", "Apply the custom gradient to your wallpaper.", new Components.Toggle(s.wallpaperTint, v -> {
+                    s.wallpaperTint = v; s.save(); Wallpaper.touch(); restyle();
+                }), 50),
+                new IconRow(),
+                new Row("Wallpaper dim", "Darkens the wallpaper so text stays readable.", dim, 300)}));
+        // ---- Cosmetics (the same choices as the Cosmetics page; searchable here)
+        java.util.function.BiFunction<String, List<String>, Components.Button> picker = (key, opts) -> {
+            Components.Button b = new Components.Button(CosmeticsGallery.value(key), null, Components.Variant.GHOST, null);
+            b.onClick(() -> MainWindow.get().ask("Choose", "Pick one. It applies the next time you launch.", opts,
+                    opts.indexOf(CosmeticsGallery.value(key)), i -> {
+                        CosmeticsGallery.set(key, opts.get(i));
+                        b.setText(opts.get(i));
+                    }));
+            return b;
+        };
+        Components.Toggle cKatana = new Components.Toggle(s.cosKatana, v -> CosmeticsGallery.set("katana", v ? "On" : "Off"));
+        Components.Toggle cFeet = new Components.Toggle(s.cosFeet, v -> CosmeticsGallery.set("feet", v ? "On" : "Off"));
+        Components.Toggle cGlow = new Components.Toggle(s.cosGlow, v -> { s.cosGlow = v; s.save(); });
+        Components.Button openCos = new Components.Button("Open", "sparkle", Components.Variant.GHOST, () -> {
+            MainWindow mw = MainWindow.get();
+            for (int k = 0; k < mw.pageCount(); k++) if (mw.pageTitle(k).equals("Accessories")) mw.showPage(k);
+        });
+        stack.add(new Section("Cosmetics", new Row[]{
+                new Row("Cosmetics gallery", "Accessories page, below your capes: 3D previews of everything. Only other Life players see what you wear.", openCos, 120),
+                new Row("Wings", "Angel, red, black, gold, blue, purple, pink, green or cyan.", picker.apply("wings", List.of("Off", "Angel", "Red", "Black", "Gold", "Blue", "Purple", "Pink", "Green", "Cyan")), 130),
+                new Row("Halo", "A glowing ring above your head.", picker.apply("halo", List.of("Off", "Angel", "Red")), 130),
+                new Row("Cat ears", "Black, white, ginger or pink.", picker.apply("ears", List.of("Off", "Black", "White", "Ginger", "Pink")), 130),
+                new Row("Boxing gloves", "Red, blue or black.", picker.apply("gloves", List.of("Off", "Red", "Blue", "Black")), 130),
+                new Row("Wing style", "Feathered, dragon, butterfly, demon blades or energy rays.", picker.apply("wingstyle", List.of("Feather", "Dragon", "Butterfly", "Demon", "Energy", "Fairy")), 130),
+                new Row("Hat", "A crown, a top hat or a witch hat.", picker.apply("hat", List.of("Off", "Crown", "Top hat", "Witch", "Santa", "Viking")), 130),
+                new Row("Bunny ears", "Tall ears that bob a little.", picker.apply("bunny", List.of("Off", "White", "Pink", "Black", "Brown")), 130),
+                new Row("Horns", "Devil horns.", picker.apply("horns", List.of("Off", "Red", "Black", "White", "Gold")), 130),
+                new Row("Sunglasses", "Cool shades.", picker.apply("glasses", List.of("Off", "Black", "Gold", "Pink")), 130),
+                new Row("Headphones", "Over your ears.", picker.apply("headphones", List.of("Off", "Black", "White", "Pink", "Blue")), 130),
+                new Row("Tail", "A cat tail in any colour, or a fluffy fox tail.", picker.apply("tail", List.of("Off", "Black", "White", "Ginger", "Pink", "Fox")), 130),
+                new Row("Backpack", "A little backpack.", picker.apply("backpack", List.of("Off", "Brown", "Black", "Blue", "Red")), 130),
+                new Row("Katana", "A katana across your back.", cKatana, 50),
+                new Row("Big feet", "Oversized bare feet.", cFeet, 50),
+                new Row("Glow effects", "Wings, halo and katana glow softly (they shine in the dark too).", cGlow, 50)}));
+
+        // ---- Customization
+        Components.Slider round = new Components.Slider(50, 150, 5, s.roundness, v -> Math.round(v) + "%", v -> {
+            s.roundness = (int) Math.round(v);
+            s.save();
+            Glass.invalidate();
+            MainWindow.get().frame.repaint();
+        });
+        Components.Slider tint = new Components.Slider(0, 200, 10, s.glassTint, v -> Math.round(v) + "%", v -> {
+            s.glassTint = (int) Math.round(v);
+            s.save();
+            Glass.invalidate();
+            MainWindow.get().frame.repaint();
+        });
+        Components.Slider border = new Components.Slider(0, 200, 10, s.glassBorder, v -> Math.round(v) + "%", v -> {
+            s.glassBorder = (int) Math.round(v);
+            s.save();
+            Glass.invalidate();
+            MainWindow.get().frame.repaint();
+        });
+        Components.Slider speed = new Components.Slider(50, 200, 10, s.animSpeed, v -> Math.round(v) + "%", v -> {
+            s.animSpeed = (int) Math.round(v);
+            s.save();
+        });
+        Components.Toggle c24 = new Components.Toggle(s.clock24, v -> { s.clock24 = v; s.save(); MainWindow.get().frame.repaint(); });
+        Components.Toggle cSec = new Components.Toggle(s.clockSeconds, v -> { s.clockSeconds = v; s.save(); MainWindow.get().frame.repaint(); });
+        Components.Toggle cDate = new Components.Toggle(s.clockDate, v -> { s.clockDate = v; s.save(); MainWindow.get().frame.repaint(); });
+        Components.Toggle heroWp = new Components.Toggle(s.heroWallpaper, v -> { s.heroWallpaper = v; s.save(); MainWindow.get().frame.repaint(); });
+        Components.Input title = new Components.Input(s.homeTitle, "LIFE", null);
+        title.onChange(() -> { s.homeTitle = title.getText(); s.save(); MainWindow.get().frame.repaint(); });
+        Components.Input greet = new Components.Input(s.homeGreeting, "Automatic (Welcome back, …)", null);
+        greet.onChange(() -> { s.homeGreeting = greet.getText(); s.save(); MainWindow.get().frame.repaint(); });
+        Components.Button resetLook = new Components.Button("Reset", "close", Components.Variant.GHOST, () -> {
+            s.roundness = 100;
+            s.glassTint = 100;
+            s.glassBorder = 100;
+            s.animSpeed = 100;
+            s.save();
+            Glass.invalidate();
+            MainWindow.get().frame.repaint();
+            MainWindow.get().toast("Customization reset. Reopen Settings to see the sliders back at 100%.");
+        });
+        stack.add(new Section("Customization", new Row[]{
+                new Row("Corner roundness", "How round every card, button and panel is.", round, 300),
+                new Row("Glass tint", "How dark (or light) the glass is. Lower shows more of your wallpaper.", tint, 300),
+                new Row("Glass borders", "How visible the thin edges of the glass are.", border, 300),
+                new Row("Animation speed", "Faster or slower motion everywhere (100% = normal).", speed, 300),
+                new Row("24-hour clock", "Off shows 7:30 PM style.", c24, 50),
+                new Row("Clock seconds", "Show seconds in the top-right clock.", cSec, 50),
+                new Row("Date under the clock", "Day and date below the time.", cDate, 50),
+                new Row("Wallpaper on Home", "Show your wallpaper in the big Home card (off: a calm dark card).", heroWp, 50),
+                new Row("Home title", "The big word on Home.", title, 240),
+                new Row("Home greeting", "Your own line under the title. Empty = automatic.", greet, 300),
+                new Row("Reset customization", "Roundness, glass and animation speed back to normal.", resetLook, 120)}));
+
+        Components.Segmented look = new Components.Segmented(List.of("Life", "Legacy"), s.legacyGui ? 1 : 0, i -> {
+            s.legacyGui = i == 1;
+            s.save();
+            MainWindow.get().toast("Reopen the launcher to switch to the " + (i == 1 ? "legacy" : "Life") + " look.");
+        });
+        stack.add(new Section("Look", new Row[]{
+                new Row("Launcher look", "Life: the sidebar and the player Home. Legacy: the previous round rail and big Home card.", look, 220),
+                new Row("Blur", "How much the see-through panels blur what's behind them.", frost, 300),
+                new Row("Animations", "Fades, sliding and transitions. Turn off for instant switching.", anim, 50)}));
+
+        // ------------------------------------------------------------ Launcher
+        Components.Toggle keep = new Components.Toggle(s.keepOpen, v -> { s.keepOpen = v; s.save(); });
+        // --------------------------------------------------------------- Developer (Swipecz only)
+        // Developer: only shown while you're signed in as Swipecz (updates when you sign in or out)
+        {
+            Components.Button publish = new Components.Button("Publish update", "download", Components.Variant.PRIMARY, null);
+            publish.onClick(() -> {
+                MainWindow.get().toast("Asking GitHub to build and publish…");
+                new Thread(() -> {
+                    String msg = dev.life.launcher.core.Updater.publish();
+                    SwingUtilities.invokeLater(() -> MainWindow.get().toast(msg));
+                }, "life-publish").start();
+            });
+            stack.add(new Section("Developer", new Row[]{
+                    new Row("Publish update to everyone", "Builds the code on GitHub and releases it. Everyone gets it (Linux and Windows) the next time they reopen the launcher. Build "
+                            + dev.life.launcher.core.Updater.BUILD + (dev.life.launcher.core.Updater.REPO.isEmpty() ? "" : " · " + dev.life.launcher.core.Updater.REPO) + ".", publish, 190)
+                            .when(SettingsPage::isDeveloper)}));
+        }
+
+        Components.Button importBtn = new Components.Button("Import", "download", Components.Variant.GHOST, SettingsPage::importProfile);
+        Components.Button lockBtn = new Components.Button(dev.life.launcher.core.AppLock.enabled() ? "Change" : "Set", "user", Components.Variant.GHOST, null);
+        Components.Button unlockBtn = new Components.Button("Remove", "close", Components.Variant.GHOST, null);
+        lockBtn.onClick(() -> LockScreen.showSetup(MainWindow.get().frame.getRootPane(), () -> {
+            lockBtn.setText("Change");
+            unlockBtn.setEnabled(dev.life.launcher.core.AppLock.enabled());
+        }));
+        unlockBtn.setEnabled(dev.life.launcher.core.AppLock.enabled());
+        unlockBtn.onClick(() -> {
+            try {
+                dev.life.launcher.core.AppLock.remove();
+            } catch (Exception ignored) {}
+            lockBtn.setText("Set");
+            unlockBtn.setEnabled(false);
+            MainWindow.get().toast("Password removed.");
+        });
+        JPanel lockBox = new JPanel(null);
+        lockBox.setOpaque(false);
+        lockBox.add(lockBtn);
+        lockBox.add(unlockBtn);
+        lockBtn.setBounds(0, 0, 110, 40);
+        unlockBtn.setBounds(118, 0, 112, 40);
+        Components.Button updateBtn = new Components.Button("Update", "download", Components.Variant.PRIMARY, null);
+        updateBtn.onClick(() -> {
+            updateBtn.setEnabled(false);
+            MainWindow.get().toast("Checking for a newer Life…");
+            new Thread(() -> {
+                String msg = dev.life.launcher.core.Updater.checkNow();
+                SwingUtilities.invokeLater(() -> {
+                    updateBtn.setEnabled(true);
+                    MainWindow.get().toast(msg);
+                });
+            }, "life-check-update").start();
+        });
+        Components.Input lname = new Components.Input(s.launcherName, "Life", null);
+        lname.onChange(() -> {
+            s.launcherName = lname.getText().trim();
+            s.save();
+            MainWindow.get().applyName();
+        });
+        stack.add(new Section("Launcher", new Row[]{
+                new Row("Launcher name", "Call the launcher whatever you like: the window title and the sidebar use it. Empty = Life.", lname, 240),
+                new Row("Launcher password", "Asked when Life Launcher opens, so nobody else on this PC can use it.", lockBox, 230),
+                new Row("Update to the newest", "Gets the latest Life Launcher and Client (build " + dev.life.launcher.core.Updater.BUILD
+                        + "). It's used the next time you open the launcher.", updateBtn, 150),
+                new Row("Import a profile", "From Lunar, Dawn, Prism, MultiMC, Modrinth App, CurseForge, ATLauncher or Minecraft: options, mods, packs.", importBtn, 150),
+                new Row("Keep launcher open", "Stay on screen while you play instead of minimizing.", keep, 50)}));
+
+        // ------------------------------------------------------------- Account
+        accountButton = new Components.Button("", null, Components.Variant.GHOST, null);
+        accountButton.onClick(() -> {
+            MainWindow mw = MainWindow.get();
+            if (mw.account() == null) mw.openLogin(null);
+            else mw.signOut();
+        });
+        Components.Toggle offline = new Components.Toggle(s.offline, v -> {
+            s.offline = v;
+            s.save();
+            MainWindow.get().toast(v ? "No account: launches offline, singleplayer only." : "Signed-in play is back on.");
+        });
+        Components.Input offlineName = new Components.Input(s.offlineName, "Player name for offline play", null);
+        offlineName.onChange(() -> { s.offlineName = offlineName.getText().trim(); s.save(); });
+        stack.add(new Section("Account", new Row[]{
+                new AccountRow(accountButton),
+                new Row("No account", "Skip sign-in and play offline. Singleplayer only, servers are disabled.", offline, 50),
+                new Row("Offline name", "Name used in No account mode.", offlineName, 240)}));
+
+        // --------------------------------------------------------------- Discord
+        Components.Toggle rpc = new Components.Toggle(s.discordRpc, v -> {
+            s.discordRpc = v;
+            s.save();
+            dev.life.launcher.core.DiscordPresence.refresh();
+            if (v && !dev.life.launcher.core.DiscordPresence.enabled())
+                MainWindow.get().toast("Paste your Discord application ID below to turn it on (see README).");
+        });
+        Components.Toggle showServer = new Components.Toggle(s.discordShowServer, v -> {
+            s.discordShowServer = v;
+            s.save();
+            dev.life.launcher.core.DiscordPresence.refresh();
+        });
+        Components.Input appId = new Components.Input(s.discordAppId, "Discord application ID", null);
+        appId.onChange(() -> {
+            s.discordAppId = appId.getText().trim();
+            s.save();
+            dev.life.launcher.core.DiscordPresence.refresh();
+        });
+        Components.Input dDetails = new Components.Input(s.discordDetails, "Automatic (e.g. Playing Minecraft 1.21.11)", null);
+        dDetails.onChange(() -> {
+            s.discordDetails = dDetails.getText();
+            s.save();
+            dev.life.launcher.core.DiscordPresence.refresh();
+        });
+        Components.Input dState = new Components.Input(s.discordState, "Automatic (e.g. On 65.109.88.105)", null);
+        dState.onChange(() -> {
+            s.discordState = dState.getText();
+            s.save();
+            dev.life.launcher.core.DiscordPresence.refresh();
+        });
+        Components.Toggle dTime = new Components.Toggle(s.discordShowTime, v -> {
+            s.discordShowTime = v;
+            s.save();
+            dev.life.launcher.core.DiscordPresence.refresh();
+        });
+        Components.Toggle dProfile = new Components.Toggle(s.discordShowProfile, v -> {
+            s.discordShowProfile = v;
+            s.save();
+            dev.life.launcher.core.DiscordPresence.refresh();
+        });
+        Components.Toggle dActivity = new Components.Toggle(s.discordShowActivity, v -> {
+            s.discordShowActivity = v;
+            s.save();
+            dev.life.launcher.core.DiscordPresence.refresh();
+        });
+        Components.Toggle dSmall = new Components.Toggle(s.discordSmallIcon, v -> {
+            s.discordSmallIcon = v;
+            s.save();
+            dev.life.launcher.core.DiscordPresence.refresh();
+        });
+        Components.Toggle dButton = new Components.Toggle(s.discordButton, v -> {
+            s.discordButton = v;
+            s.save();
+            dev.life.launcher.core.DiscordPresence.refresh();
+        });
+        stack.add(new Section("Discord", new Row[]{
+                new Row("Rich Presence", "Shows \"Playing Life Client\" on your Discord profile, with what you're doing.", rpc, 50),
+                new Row("Show server", "Adds the server you're on (e.g. \"On mc.eclypse.net\"). Off shows just \"Multiplayer\".", showServer, 50),
+                new Row("Top line", "Your own text instead of the automatic one. Empty = automatic.", dDetails, 300),
+                new Row("Bottom line", "Your own text instead of what you're doing. Empty = automatic.", dState, 300),
+                new Row("Show what you're doing", "In the menus / Playing singleplayer / On a server. Off hides the second line.", dActivity, 50),
+                new Row("Status icon", "The small round icon (launcher, menus, singleplayer, server) on the Life logo.", dSmall, 50),
+                new Row("Show play time", "The \"elapsed\" timer on your status.", dTime, 50),
+                new Row("Show profile name", "Adds the Life profile you're playing.", dProfile, 50),
+                new Row("\"Get Life Client\" button", "A button on your status so friends can download it.", dButton, 50)}));
+
+        // --------------------------------------------------------------- Files
+        Components.Button open = new Components.Button("Open folder", "folder", Components.Variant.GHOST, () -> MainWindow.openPath(Paths.ROOT));
+        stack.add(new Section("Files", new Row[]{
+                new Row("Game files", Paths.ROOT.toString(), open, 150)}));
+
+        // order: what people change most first
+        String[] order = {"Account", "Game", "Performance", "Wallpaper & colours", "Look", "Customization", "Cosmetics", "Discord", "Launcher", "Files", "Developer"};
+        List<Component> sections = new java.util.ArrayList<>(List.of(stack.getComponents()));
+        stack.removeAll();
+        for (String t : order) {
+            for (Component c : sections) if (c instanceof Section sec && sec.title.equals(t)) stack.add(c);
+        }
+        for (Component c : sections) if (c.getParent() == null) stack.add(c);
+
+        search.onChange(() -> {
+            query = search.getText();
+            refilter();
+        });
+        add(search);
+        instance = this;
+        refilter();
+
+        SwingUtilities.invokeLater(() -> MainWindow.get().onStateChange(this::updateAccount));
+        updateAccount();
+    }
+
+    private final Components.Input search = new Components.Input("", "Search settings", "search");
+    private static String query = "";
+    private static SettingsPage instance;
+
+    private static boolean isDeveloper() {
+        MainWindow mw = MainWindow.get();
+        return mw != null && mw.account() != null && mw.account().name != null && mw.account().name.equalsIgnoreCase("Swipecz");
+    }
+
+    /** Re-applies the search and the "only with…" conditions. */
+    public static void refilter() {
+        SettingsPage p = instance;
+        if (p == null) return;
+        for (Component c : p.stack.getComponents()) if (c instanceof Section sec) sec.filter(query);
+        p.scroll.getVerticalScrollBar().setValue(0);   // results start at the top
+        p.stack.revalidate();
+        p.stack.doLayout();
+        p.stack.repaint();
+    }
+
+    private interface ModpackJob {
+        dev.life.launcher.core.Profiles.Profile run() throws Exception;
+    }
+
+    private static long lastProgress;
+
+    /** Status line while a modpack downloads (at most every 0.4 s so the toasts stay readable). */
+    private static void progress(String msg) {
+        long now = System.currentTimeMillis();
+        if (now - lastProgress < 400) return;
+        lastProgress = now;
+        SwingUtilities.invokeLater(() -> MainWindow.get().toast(msg));
+    }
+
+    private static void runModpackImport(ModpackJob job) {
+        MainWindow.get().toast("Importing the modpack…");
+        new Thread(() -> {
+            try {
+                var p = job.run();
+                SwingUtilities.invokeLater(() -> {
+                    dev.life.launcher.core.Profiles.select(p);
+                    MainWindow.get().frame.repaint();
+                    MainWindow.get().toast("Imported \"" + p.name + "\" as a new profile. Press Launch to play it.");
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> MainWindow.get().toast("Import failed: " + ex.getMessage()));
+            }
+        }, "life-modpack").start();
+    }
+
+    /** For the Profiles page's Import button. */
+    public static void importProfileNow() {
+        importProfile();
+    }
+
+    /** Settings → Import a profile: pick the launcher, then the profile. */
+    private static void importProfile() {
+        List<dev.life.launcher.core.ProfileImport.Source> found = dev.life.launcher.core.ProfileImport.detect();
+        List<String> names = new java.util.ArrayList<>();
+        names.add("Modrinth modpack (link)");
+        names.add("Modrinth modpack (.mrpack file)");
+        for (var src : found) names.add(src.name() + "  (" + src.profiles().size() + ")");
+        MainWindow.get().ask("Import a profile", "From a Modrinth modpack, or from another launcher on this PC.", names, 0, i -> {
+            if (i == 0) {
+                SwingUtilities.invokeLater(() -> MainWindow.get().askText("Modrinth modpack",
+                        "Paste the modpack's Modrinth link (or its name). The newest Fabric version for Minecraft "
+                                + dev.life.launcher.game.GameVersion.MODERN.mc + " becomes a new profile.",
+                        "modrinth.com/modpack/…", "Import", link -> {
+                            if (link.isEmpty()) return;
+                            runModpackImport(() -> dev.life.launcher.core.ProfileImport.importModrinthLink(link, SettingsPage::progress));
+                        }));
+                return;
+            }
+            if (i == 1) {
+                java.nio.file.Path f = FilePicker.one("Choose a Modrinth modpack", "Modrinth modpacks", "mrpack");
+                if (f != null) runModpackImport(() -> dev.life.launcher.core.ProfileImport.importMrpack(f, SettingsPage::progress));
+                return;
+            }
+            var src = found.get(i - 2);
+            List<String> profs = new java.util.ArrayList<>();
+            for (var f : src.profiles()) profs.add(f.name());
+            SwingUtilities.invokeLater(() -> MainWindow.get().ask("Import from " + src.name(),
+                    "Its options.txt, mods, resource packs, shader packs and configs are copied into a new Life profile. "
+                            + "Mods made for another Minecraft version may need updating.",
+                    profs, -1, j -> {
+                        var f = src.profiles().get(j);
+                        MainWindow.get().toast("Importing " + f.name() + "…");
+                        new Thread(() -> {
+                            try {
+                                var p = dev.life.launcher.core.ProfileImport.importInto(f);
+                                SwingUtilities.invokeLater(() -> {
+                                    dev.life.launcher.core.Profiles.select(p);
+                                    MainWindow.get().frame.repaint();
+                                    MainWindow.get().toast("Imported \"" + f.name() + "\" as a new profile.");
+                                });
+                            } catch (Exception ex) {
+                                SwingUtilities.invokeLater(() -> MainWindow.get().toast("Import failed: " + ex.getMessage()));
+                            }
+                        }, "life-import").start();
+                    }));
+        });
+    }
+
+    private void updateAccount() {
+        MainWindow mw = MainWindow.get();
+        boolean in = mw != null && mw.account() != null;
+        SwingUtilities.invokeLater(SettingsPage::refilter);      // Developer section follows the account
+        accountButton.setText(in ? "Sign out" : "Sign in");
+        stack.repaint();
+    }
+
+    private static int roundDown(int mb) {
+        return Math.max(2048, mb / 512 * 512);
+    }
+
+    private static int parse(String t, int def) {
+        try {
+            return Math.max(0, Integer.parseInt(t.trim()));
+        } catch (Exception e) {
+            return def;
+        }
+    }
+
+    @Override
+    public void onShow() {
+        stack.animateIn();
+    }
+
+    @Override public String title() { return "Settings"; }
+    @Override public String icon() { return "settings"; }
+
+    @Override
+    public void doLayout() {
+        search.setBounds(Math.max(260, getWidth() - 280), 8, Math.min(280, getWidth() - 260), 40);
+        scroll.setBounds(0, 76, getWidth() + 10, getHeight() - 76);
+        stack.doLayout();
+    }
+
+    @Override
+    protected void paintComponent(Graphics g0) {
+        Graphics2D g = Theme.aa(g0.create());
+        Theme.left(g, "Settings", Theme.font(Theme.REGULAR, 34f), Theme.TEXT, 0, 0, 42);
+        Theme.left(g, "Changes save automatically and apply the next time you launch.", Theme.font(Theme.REGULAR, 13.5f), Theme.SOFT, 0, 44, 22);
+        g.dispose();
+    }
+
+    private static class Row extends JComponent {
+        final String title, desc;
+        final JComponent control;
+        final int controlW;
+        /** Shown only while this holds (e.g. glass options only with the Glass style). */
+        java.util.function.BooleanSupplier showIf;
+
+        Row when(java.util.function.BooleanSupplier c) {
+            showIf = c;
+            return this;
+        }
+
+        boolean matches(String q) {
+            if (showIf != null && !showIf.getAsBoolean()) return false;
+            if (q == null || q.isBlank()) return true;
+            String t = (title + " " + desc).toLowerCase();
+            for (String word : q.toLowerCase().trim().split("\\s+")) if (!t.contains(word)) return false;
+            return true;
+        }
+
+        Row(String title, String desc, JComponent control, int controlW) {
+            this.title = title;
+            this.desc = desc;
+            this.control = control;
+            this.controlW = controlW;
+            setLayout(null);
+            if (control != null) add(control);
+        }
+
+        int height() { return 72; }
+
+        @Override
+        public void doLayout() {
+            if (control == null) return;
+            int ch = control instanceof Components.Toggle ? 28 : 40;
+            control.setBounds(getWidth() - controlW - 22, (getHeight() - ch) / 2, controlW, ch);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            Theme.left(g, title, Theme.font(Theme.MEDIUM, 14.5f), Theme.TEXT, 22, 14, 22);
+            g.setFont(Theme.font(Theme.REGULAR, 12.5f));
+            int max = getWidth() - controlW - 70;
+            Theme.left(g, Theme.ellipsize(desc, g.getFontMetrics(), max), Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 22, 36, 20);
+            g.dispose();
+        }
+    }
+
+    /** Wallpaper: shows the current file, Choose… and Remove. */
+    private static final class WallpaperRow extends Row {
+        private final Components.Button choose, remove;
+
+        WallpaperRow() {
+            super("Wallpaper", "", new JPanel(null), 250);
+            JPanel box = (JPanel) control;
+            box.setOpaque(false);
+            choose = new Components.Button("Choose", "folder", Components.Variant.GHOST, null);
+            remove = new Components.Button("Remove", "trash", Components.Variant.GHOST, null);
+            choose.onClick(() -> MainWindow.get().chooseWallpaper(this::repaint));
+            remove.onClick(() -> {
+                MainWindow.get().clearWallpaper();
+                repaint();
+            });
+            box.add(choose);
+            box.add(remove);
+            choose.setBounds(0, 0, 120, 40);
+            remove.setBounds(130, 0, 120, 40);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            Settings st = Settings.get();
+            String desc = st.wallpaperType.isEmpty() ? "Image, GIF or video (MP4, WebM, MKV) behind the launcher and the in-game menu."
+                    : (st.wallpaperType.equals("video") ? "Animated: " : "Image: ") + st.wallpaperName;
+            Theme.left(g, "Wallpaper", Theme.font(Theme.MEDIUM, 14.5f), Theme.TEXT, 22, 14, 22);
+            g.setFont(Theme.font(Theme.REGULAR, 12.5f));
+            Theme.left(g, Theme.ellipsize(desc, g.getFontMetrics(), getWidth() - 320), Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 22, 36, 20);
+            g.dispose();
+        }
+    }
+
+    private static void restyle() {
+        Theme.applyAccent();
+        Glass.invalidate();
+        MainWindow.get().frame.repaint();
+    }
+
+    private static Integer parseHex(String t) {
+        String h = t.trim().replace("#", "");
+        if (!h.matches("[0-9a-fA-F]{6}")) return null;
+        return Integer.parseInt(h, 16);
+    }
+
+    private static Row gradientRow(dev.life.launcher.core.Settings s) {
+        Components.Toggle t = new Components.Toggle(s.gradient, v -> {
+            s.gradient = v;
+            s.save();
+            restyle();
+        });
+        return new Row("Background gradient", "Your own two colours: the whole background, or a tint over your wallpaper.", t, 50);
+    }
+
+    private static Row gradientStrengthRow(dev.life.launcher.core.Settings s) {
+        Components.Slider sl = new Components.Slider(0, 100, 5, s.gradientStrength, v -> Math.round(v) + "%", v -> {
+            s.gradientStrength = (int) Math.round(v);
+            s.save();
+            Wallpaper.touch();
+            restyle();
+        });
+        return new Row("Gradient over wallpaper", "How strongly the gradient tints your wallpaper.", sl, 300);
+    }
+
+    private static Row gradientColorsRow(dev.life.launcher.core.Settings s) {
+        JPanel box = new JPanel(null);
+        box.setOpaque(false);
+        Components.Input a = new Components.Input(String.format("#%06X", s.gradientA & 0xFFFFFF), "#1B1B3A", null);
+        Components.Input b = new Components.Input(String.format("#%06X", s.gradientB & 0xFFFFFF), "#0B0B0D", null);
+        int[] angles = {135, 90, 45, 0};
+        int idx = 0;
+        for (int i = 0; i < angles.length; i++) if (angles[i] == s.gradientAngle) idx = i;
+        Components.Segmented dir = new Components.Segmented(java.util.List.of("\u2198", "\u2193", "\u2197", "\u2192"), idx, i -> {
+            s.gradientAngle = angles[i];
+            s.save();
+            restyle();
+        });
+        a.onChange(() -> {
+            Integer c = parseHex(a.getText());
+            if (c != null) {
+                s.gradientA = c;
+                s.save();
+                restyle();
+            }
+        });
+        b.onChange(() -> {
+            Integer c = parseHex(b.getText());
+            if (c != null) {
+                s.gradientB = c;
+                s.save();
+                restyle();
+            }
+        });
+        Swatch sa = new Swatch(() -> s.gradientA, rgb -> {
+            s.gradientA = rgb;
+            a.setText(String.format("#%06X", rgb));
+            s.save();
+            restyle();
+        });
+        Swatch sb = new Swatch(() -> s.gradientB, rgb -> {
+            s.gradientB = rgb;
+            b.setText(String.format("#%06X", rgb));
+            s.save();
+            restyle();
+        });
+        box.add(sa);
+        box.add(a);
+        box.add(sb);
+        box.add(b);
+        box.add(dir);
+        sa.setBounds(0, 6, 28, 28);
+        a.setBounds(32, 0, 92, 40);
+        sb.setBounds(132, 6, 28, 28);
+        b.setBounds(164, 0, 92, 40);
+        dir.setBounds(264, 0, 150, 40);
+        return new Row("Gradient colours", "Click a circle for the colour wheel, or type hex codes; then the direction.", box, 414);
+    }
+
+    /** A colour circle that opens the colour wheel. */
+    private static final class Swatch extends JComponent {
+        private final java.util.function.IntSupplier get;
+
+        Swatch(java.util.function.IntSupplier get, java.util.function.IntConsumer set) {
+            this.get = get;
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                    ColorWheel.open(Swatch.this, get.getAsInt(), rgb -> {
+                        set.accept(rgb);
+                        repaint();
+                    });
+                }
+            });
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            g.setColor(new Color(get.getAsInt() & 0xFFFFFF));
+            g.fillOval(2, 2, getWidth() - 4, getHeight() - 4);
+            g.setColor(Theme.alpha(Theme.TEXT, 0.35));
+            g.drawOval(2, 2, getWidth() - 5, getHeight() - 5);
+            g.dispose();
+        }
+    }
+
+
+    /** Accent colour: preset swatches plus your own hex colour. */
+    private static final class AccentRow extends Row {
+        private final Components.Input hex;
+        private int hover = -1;
+
+        AccentRow() {
+            super("Accent colour", "", new JPanel(null), 190);
+            dev.life.launcher.core.Settings s = dev.life.launcher.core.Settings.get();
+            JPanel box = (JPanel) control;
+            box.setOpaque(false);
+            hex = new Components.Input(String.format("#%06X", s.accentCustom & 0xFFFFFF), "#7C5CFF", null);
+            hex.onChange(() -> {
+                Integer c = parseHex(hex.getText());
+                if (c == null) return;
+                s.accentCustom = c;
+                s.accent = "Custom";
+                s.save();
+                restyle();
+                repaint();
+            });
+            box.add(hex);
+            hex.setBounds(80, 0, 110, 40);
+            addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+                @Override public void mouseMoved(java.awt.event.MouseEvent e) {
+                    int h = swatchAt(e.getX(), e.getY());
+                    if (h != hover) {
+                        hover = h;
+                        repaint();
+                    }
+                }
+            });
+            addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                    int i = swatchAt(e.getX(), e.getY());
+                    if (i < 0) return;
+                    s.accent = Theme.ACCENTS[i];
+                    s.save();
+                    restyle();
+                    repaint();
+                    if (Theme.ACCENTS[i].equals("Custom")) {        // any colour: the wheel
+                        JComponent anchor = AccentRow.this;
+                        ColorWheel.open(anchor, s.accentCustom, rgb -> {
+                            s.accentCustom = rgb;
+                            s.accent = "Custom";
+                            s.save();
+                            hex.setText(String.format("#%06X", rgb));
+                            restyle();
+                            repaint();
+                        });
+                    }
+                }
+
+                @Override public void mouseExited(java.awt.event.MouseEvent e) {
+                    hover = -1;
+                    repaint();
+                }
+            });
+            setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+        }
+
+        private int swatchX(int i) { return 24 + i * 30; }
+
+        private int swatchAt(int x, int y) {
+            if (y < 42 || y > 64) return -1;
+            for (int i = 0; i < Theme.ACCENTS.length; i++) if (x >= swatchX(i) - 2 && x <= swatchX(i) + 24) return i;
+            return -1;
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            return new Dimension(super.getPreferredSize().width, 76);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            dev.life.launcher.core.Settings s = dev.life.launcher.core.Settings.get();
+            Theme.left(g, "Accent colour", Theme.font(Theme.MEDIUM, 14.5f), Theme.TEXT, 22, 8, 22);
+            g.setFont(Theme.font(Theme.REGULAR, 12.5f));
+            Theme.left(g, "Launch button, selection, switches and sliders. The last circle opens a colour wheel.", Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 22, 26, 16);
+            for (int i = 0; i < Theme.ACCENTS.length; i++) {
+                int x = swatchX(i), y = 44;
+                String name = Theme.ACCENTS[i];
+                boolean sel = name.equals(s.accent), hov = i == hover;
+                if (name.equals("Classic")) {   // classic: ivory and charcoal halves
+                    g.setColor(new Color(0xF8F5F2));
+                    g.fillArc(x, y, 22, 22, 90, 180);
+                    g.setColor(new Color(0x2D2D2D));
+                    g.fillArc(x, y, 22, 22, 270, 180);
+                } else if (name.equals("Life")) {   // the Life liquid
+                    g.setPaint(new LinearGradientPaint(x, y, x + 22, y + 22, new float[]{0f, 0.45f, 1f},
+                            new Color[]{new Color(Theme.LIFE_LIGHT), new Color(Theme.LIFE_CYAN), new Color(Theme.LIFE_AZURE)}));
+                    g.fillOval(x, y, 22, 22);
+                } else {
+                    g.setColor(new Color(name.equals("Custom") ? s.accentCustom & 0xFFFFFF : Theme.ACCENT_RGB[i]));
+                    g.fillOval(x, y, 22, 22);
+                }
+                g.setColor(Theme.alpha(Theme.TEXT, sel ? 0.95 : hov ? 0.5 : 0.18));
+                g.setStroke(new BasicStroke(sel ? 2f : 1f));
+                g.drawOval(x - (sel ? 3 : 0), y - (sel ? 3 : 0), 22 + (sel ? 6 : 0), 22 + (sel ? 6 : 0));
+            }
+            g.dispose();
+        }
+    }
+
+    /** Launcher icon: your own picture as the app icon and logo, or the Life star. */
+    private static final class IconRow extends Row {
+        IconRow() {
+            super("Launcher icon", "", new JPanel(null), 250);
+            JPanel box = (JPanel) control;
+            box.setOpaque(false);
+            Components.Button choose = new Components.Button("Choose", "folder", Components.Variant.GHOST, null);
+            Components.Button reset = new Components.Button("Reset", "trash", Components.Variant.GHOST, null);
+            choose.onClick(() -> MainWindow.get().chooseAppIcon(this::repaint));
+            reset.onClick(() -> MainWindow.get().resetAppIcon(this::repaint));
+            box.add(choose);
+            box.add(reset);
+            choose.setBounds(0, 0, 120, 40);
+            reset.setBounds(130, 0, 120, 40);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            boolean mine = dev.life.launcher.core.AppIcon.custom() != null;
+            Theme.logo(g, 34, 30, 26, 1);
+            Theme.left(g, "Launcher icon", Theme.font(Theme.MEDIUM, 14.5f), Theme.TEXT, 58, 14, 22);
+            String desc = mine ? "Your own picture: window, taskbar, app menu and the logo in here."
+                    : "Use any picture as the launcher's icon and logo. Reset brings Life back.";
+            g.setFont(Theme.font(Theme.REGULAR, 12.5f));
+            Theme.left(g, Theme.ellipsize(desc, g.getFontMetrics(), getWidth() - 360), Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 58, 36, 20);
+            g.dispose();
+        }
+    }
+
+    /** Crosshair picture for Life Client (Custom Crosshair → Style: Image). */
+    private static final class CrosshairRow extends Row {
+        private java.awt.image.BufferedImage preview;
+
+        CrosshairRow() {
+            super("Crosshair image", "", new JPanel(null), 250);
+            JPanel box = (JPanel) control;
+            box.setOpaque(false);
+            Components.Button choose = new Components.Button("Choose", "folder", Components.Variant.GHOST, null);
+            Components.Button reset = new Components.Button("Remove", "trash", Components.Variant.GHOST, null);
+            choose.onClick(() -> {
+                FileDialog fd = new FileDialog(MainWindow.get().frame, "Crosshair picture (PNG with a transparent background works best)", FileDialog.LOAD);
+                fd.setVisible(true);
+                if (fd.getFile() == null) return;
+                try {
+                    dev.life.launcher.core.Accessories.importCrosshair(java.nio.file.Path.of(fd.getDirectory(), fd.getFile()));
+                    preview = null;
+                    MainWindow.get().toast("Crosshair set. In game: Custom Crosshair → Style: Image.");
+                } catch (Exception e) {
+                    MainWindow.get().toast(e.getMessage());
+                }
+                repaint();
+            });
+            reset.onClick(() -> {
+                try {
+                    dev.life.launcher.core.Accessories.removeCrosshair();
+                } catch (Exception ignored) {}
+                preview = null;
+                repaint();
+            });
+            box.add(choose);
+            box.add(reset);
+            choose.setBounds(0, 0, 120, 40);
+            reset.setBounds(130, 0, 120, 40);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            java.nio.file.Path f = dev.life.launcher.core.Accessories.CROSSHAIR;
+            boolean has = java.nio.file.Files.exists(f);
+            if (has && preview == null) {
+                try {
+                    preview = javax.imageio.ImageIO.read(f.toFile());
+                } catch (Exception ignored) {}
+            }
+            if (has && preview != null) {
+                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                g.drawImage(preview, 22, 18, 24, 24, null);
+            } else {
+                Icons.paint(g, "crosshair", 22, 18, 24, Theme.SOFT);
+            }
+            Theme.left(g, "Crosshair image", Theme.font(Theme.MEDIUM, 14.5f), Theme.TEXT, 58, 14, 22);
+            String desc = has ? "Used in game with Custom Crosshair → Style: Image."
+                    : "Your own crosshair picture for Life Client (PNG with transparency is best).";
+            g.setFont(Theme.font(Theme.REGULAR, 12.5f));
+            Theme.left(g, Theme.ellipsize(desc, g.getFontMetrics(), getWidth() - 360), Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 58, 36, 20);
+            g.dispose();
+        }
+    }
+
+    private static final class AccountRow extends Row {
+        AccountRow(JComponent button) {
+            super("", "", button, 120);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            MainWindow mw = MainWindow.get();
+            boolean in = mw != null && mw.account() != null;
+            MainWindow.drawFace(g, in ? mw.face() : null, 22, 16, 40);
+            Theme.left(g, in ? mw.account().name : "Not signed in", Theme.font(Theme.MEDIUM, 14.5f), Theme.TEXT, 76, 14, 22);
+            Theme.left(g, in ? "Microsoft account" : "Sign in to launch the game.", Theme.font(Theme.REGULAR, 12.5f), Theme.MUTED, 76, 36, 20);
+            g.dispose();
+        }
+    }
+
+    /**
+     * A settings card. Click its title to fold it up or open it (the chevron shows which); long ones
+     * like Cosmetics start folded. A search opens the sections that match.
+     */
+    private static final class Section extends JComponent {
+        private static final java.util.Set<String> FOLDED_BY_DEFAULT = java.util.Set.of("Cosmetics", "Customization", "Developer");
+        private final String title;
+        private final Row[] rows;
+        private boolean folded;
+        private boolean searching;
+        private final dev.life.launcher.ui.Anim.Tween open;
+        private boolean hoverHead;
+
+        Section(String title, Row[] rows) {
+            this.title = title;
+            this.rows = rows;
+            this.folded = FOLDED_BY_DEFAULT.contains(title);
+            this.open = new dev.life.launcher.ui.Anim.Tween(this, folded ? 0 : 1).rate(16);
+            setLayout(null);
+            for (Row r : rows) add(r);
+            java.awt.event.MouseAdapter m = new java.awt.event.MouseAdapter() {
+                @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                    if (e.getY() > 44) return;
+                    folded = !folded;
+                    open.to(folded ? 0 : 1);
+                    relayout();
+                }
+
+                @Override public void mouseMoved(java.awt.event.MouseEvent e) {
+                    boolean h = e.getY() <= 44;
+                    if (h != hoverHead) {
+                        hoverHead = h;
+                        setCursor(Cursor.getPredefinedCursor(h ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
+                        repaint();
+                    }
+                }
+
+                @Override public void mouseExited(java.awt.event.MouseEvent e) {
+                    hoverHead = false;
+                    repaint();
+                }
+            };
+            addMouseListener(m);
+            addMouseMotionListener(m);
+        }
+
+        /** Grows / shrinks smoothly: the page re-measures every frame while it animates. */
+        private void relayout() {
+            Timer t = new Timer(16, null);
+            t.addActionListener(e -> {
+                Container p = getParent();
+                if (p != null) {
+                    p.revalidate();
+                    p.repaint();
+                }
+                double v = open.get();
+                if (Math.abs(v - (folded ? 0 : 1)) < 0.01) t.stop();
+            });
+            t.start();
+        }
+
+        private boolean expanded() { return searching || !folded; }
+
+        /** Shows the rows that match the search (all when the section's own name matches). */
+        void filter(String q) {
+            searching = q != null && !q.isBlank();
+            boolean titleHit = searching && title.toLowerCase().contains(q.toLowerCase().trim());
+            int shown = 0;
+            for (Row r : rows) {
+                boolean on = titleHit ? r.matches("") : r.matches(q);
+                r.setVisible(on);
+                if (on) shown++;
+            }
+            setVisible(shown > 0);
+        }
+
+        private int rowsHeight() {
+            int h = 0;
+            for (Row r : rows) if (r.isVisible()) h += r.height();
+            return h;
+        }
+
+        private double openness() { return searching ? 1 : Math.max(0, Math.min(1, open.get())); }
+
+        @Override
+        public Dimension getPreferredSize() {
+            return new Dimension(100, 50 + (int) Math.round(rowsHeight() * openness()));
+        }
+
+        @Override
+        public void doLayout() {
+            int y = 44;
+            for (Row r : rows) {
+                if (!r.isVisible()) continue;
+                r.setBounds(0, y, getWidth(), r.height());
+                r.doLayout();
+                y += r.height();
+            }
+        }
+
+        @Override
+        public void paint(Graphics g) {
+            Graphics2D c = (Graphics2D) g.create();
+            c.clipRect(0, 0, getWidth(), getHeight());              // folded rows stay hidden
+            super.paint(c);
+            c.dispose();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g0) {
+            Graphics2D g = Theme.aa(g0.create());
+            int w = getWidth(), h = getHeight();
+            Theme.surface(g, this, 0, 0, w, h, 20);
+            if (hoverHead) Theme.fill(g, 6, 6, w - 12, 34, 14, Theme.alpha(Theme.TEXT, 0.04));
+            Theme.left(g, title, Theme.font(Theme.BOLD, 15f), Theme.TEXT, 22, 12, 26);
+            // the chevron: points down when open, right when folded
+            double o = openness();
+            Graphics2D cg = (Graphics2D) g.create();
+            cg.translate(w - 34, 25);
+            cg.rotate(-Math.PI / 2 * (1 - o));
+            dev.life.launcher.ui.Icons.paint(cg, "chevron-down", -8, -8, 16, Theme.MUTED);
+            cg.dispose();
+            if (!expanded() && o < 0.05) {
+                int n = 0;
+                for (Row r : rows) if (r.isVisible()) n++;
+                String hint = n + (n == 1 ? " setting" : " settings");
+                Font f = Theme.font(Theme.REGULAR, 12f);
+                Theme.left(g, hint, f, Theme.MUTED, w - 50 - Theme.width(g, hint, f), 12, 26);
+            }
+            g.setColor(Theme.LINE);
+            int y = 44;
+            for (Row r : rows) {
+                if (!r.isVisible()) continue;
+                if (y < h) g.fillRect(22, y, w - 44, 1);
+                y += r.height();
+            }
+            g.dispose();
+        }
+    }
+}

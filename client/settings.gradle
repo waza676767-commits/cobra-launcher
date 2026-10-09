@@ -5,4 +5,4 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
-rootProject.name = 'cobra-client-1.21.11'
+rootProject.name = 'life-client-1.21.11'

@@ -1,0 +1,15 @@
+# sudo cp life-online.py /opt/ && sudo cp life-online.service /etc/systemd/system/
+# sudo systemctl enable --now life-online
+[Unit]
+Description=Life Client online list
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/life-online.py
+Restart=always
+DynamicUser=yes
+# where uploaded capes are kept (/var/lib/life-online)
+StateDirectory=life-online
+
+[Install]
+WantedBy=multi-user.target
