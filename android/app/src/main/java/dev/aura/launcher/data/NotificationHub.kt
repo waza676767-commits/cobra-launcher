@@ -153,6 +153,12 @@ object NotificationHub {
 
     fun get(key: String) = entries[key]
 
+    /** Debug builds: lets the lock screen be tested without real notifications. */
+    fun debugAdd(e: NotifEntry) {
+        entries[e.key] = e
+        notifyChanged(e.key)
+    }
+
     fun badgeCounts(): Map<String, Int> {
         val m = HashMap<String, Int>()
         for (e in list()) m[e.pkg] = (m[e.pkg] ?: 0) + 1

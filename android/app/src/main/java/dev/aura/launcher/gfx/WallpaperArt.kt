@@ -223,13 +223,13 @@ object WallpaperArt {
         c.restore()
 
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(bx, by, tx, ty, argb(0.95f, color), argb(if (light) 0.55f else 0.6f, lighten(color, 0.25f)), Shader.TileMode.CLAMP)
+            shader = LinearGradient(bx, by, tx, ty, argb(0.96f, color), argb(if (light) 0.6f else 0.72f, lighten(color, 0.1f)), Shader.TileMode.CLAMP)
         }
         c.drawPath(path, fill)
 
         val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.color = if (light) 0x80FFFFFF.toInt() else 0x66FFFFFF
-            maskFilter = BlurMaskFilter(26f * s, BlurMaskFilter.Blur.INNER)
+            this.color = if (light) 0x73FFFFFF else 0x3DFFFFFF
+            maskFilter = BlurMaskFilter(22f * s, BlurMaskFilter.Blur.INNER)
         }
         c.drawPath(path, glow)
 

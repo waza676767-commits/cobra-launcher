@@ -496,7 +496,7 @@ class SearchOverlay(private val home: HomeActivity) : FrameLayout(home) {
 
     private fun apply() {
         val p = progress
-        home.setOverlayBlur(p.coerceIn(0f, 1f))
+        home.setOverlayBlur(p.coerceIn(0f, 1f), strong = true)
         bar.alpha = p.coerceIn(0f, 1f)
         bar.translationY = -(1f - p.coerceIn(0f, 1f)) * 40.dp + (p - 1f).coerceAtLeast(0f) * 30.dp
         results.alpha = ((p - 0.3f) / 0.7f).coerceIn(0f, 1f)

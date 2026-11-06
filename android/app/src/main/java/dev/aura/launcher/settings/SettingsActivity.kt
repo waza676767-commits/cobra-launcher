@@ -52,6 +52,7 @@ import kotlin.math.roundToInt
 
 /** Aura Settings: grouped iOS-style lists over a frosted copy of the wallpaper. */
 class SettingsActivity : Activity() {
+    private var snapReceiver: android.content.BroadcastReceiver? = null
     private lateinit var root: FrameLayout
     private val stack = ArrayList<ScreenView>()
     private var insets = android.graphics.Insets.NONE
@@ -85,9 +86,11 @@ class SettingsActivity : Activity() {
         Backdrop.listen(onWall)
         push("main", animate = false)
         intent.getStringExtra(EXTRA_SECTION)?.let { push(it, animate = false) }
+        snapReceiver = dev.aura.launcher.core.DebugSnap.attach(this, "settings")
     }
 
     override fun onDestroy() {
+        dev.aura.launcher.core.DebugSnap.detach(this, snapReceiver)
         Backdrop.unlisten(onWall)
         super.onDestroy()
     }

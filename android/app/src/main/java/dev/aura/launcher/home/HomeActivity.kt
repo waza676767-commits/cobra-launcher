@@ -64,10 +64,11 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.sin
 
-class PendingDrag(val view: View, val item: Item, val container: DropContainer)
+class PendingDrag(val view: View, val item: Item, val container: DropContainer, val x: Float, val y: Float)
 
 /** The Aura home screen. */
 class HomeActivity : Activity() {
+    private var snapReceiver: android.content.BroadcastReceiver? = null
     val geo = Geometry()
     lateinit var layout: HomeLayout
         private set
@@ -146,7 +147,8 @@ class HomeActivity : Activity() {
         root.addView(popup, FrameLayout.LayoutParams(mp))
         root.addView(picker, FrameLayout.LayoutParams(mp))
         root.setOnApplyWindowInsetsListener { _, ins ->
-            val i = ins.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+            // ignoring visibility: hiding the status bar in edit mode must not move the grid
+            val i = ins.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
             if (i != insets) {
                 insets = i
                 geo.invalidate()
@@ -167,9 +169,11 @@ class HomeActivity : Activity() {
         badges = NotificationHub.badgeCounts()
         updateSystemBars()
         handleIntent(intent)
+        snapReceiver = dev.aura.launcher.core.DebugSnap.attach(this, "home")
     }
 
     override fun onDestroy() {
+        dev.aura.launcher.core.DebugSnap.detach(this, snapReceiver)
         Backdrop.unlisten(onWallpaper)
         AppRepository.unlisten(onApps)
         NotificationHub.unlisten(onNotifications)
@@ -491,10 +495,11 @@ class HomeActivity : Activity() {
     private var blurLevel = -1f
 
     /** Blurs + dims the home screen behind folders, search, menus (only while they're open). */
-    fun setOverlayBlur(p: Float) {
+    fun setOverlayBlur(p: Float, strong: Boolean = false) {
         val v = p.coerceIn(0f, 1f)
-        if (v == blurLevel) return
+        if (v == blurLevel && strong == blurStrong) return
         blurLevel = v
+        blurStrong = strong
         wallpaper.blur = if (Theme.reduceTransparency) 0f else v
         if (v <= 0.002f || Theme.reduceTransparency) {
             content.setRenderEffect(null)
@@ -502,8 +507,10 @@ class HomeActivity : Activity() {
             val r = (24.dp * v).coerceAtLeast(0.5f)
             content.setRenderEffect(RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP))
         }
-        content.alpha = 1f - (if (Theme.reduceTransparency) 0.75f else 0.3f) * v
+        content.alpha = 1f - (if (Theme.reduceTransparency || strong) 0.85f else 0.3f) * v
     }
+
+    private var blurStrong = false
 
     fun anyOverlayOpen() = folder.isOpen || search.visibility == View.VISIBLE || popup.isShowing || picker.isOpen
 
@@ -606,7 +613,7 @@ class HomeActivity : Activity() {
             return
         }
         Ui.thud(v)
-        pendingDrag = PendingDrag(v, item, c)
+        pendingDrag = PendingDrag(v, item, c, x, y)
         showMenu(v, item, c)
     }
 
@@ -614,7 +621,9 @@ class HomeActivity : Activity() {
         val pd = pendingDrag ?: return
         pendingDrag = null
         popup.dismiss(immediate = true)
-        drag.start(pd.view, pd.item, pd.container, x, y)
+        // grab the icon where the finger first pressed it, then catch up with the finger
+        drag.start(pd.view, pd.item, pd.container, pd.x, pd.y)
+        drag.move(x, y)
     }
 
     fun onPopupGone() {
@@ -752,6 +761,10 @@ class HomeActivity : Activity() {
         forEachItemView { (it as? Editable)?.editMode = true }
         editBar.visibility = View.VISIBLE
         editBar.animate().alpha(1f).setDuration(Ui.ms(200)).start()
+        window.insetsController?.let {
+            it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            it.hide(WindowInsets.Type.statusBars())
+        }
         if (!Theme.reduceMotion) startJiggle()
     }
 
@@ -762,6 +775,7 @@ class HomeActivity : Activity() {
         jiggle = null
         forEachItemView { it.rotation = 0f; (it as? Editable)?.editMode = false }
         editBar.animate().alpha(0f).setDuration(Ui.ms(180)).withEndAction { if (!editMode) editBar.visibility = View.GONE }.start()
+        window.insetsController?.show(WindowInsets.Type.statusBars())
         afterLayoutEdit()
     }
 

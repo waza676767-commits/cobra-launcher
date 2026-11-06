@@ -108,13 +108,23 @@ class ClockView(ctx: Context) : View(ctx) {
         }
         tp.shader = LinearGradient(0f, base - clockSize * 0.75f, 0f, base, 0xB3FFFFFF.toInt(), 0x59FFFFFF, Shader.TileMode.CLAMP)
         c.drawText(time, width / 2f, base, tp)
-        tp.style = Paint.Style.STROKE
-        tp.strokeWidth = 1.4f.dp
-        tp.shader = LinearGradient(0f, base - clockSize * 0.75f, 0f, base, 0xF2FFFFFF.toInt(), 0x33FFFFFF, Shader.TileMode.CLAMP)
-        c.drawText(time, width / 2f, base, tp)
-        tp.style = Paint.Style.FILL
         tp.shader = null
+        // bright rim: stroke the merged outline (stroking text directly shows the font's inner overlaps)
+        val key = "$time|${tp.textSize}|$width"
+        if (key != outlineKey) {
+            outlineKey = key
+            outline.reset()
+            tp.getTextPath(time, 0, time.length, width / 2f, base, outline)
+            outline.op(Path(), Path.Op.UNION)
+        }
+        rim.strokeWidth = 1.4f.dp
+        rim.shader = LinearGradient(0f, base - clockSize * 0.75f, 0f, base, 0xF2FFFFFF.toInt(), 0x33FFFFFF, Shader.TileMode.CLAMP)
+        c.drawPath(outline, rim)
     }
+
+    private val outline = Path()
+    private var outlineKey = ""
+    private val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 
     fun preferredHeight(): Int = (24.dp + clockSize * 1.12f).toInt()
 }
@@ -213,6 +223,7 @@ class NotifCard(ctx: Context, private val host: LockActivity) : View(ctx) {
     private val r = RectF()
     private var body: StaticLayout? = null
     private var icon: Bitmap? = null
+    private var small: android.graphics.drawable.Drawable? = null
 
     private val pad get() = 14.dp
     private val iconS get() = 38.dp
@@ -221,6 +232,7 @@ class NotifCard(ctx: Context, private val host: LockActivity) : View(ctx) {
 
     fun bind(e: NotifEntry, count: Int, hide: Boolean) {
         entry = e
+        small = null
         stack = count
         hidePreview = hide
         val key = AppRepository.forPackage(e.pkg)?.key
@@ -282,7 +294,23 @@ class NotifCard(ctx: Context, private val host: LockActivity) : View(ctx) {
             Squircle.into(path, il, top0, iconS)
             c.drawPath(path, plate)
         }
-        icon?.let { b -> r.set(il, top0, il + iconS, top0 + iconS); c.drawBitmap(b, null, r, bmpPaint) }
+        val ic = icon
+        if (ic != null) {
+            r.set(il, top0, il + iconS, top0 + iconS)
+            c.drawBitmap(ic, null, r, bmpPaint)
+        } else {
+            // app without a launcher icon (system services): its small notification icon on a plate
+            plate.color = if (Theme.dark) 0x40FFFFFF else 0x26000000
+            Squircle.into(path, il, top0, iconS)
+            c.drawPath(path, plate)
+            val d = small ?: e.smallIcon?.loadDrawable(context)?.mutate()?.also { small = it }
+            if (d != null) {
+                val inset = (iconS * 0.24f).toInt()
+                d.setTint(fg)
+                d.setBounds((il + inset).toInt(), (top0 + inset).toInt(), (il + iconS - inset).toInt(), (top0 + iconS - inset).toInt())
+                d.draw(c)
+            } else Glyphs.draw(c, Glyph.BELL, il + iconS / 2f, top0 + iconS / 2f, iconS * 0.5f, fg, 2f)
+        }
         val (title, _) = textFor(e)
         val tx = il + iconS + pad
         tTime.textSize = 13.dp

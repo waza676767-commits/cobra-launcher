@@ -121,7 +121,19 @@ object IconFactory {
                 darkBackground(c, s)
                 glyph(c, d, s, o, tint, keepShade = true)
             }
-            "clear" -> glyph(c, d, s, o, Color.WHITE, keepShade = false)
+            "clear" -> {
+                // white glyph with a soft shadow so it reads on light and dark glass
+                val g = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+                glyph(Canvas(g), d, s, o, Color.WHITE, keepShade = false)
+                val sp = Paint(Paint.ANTI_ALIAS_FLAG).apply { maskFilter = android.graphics.BlurMaskFilter(s * 0.035f, android.graphics.BlurMaskFilter.Blur.NORMAL) }
+                val off = IntArray(2)
+                val shadow = g.extractAlpha(sp, off)
+                sp.maskFilter = null
+                sp.color = 0x59000000
+                c.drawBitmap(shadow, off[0].toFloat(), off[1] + s * 0.015f, sp)
+                c.drawBitmap(g, 0f, 0f, null)
+                shadow.recycle(); g.recycle()
+            }
             else -> {
                 if (adaptive != null) {
                     layer(c, adaptive.background, s, o)

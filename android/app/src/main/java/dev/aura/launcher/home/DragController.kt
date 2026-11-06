@@ -156,7 +156,7 @@ class DragController(private val home: HomeActivity) {
                 if (pendingIndex != want) {
                     pendingIndex = want
                     pendingSince = now
-                } else if (now - pendingSince > 90) {
+                } else if (now - pendingSince > 200) {
                     target.moveTo(it, want)
                     target.refresh(true)
                     pendingIndex = -1

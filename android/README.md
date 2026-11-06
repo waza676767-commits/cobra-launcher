@@ -5,13 +5,16 @@ own design. It doesn't modify One UI, so you can switch between Aura and One UI 
 
 ## Install
 
-1. Get `Aura.apk`: from the chat, from `android/dist/Aura.apk` in this repo, or from GitHub
+1. Get `Aura.apk` from the chat or from GitHub
    **Actions → Aura APK → latest run → Artifacts**.
 2. Open it on the phone and allow "Install unknown apps" for your browser / My Files when asked.
 3. Open **Aura** from the app drawer. Tap **Set** on the banner, then choose **Aura** and
    **Set as default** in Samsung's sheet.
 
-Newer APKs always install over the old one: every build is signed with the same key.
+A newer APK only installs over the old one if both are signed with the same key. Keep
+`aura.jks` and its password private (they're never committed). To make GitHub builds use the key,
+add the secrets `AURA_KEYSTORE_B64` (`base64 -w0 aura.jks`) and `AURA_KEY_PASSWORD`. Without them, the
+workflow signs with a temporary debug key, and you'd have to uninstall before installing that build.
 
 ## Switching between Aura and One UI Home
 
@@ -74,7 +77,7 @@ apps installed from an APK file.
 
 ```
 cd android
-./gradlew assembleRelease      # → app/build/outputs/apk/release/app-release.apk
+AURA_KEY_PASSWORD=… ./gradlew assembleRelease   # key at app/aura.jks → app/build/outputs/apk/release/
 ```
 
 You need JDK 17+ and the Android SDK (platform 35). Kotlin, minSdk 31, targetSdk 35. The only

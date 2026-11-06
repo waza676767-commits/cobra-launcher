@@ -46,6 +46,7 @@ object LockController {
                     .putExtra(LockActivity.EXTRA_PREVIEW, preview)
             )
         } catch (e: Exception) {
+            android.util.Log.w("Aura", "lock screen start failed", e)
         }
     }
 }

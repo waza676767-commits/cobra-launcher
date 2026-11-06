@@ -82,7 +82,7 @@ object Backdrop {
             if (f.exists()) BitmapFactory.decodeFile(f.path)?.let { return it }
         }
         val spec = WallpaperArt.find(id)
-        val cache = File(ctx.cacheDir, "wall_${spec.id}_v1_${w}x$h.jpg")
+        val cache = File(ctx.cacheDir, "wall_${spec.id}_v2_${w}x$h.jpg")
         if (cache.exists()) BitmapFactory.decodeFile(cache.path)?.let { return it }
         val bmp = WallpaperArt.render(spec, w, h)
         try {

@@ -49,6 +49,7 @@ import kotlin.math.roundToInt
  * (PIN / pattern / fingerprint as usual), so security stays exactly as before.
  */
 class LockActivity : Activity() {
+    private var snapReceiver: android.content.BroadcastReceiver? = null
     private lateinit var root: LockRoot
     private lateinit var clock: ClockView
     private lateinit var widgets: LockWidgets
@@ -113,6 +114,7 @@ class LockActivity : Activity() {
         window.insetsController?.setSystemBarsAppearance(0, android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
         findTorch()
         Backdrop.ensure(this)
+        snapReceiver = dev.aura.launcher.core.DebugSnap.attach(this, "lock")
     }
 
     override fun onStart() {
@@ -382,7 +384,7 @@ class LockActivity : Activity() {
 
         private fun setOffset(v: Float) {
             offset = v
-            val k = (-v / (height * 0.45f)).coerceIn(0f, 1f)
+            val k = if (height <= 0) 0f else (-v / (height * 0.45f)).coerceIn(0f, 1f)
             content.translationY = v
             content.alpha = 1f - k
             glyphView.translationY = v
@@ -525,6 +527,11 @@ class LockActivity : Activity() {
             }
             return true
         }
+    }
+
+    override fun onDestroy() {
+        dev.aura.launcher.core.DebugSnap.detach(this, snapReceiver)
+        super.onDestroy()
     }
 
     companion object {

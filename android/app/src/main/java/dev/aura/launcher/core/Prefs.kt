@@ -43,7 +43,6 @@ object Prefs {
     var searchPill by bool("searchPill", true)
     var swipeDown by str("swipeDown", "search")          // search | notifications | none
     var badges by str("badges", "count")                  // count | dot | off
-    var homeBanners by bool("homeBanners", false)
     var setupBannerHidden by bool("setupBannerHidden", false)
     var hidden by strSet("hidden")
     var layoutReset by long("layoutReset", 0L)

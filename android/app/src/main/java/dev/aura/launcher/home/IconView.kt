@@ -203,6 +203,8 @@ open class IconView(val home: HomeActivity) : View(home), HasGlass, Editable {
     open fun drawIcon(c: Canvas, l: Float, t: Float, s: Float) {
         if (IconFactory.isClear || icon == null) {
             Squircle.into(path, l, t, s)
+            // light mode: slightly smoky glass so the white glyph stays readable
+            glass.tintColor = if (!Theme.dark && IconFactory.isClear) 0x24000000 else 0
             glass.drawPath(c, this, path, l, t, s, s)
         }
         icon?.let {
@@ -286,7 +288,7 @@ open class IconView(val home: HomeActivity) : View(home), HasGlass, Editable {
 /** Folder: a glass squircle with up to nine mini icons. */
 class FolderIconView(home: HomeActivity) : IconView(home) {
     private val mini = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
-    private val plate = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x33FFFFFF }
+    private val plate = Paint(Paint.ANTI_ALIAS_FLAG)
     private val r = RectF()
     private val miniPath = Path()
 
@@ -316,6 +318,7 @@ class FolderIconView(home: HomeActivity) : IconView(home) {
             val y = t + pad + (i / 3) * (m + gap)
             if (IconFactory.isClear) {
                 Squircle.into(miniPath, x, y, m)
+                plate.color = if (Theme.dark) 0x33FFFFFF else 0x2E000000
                 c.drawPath(miniPath, plate)
             }
             r.set(x, y, x + m, y + m)

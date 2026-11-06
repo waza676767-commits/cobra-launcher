@@ -56,7 +56,8 @@ class HomeContent(private val home: HomeActivity) : ViewGroup(home) {
         home.workspace.layout(0, g.wsTop, width, g.wsTop + g.wsHeight)
         home.pill.layout(0, g.pillTop, width, g.pillTop + g.pillH)
         home.dock.layout(g.dockMargin, g.dockTop, width - g.dockMargin, g.dockTop + g.dockH)
-        val et = g.insetTop + 4.dp.roundToInt()
+        // edit buttons sit in the status bar's place (it's hidden while editing), like iOS
+        val et = (g.insetTop - 42.dp).roundToInt().coerceAtLeast(4.dp.roundToInt())
         home.editBar.layout(0, et, width, et + home.editBar.measuredHeight)
     }
 }
