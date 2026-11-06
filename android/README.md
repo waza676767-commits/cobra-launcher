@@ -5,8 +5,8 @@ own design. It doesn't modify One UI, so you can switch between Aura and One UI 
 
 ## Install
 
-1. Get `Aura.apk` from the chat or from GitHub
-   **Actions → Aura APK → latest run → Artifacts**.
+1. Download `Aura.apk` on the phone:
+   https://github.com/waza676767-commits/cobra-launcher/raw/claude/samsung-a56-custom-os-at7kcn/android/apk/Aura.apk
 2. Open it on the phone and allow "Install unknown apps" for your browser / My Files when asked.
 3. Open **Aura** from the app drawer. Tap **Set** on the banner, then choose **Aura** and
    **Set as default** in Samsung's sheet.
