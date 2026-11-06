@@ -4,28 +4,28 @@ plugins {
 }
 
 android {
-    namespace = "dev.aura.launcher"
+    namespace = "dev.mango.os"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.aura.launcher"
+        applicationId = "dev.mango.os"
         minSdk = 31
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
     }
 
-    // Signing: a personal key kept OUT of git. Put it at app/aura.jks (or point AURA_KEYSTORE at it)
-    // and set AURA_KEY_PASSWORD. Using the same key every time lets a new APK install over the old
+    // Signing: a personal key kept OUT of git. Put it at app/mango.jks (or point MANGO_KEYSTORE at it)
+    // and set MANGO_KEY_PASSWORD. Using the same key every time lets a new APK install over the old
     // one. Without it, builds fall back to the debug key (fine for a first install).
-    val keyFile = file(System.getenv("AURA_KEYSTORE") ?: "aura.jks")
-    val keyPassword = System.getenv("AURA_KEY_PASSWORD")
+    val keyFile = file(System.getenv("MANGO_KEYSTORE") ?: "mango.jks")
+    val keyPassword = System.getenv("MANGO_KEY_PASSWORD")
     val hasKey = keyFile.exists() && !keyPassword.isNullOrEmpty()
     signingConfigs {
-        if (hasKey) create("aura") {
+        if (hasKey) create("mango") {
             storeFile = keyFile
             storePassword = keyPassword
-            keyAlias = System.getenv("AURA_KEY_ALIAS") ?: "aura"
+            keyAlias = System.getenv("MANGO_KEY_ALIAS") ?: "aura"
             this.keyPassword = keyPassword
         }
     }
@@ -35,10 +35,10 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = if (hasKey) signingConfigs.getByName("aura") else signingConfigs.getByName("debug")
+            signingConfig = if (hasKey) signingConfigs.getByName("mango") else signingConfigs.getByName("debug")
         }
         debug {
-            if (hasKey) signingConfig = signingConfigs.getByName("aura")
+            if (hasKey) signingConfig = signingConfigs.getByName("mango")
         }
     }
 

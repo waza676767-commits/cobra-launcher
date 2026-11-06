@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "AuraLauncher"
+rootProject.name = "MangoOS"
 include(":app")

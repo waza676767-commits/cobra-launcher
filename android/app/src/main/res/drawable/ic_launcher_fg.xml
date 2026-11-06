@@ -3,30 +3,13 @@
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- glass ring -->
-    <path android:pathData="M54,31a23,23 0,1 1,-0.01 0z" android:strokeWidth="7"
-        android:fillColor="#00000000">
-        <aapt:attr name="android:strokeColor">
-            <gradient android:type="linear" android:startX="34" android:startY="32"
-                android:endX="76" android:endY="78">
-                <item android:offset="0" android:color="#FFFFFFFF" />
-                <item android:offset="0.5" android:color="#B3BFE9FF" />
-                <item android:offset="1" android:color="#E6FFFFFF" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <!-- inner glow -->
-    <path android:pathData="M54,42a12,12 0,1 1,-0.01 0z">
+    <path android:pathData="@string/mango_path">
         <aapt:attr name="android:fillColor">
-            <gradient android:type="radial" android:centerX="50" android:centerY="50"
-                android:gradientRadius="16">
-                <item android:offset="0" android:color="#FFFFFFFF" />
-                <item android:offset="0.6" android:color="#8066D9FF" />
-                <item android:offset="1" android:color="#0066D9FF" />
+            <gradient android:type="linear" android:startX="40" android:startY="24"
+                android:endX="66" android:endY="84">
+                <item android:offset="0" android:color="#FF2A2A2C" />
+                <item android:offset="1" android:color="#FF0A0A0B" />
             </gradient>
         </aapt:attr>
     </path>
-    <!-- specular highlight -->
-    <path android:pathData="M39,44 C42,37 48,33 55,32" android:strokeWidth="2.2"
-        android:strokeColor="#FFFFFFFF" android:strokeLineCap="round" android:fillColor="#00000000" />
 </vector>

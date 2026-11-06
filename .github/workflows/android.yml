@@ -1,12 +1,12 @@
-# Builds the Aura launcher APK (android/) on GitHub's machines whenever android/ changes,
-# or when you press "Run workflow". Download it from the Actions tab → latest "Aura APK" run →
-# Artifacts → Aura-apk.
+# Builds the Mango OS launcher APK (android/) on GitHub's machines whenever android/ changes,
+# or when you press "Run workflow". Download it from the Actions tab → latest "Mango OS APK" run →
+# Artifacts → MangoOS-apk.
 #
 # Optional, so every build installs over the previous one: add two repository secrets
-#   AURA_KEYSTORE_B64   = base64 of your aura.jks   (base64 -w0 aura.jks)
-#   AURA_KEY_PASSWORD   = its password
+#   MANGO_KEYSTORE_B64   = base64 of your mango.jks  (base64 -w0 mango.jks)
+#   MANGO_KEY_PASSWORD   = its password
 # Without them the APK is signed with a throwaway debug key.
-name: Aura APK
+name: Mango OS APK
 
 on:
   push:
@@ -26,19 +26,19 @@ jobs:
           java-version: '17'
       - name: Signing key (if configured)
         env:
-          KEY_B64: ${{ secrets.AURA_KEYSTORE_B64 }}
+          KEY_B64: ${{ secrets.MANGO_KEYSTORE_B64 }}
         run: |
-          if [ -n "$KEY_B64" ]; then echo "$KEY_B64" | base64 -d > android/app/aura.jks; fi
+          if [ -n "$KEY_B64" ]; then echo "$KEY_B64" | base64 -d > android/app/mango.jks; fi
       - name: Build APK
         working-directory: android
         env:
-          AURA_KEY_PASSWORD: ${{ secrets.AURA_KEY_PASSWORD }}
+          MANGO_KEY_PASSWORD: ${{ secrets.MANGO_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk Aura.apk
+          cp app/build/outputs/apk/release/app-release.apk MangoOS.apk
       - uses: actions/upload-artifact@v5
         with:
-          name: Aura-apk
-          path: android/Aura.apk
+          name: MangoOS-apk
+          path: android/MangoOS.apk
           if-no-files-found: error

@@ -1,36 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- see every installed app (a launcher has to) -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <!-- weather widget (Open-Meteo, no account needed) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <!-- swipe down on the home screen can open the notification shade -->
-    <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
     <!-- "Uninstall" in the long-press menu -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
-    <!-- "Also use as phone wallpaper" -->
+    <!-- puts the Mango wallpaper behind apps too, so closing an app doesn't flash another wallpaper -->
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
-    <!-- optional: lets the lock screen appear even when Aura isn't the default home app -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER_HINTS" />
 
+    <!-- Only the apps a home screen needs to see: launchable apps, widget providers, and the
+         default phone / messages / browser / camera for the starting dock. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <intent>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.STILL_IMAGE_CAMERA" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SHOW_ALARMS" />
+        </intent>
     </queries>
 
     <application
-        android:name=".AuraApp"
+        android:name=".MangoApp"
         android:allowBackup="true"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:largeHeap="false"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Aura">
+        android:theme="@style/Theme.Mango">
 
         <!-- The home screen -->
         <activity
@@ -43,7 +60,7 @@
             android:resumeWhilePausing="true"
             android:screenOrientation="portrait"
             android:stateNotNeeded="true"
-            android:theme="@style/Theme.Aura.Home"
+            android:theme="@style/Theme.Mango.Home"
             android:windowSoftInputMode="adjustNothing|stateAlwaysHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -52,9 +69,9 @@
             </intent-filter>
         </activity>
 
-        <!-- "Aura" icon in One UI's app drawer: opens the Aura home screen to try it -->
+        <!-- "Mango OS" icon in One UI's app drawer: opens the Mango home screen to try it -->
         <activity-alias
-            android:name=".AuraHome"
+            android:name=".MangoHome"
             android:exported="true"
             android:label="@string/app_name"
             android:targetActivity=".home.HomeActivity">
@@ -71,8 +88,8 @@
             android:icon="@mipmap/ic_settings"
             android:label="@string/settings_name"
             android:screenOrientation="portrait"
-            android:taskAffinity="dev.aura.launcher.settings"
-            android:theme="@style/Theme.Aura.Settings"
+            android:taskAffinity="dev.mango.os.settings"
+            android:theme="@style/Theme.Mango.Settings"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -93,11 +110,11 @@
             android:resizeableActivity="false"
             android:screenOrientation="portrait"
             android:showWhenLocked="true"
-            android:taskAffinity="dev.aura.launcher.lock"
-            android:theme="@style/Theme.Aura.Lock" />
+            android:taskAffinity="dev.mango.os.lock"
+            android:theme="@style/Theme.Mango.Lock" />
 
         <service
-            android:name=".notif.AuraNotificationListener"
+            android:name=".notif.MangoNotificationListener"
             android:exported="true"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
@@ -106,7 +123,7 @@
             </intent-filter>
         </service>
 
-        <!-- Quick Settings tile: one tap to switch between Aura and One UI Home -->
+        <!-- Quick Settings tile: one tap to switch between Mango and One UI Home -->
         <service
             android:name=".tile.SwitchHomeTile"
             android:exported="true"

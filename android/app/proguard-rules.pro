@@ -1,2 +1,4 @@
-# Everything Aura needs is referenced from the manifest or by code, so R8's defaults are enough.
+# Keep readable class names: Mango OS is open source and has nothing to hide, and
+# obfuscated code is one of the things phone virus scanners are suspicious of.
+-dontobfuscate
 -keepattributes SourceFile,LineNumberTable
