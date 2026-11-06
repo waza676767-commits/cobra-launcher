@@ -1,0 +1,11 @@
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+captures/
+
+# signing key stays on your machine / in GitHub secrets
+*.jks
+*.keystore

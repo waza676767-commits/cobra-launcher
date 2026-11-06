@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aura</string>
+    <string name="settings_name">Aura Settings</string>
+    <string name="tile_label">Switch Home</string>
+</resources>

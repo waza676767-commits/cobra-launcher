@@ -1,0 +1,44 @@
+# Builds the Aura launcher APK (android/) on GitHub's machines whenever android/ changes,
+# or when you press "Run workflow". Download it from the Actions tab → latest "Aura APK" run →
+# Artifacts → Aura-apk.
+#
+# Optional, so every build installs over the previous one: add two repository secrets
+#   AURA_KEYSTORE_B64   = base64 of your aura.jks   (base64 -w0 aura.jks)
+#   AURA_KEY_PASSWORD   = its password
+# Without them the APK is signed with a throwaway debug key.
+name: Aura APK
+
+on:
+  push:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Signing key (if configured)
+        env:
+          KEY_B64: ${{ secrets.AURA_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEY_B64" ]; then echo "$KEY_B64" | base64 -d > android/app/aura.jks; fi
+      - name: Build APK
+        working-directory: android
+        env:
+          AURA_KEY_PASSWORD: ${{ secrets.AURA_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk Aura.apk
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Aura-apk
+          path: android/Aura.apk
+          if-no-files-found: error
