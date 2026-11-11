@@ -77,6 +77,7 @@ app.whenReady().then(() => {
     }
   });
   ses.webRequest.onBeforeSendHeaders((details, done) => {
+    if (isGoogleSignIn(details.url)) details.requestHeaders['User-Agent'] = FIREFOX_UA;
     if (config.privateSearch) {
       details.requestHeaders['Sec-GPC'] = '1';
       details.requestHeaders['DNT'] = '1';
@@ -106,6 +107,11 @@ app.whenReady().then(() => {
   createWindow();
 });
 
+// Google refuses sign-in from Chromium-based embedded browsers but accepts Firefox, so Velo
+// presents itself as Firefox on Google's sign-in pages and nowhere else.
+const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0';
+const isGoogleSignIn = (url) => /^https:\/\/accounts\.(google|youtube)\.com\//.test(url);
+
 // Links that ask for a new window open as a tab instead.
 app.on('web-contents-created', (_e, contents) => {
   if (contents.getType() !== 'webview') return;
@@ -118,6 +124,9 @@ app.on('web-contents-created', (_e, contents) => {
       win.webContents.send('shortcut', key);
     }
   });
+  const pickAgent = (_event, url) => contents.setUserAgent(isGoogleSignIn(url) ? FIREFOX_UA : app.userAgentFallback);
+  contents.on('will-navigate', pickAgent);
+  contents.on('will-redirect', pickAgent);
   contents.setWindowOpenHandler(({ url }) => {
     if (win && !win.isDestroyed()) win.webContents.send('open-tab', url);
     return { action: 'deny' };
