@@ -8,8 +8,8 @@ show two assistants at once.
 ```bash
 npm install
 npm start          # run it
-npm run dist       # dist/Velo-<version>-win.zip (unzip anywhere and run Velo.exe)
+npm run dist       # dist/Velo-Setup-<version>.exe
 ```
 
-Building a one-click installer (`electron-builder --win nsis`) has to be done on Windows, or on
-Linux with Wine installed.
+The installer adds Velo to the Start menu and desktop with its own icon. Building it on Linux needs
+Wine; on Windows it works as is.

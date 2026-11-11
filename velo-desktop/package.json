@@ -5,12 +5,36 @@
   "description": "Velo browser for Windows",
   "author": "Velo",
   "main": "main.js",
-  "scripts": { "start": "electron .", "dist": "electron-builder --win zip --x64" },
-  "devDependencies": { "electron": "^33.2.0", "electron-builder": "^25.1.8" },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
   "build": {
     "appId": "app.velo.browser",
-    "files": ["main.js", "ui/**", "adblock_hosts.txt"],
-    "win": { "target": "nsis", "signAndEditExecutable": false },
-    "nsis": { "oneClick": true, "perMachine": false, "shortcutName": "Velo" }
+    "files": [
+      "main.js",
+      "ui/**",
+      "adblock_hosts.txt"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico",
+      "executableName": "Velo"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "shortcutName": "Velo",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "artifactName": "Velo-Setup-${version}.exe"
+    },
+    "copyright": "Velo",
+    "publish": null
   }
 }
