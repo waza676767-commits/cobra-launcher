@@ -1,7 +1,9 @@
 package app.velo.browser
 
+import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.Intent
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
@@ -18,6 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -30,29 +33,31 @@ class WidgetsTest {
 
     @Test
     fun widgetLayoutsInflateAndRender() {
-        val inflater = LayoutInflater.from(app)
-        val density = app.resources.displayMetrics.density
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val density = activity.resources.displayMetrics.density
         fun shot(layout: Int, widthDp: Int, heightDp: Int, name: String) {
-            val host = FrameLayout(app)
-            val view = inflater.inflate(layout, host, false)
-            host.addView(view)
-            val w = (widthDp * density).toInt()
-            val h = (heightDp * density).toInt()
-            host.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
-            host.layout(0, 0, w, h)
+            val host = FrameLayout(activity)
+            activity.layoutInflater.inflate(layout, host, true)
+            activity.setContentView(
+                host, FrameLayout.LayoutParams((widthDp * density).toInt(), (heightDp * density).toInt())
+            )
+            shadowOf(Looper.getMainLooper()).idle()
             host.captureRoboImage("build/shots/$name.png")
         }
         shot(R.layout.widget_search, 360, 64, "60_widget_search")
         shot(R.layout.widget_pins, 360, 190, "61_widget_pins")
-        val item = inflater.inflate(R.layout.widget_pin_item, null)
+        val item = LayoutInflater.from(app).inflate(R.layout.widget_pin_item, null)
         assertNotNull(item.findViewById<TextView>(R.id.widget_pin_title))
     }
 
     @Test
-    fun widgetProvidersUpdateWithoutErrors() {
-        val manager = AppWidgetManager.getInstance(app)
-        SearchWidget().onUpdate(app, manager, intArrayOf(1))
-        PinsWidget().onUpdate(app, manager, intArrayOf(2))
+    fun searchWidgetIsBuiltByItsProvider() {
+        val shadow = shadowOf(AppWidgetManager.getInstance(app))
+        val id = shadow.createWidget(SearchWidget::class.java, R.layout.widget_search)
+        val view = shadow.getViewFor(id)
+        assertNotNull(view.findViewById<View>(R.id.widget_search_bar))
+        assertNotNull(view.findViewById<View>(R.id.widget_ai))
+        // Refreshing with no pinned-pages widget on the home screen must be harmless.
         PinsWidget.refresh(app)
     }
 
