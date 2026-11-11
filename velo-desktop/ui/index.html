@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: https: http:">
+<title>Velo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tabstrip"><div id="tabs"></div><button id="newtab" class="ib" title="New tab (Ctrl+T)"></button></div>
+<div id="toolbar">
+  <button id="back" class="ib" title="Back"></button>
+  <button id="forward" class="ib" title="Forward"></button>
+  <button id="reload" class="ib" title="Reload"></button>
+  <button id="home" class="ib" title="Velo start page"></button>
+  <div id="addrwrap"><span id="lock"></span><input id="addr" spellcheck="false" placeholder="Search DuckDuckGo or type an address"><div id="suggest"></div></div>
+  <button id="pin" class="ib" title="Pin this page"></button>
+  <button id="shield" class="chip" title="Ad blocker"></button>
+  <button id="vpn" class="chip" title="VPN"></button>
+  <button id="ai" class="ib accent" title="Assistant"></button>
+  <button id="historyBtn" class="ib" title="History (Ctrl+H)"></button>
+  <button id="settingsBtn" class="ib" title="Settings"></button>
+</div>
+<div id="findbar" hidden><input id="findinput" placeholder="Find on this page"><span id="findcount"></span><button id="findclose" class="ib"></button></div>
+<div id="main">
+  <div id="views"><div id="start"></div></div>
+  <aside id="aipanel" hidden></aside>
+</div>
+<div id="scrim" hidden></div>
+<aside id="drawer" hidden></aside>
+<div id="dialog" hidden></div>
+<div id="toast" hidden></div>
+<script src="logo-path.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
