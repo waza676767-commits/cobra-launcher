@@ -77,10 +77,19 @@ app.whenReady().then(() => {
     }
   });
   ses.webRequest.onBeforeSendHeaders((details, done) => {
-    if (isGoogleSignIn(details.url)) details.requestHeaders['User-Agent'] = FIREFOX_UA;
     if (config.privateSearch) {
       details.requestHeaders['Sec-GPC'] = '1';
       details.requestHeaders['DNT'] = '1';
+    }
+    done({ requestHeaders: details.requestHeaders });
+  });
+
+  const ai = aiSession();
+  ai.setUserAgent(FIREFOX_UA);
+  ai.setPreloads([path.join(__dirname, 'ui', 'ai-preload.js')]);
+  ai.webRequest.onBeforeSendHeaders((details, done) => {
+    for (const name of Object.keys(details.requestHeaders)) {
+      if (/^sec-ch-ua/i.test(name)) delete details.requestHeaders[name];
     }
     done({ requestHeaders: details.requestHeaders });
   });
@@ -107,10 +116,10 @@ app.whenReady().then(() => {
   createWindow();
 });
 
-// Google refuses sign-in from Chromium-based embedded browsers but accepts Firefox, so Velo
-// presents itself as Firefox on Google's sign-in pages and nowhere else.
+// Google refuses sign-in from Chromium-based embedded browsers but accepts Firefox, so the
+// assistant panel (its own storage partition) presents itself as Firefox throughout.
 const FIREFOX_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0';
-const isGoogleSignIn = (url) => /^https:\/\/accounts\.(google|youtube)\.com\//.test(url);
+const aiSession = () => session.fromPartition('persist:ai');
 
 // Links that ask for a new window open as a tab instead.
 app.on('web-contents-created', (_e, contents) => {
@@ -124,10 +133,12 @@ app.on('web-contents-created', (_e, contents) => {
       win.webContents.send('shortcut', key);
     }
   });
-  const pickAgent = (_event, url) => contents.setUserAgent(isGoogleSignIn(url) ? FIREFOX_UA : app.userAgentFallback);
-  contents.on('will-navigate', pickAgent);
-  contents.on('will-redirect', pickAgent);
   contents.setWindowOpenHandler(({ url }) => {
+    // Sign-in pop-ups from an assistant stay in its own panel so the login lands in the right place.
+    if (contents.session === aiSession()) {
+      contents.loadURL(url);
+      return { action: 'deny' };
+    }
     if (win && !win.isDestroyed()) win.webContents.send('open-tab', url);
     return { action: 'deny' };
   });

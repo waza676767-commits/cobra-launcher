@@ -496,7 +496,7 @@ function renderAi() {
   for (const a of AI) {
     if (aiShown.includes(a.id) && !aiViews[a.id]) {
       const v = document.createElement('webview');
-      v.setAttribute('partition', 'persist:web');
+      v.setAttribute('partition', 'persist:ai');
       v.setAttribute('allowpopups', '');
       v.src = a.url;
       aiViews[a.id] = v;
