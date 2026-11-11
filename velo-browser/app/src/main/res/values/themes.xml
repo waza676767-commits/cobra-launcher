@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shown while the process starts; MainActivity swaps to Theme.Velo once the splash is installed. -->
+    <style name="Theme.Velo.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/window_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.Velo</item>
+    </style>
+
+    <style name="Theme.Velo" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+
+    <!-- Themes handed to WebViews so page colours follow Velo's own light/dark choice. -->
+    <style name="Theme.Velo.Web.Light" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Velo.Web.Dark" parent="android:Theme.Material.NoActionBar" />
+</resources>

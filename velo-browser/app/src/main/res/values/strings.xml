@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Velo</string>
+    <string name="widget_search_label">Velo Search</string>
+    <string name="widget_search_description">Search DuckDuckGo or ask your AI assistant from the home screen.</string>
+    <string name="widget_pins_label">Velo Pinned pages</string>
+    <string name="widget_pins_description">Your pinned pages, one tap away.</string>
+    <string name="widget_search_hint">Search with DuckDuckGo</string>
+    <string name="widget_ask_ai">Ask AI</string>
+    <string name="widget_pins_title">Pinned</string>
+    <string name="widget_pins_empty">Pin a page in Velo to see it here</string>
+    <string name="widget_new_tab">New tab</string>
+</resources>
