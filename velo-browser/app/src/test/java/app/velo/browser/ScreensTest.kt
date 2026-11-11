@@ -287,7 +287,11 @@ class ScreensTest {
     @Test
     fun assistantPanel() {
         launch()
-        ui { b.aiOpen = true }
+        assertEquals("no key needed by default", "web", b.ai.mode(b.ai.provider))
+        ui {
+            b.ai.useApi(b.ai.provider)
+            b.aiOpen = true
+        }
         shot("50_ai_connect")
 
         ui {

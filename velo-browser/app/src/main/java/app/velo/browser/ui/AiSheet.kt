@@ -92,7 +92,7 @@ fun AiSheet(b: Browser) {
                         VIcon(VIcons.ChevronDown, tint = c.textDim, size = 14.dp, modifier = Modifier.padding(start = 3.dp))
                     }
                     "web" -> Txt("On ${UrlTools.displayHost(provider.webUrl)}", size = 12.5.sp, color = c.textDim, maxLines = 1)
-                    else -> Txt("Uses your own account", size = 12.5.sp, color = c.textDim, maxLines = 1)
+                    else -> Txt("Optional: use an API key", size = 12.5.sp, color = c.textDim, maxLines = 1)
                 }
             }
             if (mode == "api" && ai.messages.isNotEmpty()) IconBtn(VIcons.Edit, onClick = { ai.newChat() }, tint = c.textDim)
@@ -210,8 +210,7 @@ private fun WebPanel(b: Browser, provider: AiProvider) {
             Modifier.fillMaxWidth().padding(start = 20.dp, end = 14.dp, top = 6.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Txt("Showing ${provider.label}'s website", Modifier.weight(1f), size = 13.sp, color = c.textDim, maxLines = 1)
-            SoftButton("Use an API key", { b.ai.useApi(provider) }, height = 34.dp, background = c.surface)
+            Txt("Sign in once and ${provider.label} stays signed in", Modifier.weight(1f), size = 13.sp, color = c.textDim, maxLines = 1)
         }
         val revision = b.tabs.assistantRevision
         AndroidView(

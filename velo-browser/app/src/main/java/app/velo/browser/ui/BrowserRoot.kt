@@ -226,7 +226,8 @@ private fun VeloBar(b: Browser, tab: Tab?, home: Boolean) {
     Row(outer, verticalAlignment = Alignment.CenterVertically) {
         AddressPill(b, tab, home, floating, Modifier.weight(1f))
         Spacer(Modifier.width(2.dp))
-        IconBtn(VIcons.Sparkles, onClick = { b.aiOpen = true }, tint = c.accent)
+        if (!home && tab != null) IconBtn(VIcons.Home, onClick = { b.tabs.showHome(tab) }, size = 40.dp)
+        IconBtn(VIcons.Sparkles, onClick = { b.aiOpen = true }, tint = c.accent, size = 40.dp)
         TabCountButton(b.tabs.tabs.size) { b.openTabs() }
         IconBtn(VIcons.More, onClick = { b.menuOpen = true })
     }

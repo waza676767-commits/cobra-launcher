@@ -88,14 +88,19 @@ class AiChat(private val app: VeloApp) {
         return app.secure.has(p.keyName)
     }
 
-    /** "api" for the built-in chat, "web" for the provider's site, "" when not set up yet. */
+    /**
+     * "web": the provider's own site in the panel, signed in with the user's normal account (the
+     * default). "api": Velo's chat box with an API key. "": the user asked for a key but hasn't
+     * entered one yet.
+     */
     fun mode(p: AiProvider): String {
         keysRevision
         val saved = settings.aiMode(p.id)
+        val hasKey = app.secure.has(p.keyName)
         return when {
-            saved == "web" -> "web"
-            app.secure.has(p.keyName) -> "api"
-            else -> ""
+            saved == "api" -> if (hasKey) "api" else ""
+            hasKey && saved != "web" -> "api"
+            else -> "web"
         }
     }
 

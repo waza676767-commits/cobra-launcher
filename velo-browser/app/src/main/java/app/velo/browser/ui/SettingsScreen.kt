@@ -920,8 +920,8 @@ private fun AssistantPage(b: Browser) {
                     Txt(
                         when (mode) {
                             "api" -> "Connected with an API key"
-                            "web" -> "Using ${UrlTools.displayHost(provider.webUrl)}"
-                            else -> "Not connected"
+                            "web" -> "Sign in on ${UrlTools.displayHost(provider.webUrl)} in the assistant panel"
+                            else -> "Waiting for an API key"
                         },
                         size = 12.5.sp, color = c.textDim,
                     )
@@ -930,10 +930,11 @@ private fun AssistantPage(b: Browser) {
                     SoftButton("Remove key", { ai.disconnect(provider) }, height = 36.dp, color = c.danger)
                 } else {
                     SoftButton(
-                        "Set up",
+                        "Use API key",
                         {
                             ai.ensureLoaded()
                             ai.selectProvider(provider)
+                            ai.useApi(provider)
                             b.screen = Screen.BROWSER
                             b.aiOpen = true
                         },
