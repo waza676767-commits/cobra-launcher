@@ -14,6 +14,7 @@ import android.os.Looper;
 import android.view.Gravity;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
@@ -34,6 +35,9 @@ public class MainActivity extends Activity {
     private final Runnable ticker = new Runnable() {
         @Override public void run() { refresh(); handler.postDelayed(this, 300); }
     };
+
+    public static final String EXTRA_START = "start";
+    private CheckBox autoStart;
 
     private static final int[] MIC_IDS = {101, 102, 103};
 
@@ -102,6 +106,12 @@ public class MainActivity extends Activity {
             if (BridgeService.running) stopBridge(); else startBridge();
         });
         root.addView(startBtn, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)));
+        autoStart = new CheckBox(this);
+        autoStart.setText("Start automatically when I open the app");
+        autoStart.setTextSize(15);
+        autoStart.setChecked(prefs.getBoolean("auto", true));
+        autoStart.setOnCheckedChangeListener((b, on) -> prefs.edit().putBoolean("auto", on).apply());
+        root.addView(autoStart);
         space(root, 20);
 
         TextView help = text(
@@ -110,12 +120,26 @@ public class MainActivity extends Activity {
                 "2. Plug the phone into the PC with USB and turn on USB tethering " +
                 "(Settings → Hotspot & tethering → USB tethering).\n" +
                 "3. Press Start here, then press Start in Audio Bridge on the PC.\n\n" +
-                "You can turn the screen off — it keeps running. Stop it from here or from the notification.", 14, false);
+                "You can turn the screen off — it keeps running. Stop it from here or from the notification.\n\n" +
+                "Fastest way every day: pull down the notification shade, tap the pencil/edit button, and drag the " +
+                "\"Audio Bridge\" tile into your quick settings. Then it's one tap.", 14, false);
         root.addView(help);
 
         ScrollView scroll = new ScrollView(this);
         scroll.addView(root);
         setContentView(scroll);
+        if (savedInstanceState == null) maybeAutoStart(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        maybeAutoStart(intent);
+    }
+
+    private void maybeAutoStart(Intent intent) {
+        boolean fromTile = intent != null && intent.getBooleanExtra(EXTRA_START, false);
+        if (!BridgeService.running && (fromTile || prefs.getBoolean("auto", true))) startBridge();
     }
 
     private int micMode() {

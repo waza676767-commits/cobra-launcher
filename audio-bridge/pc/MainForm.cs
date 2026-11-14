@@ -5,7 +5,9 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 using NAudio.CoreAudioApi;
 
 namespace AudioBridge
@@ -28,13 +30,32 @@ namespace AudioBridge
         readonly TextBox ipBox = new TextBox { Width = 160, PlaceholderText = "automatic" };
         readonly Button startBtn = new Button { Text = "Start", Width = 140, Height = 36, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
         readonly TextBox log = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Width = 440, Height = 110 };
-        readonly Timer timer = new Timer { Interval = 500 };
+        readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer { Interval = 500 };
+        readonly CheckBox autoStart = new CheckBox { AutoSize = true, Text = "Connect automatically when the app opens", Checked = true };
+        readonly CheckBox winStart = new CheckBox { AutoSize = true, Text = "Open Audio Bridge when Windows starts (hidden in the tray)" };
+        readonly NotifyIcon tray = new NotifyIcon { Text = "Audio Bridge", Visible = true };
+        readonly ToolStripMenuItem trayToggle = new ToolStripMenuItem("Start");
+        readonly bool startHidden;
+        bool trayHintShown;
+        const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
         Bridge bridge;
         static readonly string SettingsFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AudioBridge", "settings.txt");
 
-        public MainForm()
+        public MainForm(bool startHidden, EventWaitHandle showSignal)
         {
+            this.startHidden = startHidden;
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            tray.Icon = Icon ?? SystemIcons.Application;
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("Open", null, (s, e) => ShowFromTray());
+            menu.Items.Add(trayToggle);
+            menu.Items.Add("Exit", null, (s, e) => Close());
+            trayToggle.Click += (s, e) => { if (bridge == null) StartBridge(); else StopBridge(); };
+            tray.ContextMenuStrip = menu;
+            tray.DoubleClick += (s, e) => ShowFromTray();
+            new Thread(() => { while (showSignal.WaitOne()) { try { BeginInvoke(new Action(ShowFromTray)); } catch { return; } } }) { IsBackground = true }.Start();
+
             Text = "Audio Bridge";
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
@@ -74,6 +95,8 @@ namespace AudioBridge
             root.Controls.Add(Gap());
 
             root.Controls.Add(startBtn);
+            root.Controls.Add(autoStart);
+            root.Controls.Add(winStart);
             root.Controls.Add(log);
 
             cableLink.LinkClicked += (s, e) => Process.Start(new ProcessStartInfo("https://vb-audio.com/Cable/") { UseShellExecute = true });
@@ -81,10 +104,24 @@ namespace AudioBridge
             sendSound.CheckedChanged += (s, e) => captureBox.Enabled = sendSound.Checked && bridge == null;
             useMic.CheckedChanged += (s, e) => micBox.Enabled = useMic.Checked && bridge == null;
             timer.Tick += (s, e) => UpdateStatus();
-            FormClosing += (s, e) => { SaveSettings(); StopBridge(); };
+            FormClosing += (s, e) => { SaveSettings(); StopBridge(); tray.Visible = false; };
+            Resize += (s, e) =>
+            {
+                if (WindowState != FormWindowState.Minimized) return;
+                Hide();
+                if (!trayHintShown) { trayHintShown = true; tray.ShowBalloonTip(3000, "Audio Bridge", "Still running here. Double-click to open, right-click to exit.", ToolTipIcon.Info); }
+            };
+            Shown += (s, e) =>
+            {
+                if (autoStart.Checked && bridge == null) StartBridge();
+                if (this.startHidden) BeginInvoke(new Action(() => { WindowState = FormWindowState.Minimized; }));
+            };
+            winStart.CheckedChanged += (s, e) => SetRunAtLogin(winStart.Checked);
+            autoStart.CheckedChanged += (s, e) => SaveSettings();
 
             LoadDevices();
             LoadSettings();
+            winStart.Checked = IsRunAtLogin();
             AddLog("1) Plug the phone in with USB and turn on USB tethering.  2) Open Audio Bridge on the phone and press Start.  3) Press Start here.");
         }
 
@@ -134,7 +171,7 @@ namespace AudioBridge
                 bridge = null;
                 return;
             }
-            startBtn.Text = "Stop";
+            startBtn.Text = "Stop"; trayToggle.Text = "Stop";
             captureBox.Enabled = micBox.Enabled = sendSound.Enabled = useMic.Enabled = ipBox.Enabled = false;
             timer.Start();
             SaveSettings();
@@ -147,7 +184,8 @@ namespace AudioBridge
             var b = bridge; bridge = null;
             b?.Dispose();
             if (IsDisposed) return;
-            startBtn.Text = "Start";
+            startBtn.Text = "Start"; trayToggle.Text = "Start";
+            tray.Text = "Audio Bridge (stopped)";
             sendSound.Enabled = useMic.Enabled = ipBox.Enabled = true;
             captureBox.Enabled = sendSound.Checked;
             micBox.Enabled = useMic.Checked;
@@ -163,12 +201,14 @@ namespace AudioBridge
             {
                 status.Text = "Connected to " + (string.IsNullOrWhiteSpace(b.PhoneName) ? "phone" : b.PhoneName);
                 status.ForeColor = Color.ForestGreen;
+                tray.Text = "Audio Bridge: connected";
                 stats.Text = $"Phone {b.Phone.Address}   ·   sound packets sent {b.SentPackets}   ·   mic packets {b.MicPackets}" + (b.MicDropped > 0 ? $" (skipped {b.MicDropped} to stay in sync)" : "");
             }
             else
             {
                 status.Text = "Looking for the phone…";
                 status.ForeColor = Color.DarkOrange;
+                tray.Text = "Audio Bridge: looking for the phone";
                 stats.Text = "Is USB tethering on, and did you press Start in the phone app?";
             }
         }
@@ -187,11 +227,35 @@ namespace AudioBridge
                 var kv = File.ReadAllLines(SettingsFile).Select(l => l.Split(new[] { '=' }, 2)).Where(p => p.Length == 2).ToDictionary(p => p[0], p => p[1]);
                 if (kv.TryGetValue("send", out var s)) sendSound.Checked = s == "1";
                 if (kv.TryGetValue("mic", out var m)) useMic.Checked = m == "1";
+                if (kv.TryGetValue("auto", out var au)) autoStart.Checked = au == "1";
                 if (kv.TryGetValue("ip", out var ip)) ipBox.Text = ip;
                 if (kv.TryGetValue("capture", out var c)) Select(captureBox, c);
                 if (kv.TryGetValue("micdev", out var md)) Select(micBox, md);
             }
             catch { }
+        }
+
+        void ShowFromTray()
+        {
+            Show();
+            WindowState = FormWindowState.Normal;
+            Activate();
+        }
+
+        static bool IsRunAtLogin()
+        {
+            try { using var k = Registry.CurrentUser.OpenSubKey(RunKey); return k?.GetValue("AudioBridge") != null; } catch { return false; }
+        }
+
+        void SetRunAtLogin(bool on)
+        {
+            try
+            {
+                using var k = Registry.CurrentUser.CreateSubKey(RunKey);
+                if (on) k.SetValue("AudioBridge", "\"" + Application.ExecutablePath + "\" --tray");
+                else k.DeleteValue("AudioBridge", false);
+            }
+            catch (Exception ex) { AddLog("Could not change the Windows startup setting: " + ex.Message); }
         }
 
         static void Select(ComboBox box, string id)
@@ -209,6 +273,7 @@ namespace AudioBridge
                     "send=" + (sendSound.Checked ? "1" : "0"),
                     "mic=" + (useMic.Checked ? "1" : "0"),
                     "ip=" + ipBox.Text.Trim(),
+                    "auto=" + (autoStart.Checked ? "1" : "0"),
                     "capture=" + ((captureBox.SelectedItem as Dev)?.Id ?? ""),
                     "micdev=" + ((micBox.SelectedItem as Dev)?.Id ?? ""),
                 };

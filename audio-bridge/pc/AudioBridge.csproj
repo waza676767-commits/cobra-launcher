@@ -11,6 +11,7 @@
     <RootNamespace>AudioBridge</RootNamespace>
     <Version>1.0.0</Version>
     <Product>Audio Bridge</Product>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
