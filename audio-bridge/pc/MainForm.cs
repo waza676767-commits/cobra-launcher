@@ -32,6 +32,7 @@ namespace AudioBridge
         readonly LinkLabel cableLink = new LinkLabel { AutoSize = true, Text = "Needs the free VB-CABLE driver (one-time install) — click to download" };
         readonly TextBox ipBox = new TextBox { Width = 160, PlaceholderText = "automatic" };
         readonly Button startBtn = new Button { Text = "Start", Width = 140, Height = 36, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
+        readonly Button beepBtn = new Button { Text = "Send test beep to phone", AutoSize = true, Enabled = false };
         readonly TextBox log = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Width = 440, Height = 110 };
         readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer { Interval = 500 };
         readonly CheckBox autoStart = new CheckBox { AutoSize = true, Text = "Connect automatically when the app opens", Checked = true };
@@ -98,12 +99,17 @@ namespace AudioBridge
             root.Controls.Add(ipRow);
             root.Controls.Add(Gap());
 
-            root.Controls.Add(startBtn);
+            var btnRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+            btnRow.Controls.Add(startBtn);
+            btnRow.Controls.Add(beepBtn);
+            beepBtn.Margin = new Padding(10, 6, 0, 0);
+            root.Controls.Add(btnRow);
             root.Controls.Add(autoStart);
             root.Controls.Add(winStart);
             root.Controls.Add(log);
 
             cableLink.LinkClicked += (s, e) => Process.Start(new ProcessStartInfo("https://vb-audio.com/Cable/") { UseShellExecute = true });
+            beepBtn.Click += (s, e) => { bridge?.SendTestTone(); AddLog("Sent a test beep. You should hear it in your headphones now."); };
             startBtn.Click += (s, e) => { if (bridge == null) StartBridge(); else StopBridge(); };
             muteSpeakers.CheckedChanged += (s, e) => { if (bridge?.Phone != null) ApplyMute(); else RestoreMute(); SaveSettings(); };
             sendSound.CheckedChanged += (s, e) => captureBox.Enabled = sendSound.Checked && bridge == null;
@@ -197,6 +203,7 @@ namespace AudioBridge
             micBox.Enabled = useMic.Checked;
             status.Text = "Stopped"; status.ForeColor = SystemColors.ControlText;
             stats.Text = " ";
+            beepBtn.Enabled = false;
         }
 
         void UpdateStatus()
@@ -209,7 +216,10 @@ namespace AudioBridge
                 status.ForeColor = Color.ForestGreen;
                 tray.Text = "Audio Bridge: connected";
                 ApplyMute();
-                stats.Text = $"Phone {b.Phone.Address}   ·   sound packets sent {b.SentPackets}   ·   mic packets {b.MicPackets}" + (b.MicDropped > 0 ? $" (skipped {b.MicDropped} to stay in sync)" : "");
+                int lvl = (int)Math.Round(Math.Min(1f, b.Level) * 100);
+                string lvlText = !sendSound.Checked ? "off" : lvl == 0 ? "silent (nothing playing?)" : lvl + "%";
+                stats.Text = $"Phone {b.Phone.Address}   ·   PC sound level: {lvlText}\nsound packets sent {b.SentPackets}   ·   mic packets {b.MicPackets}" + (b.MicDropped > 0 ? $" (skipped {b.MicDropped} to stay in sync)" : "");
+                beepBtn.Enabled = true;
             }
             else
             {
@@ -218,6 +228,7 @@ namespace AudioBridge
                 tray.Text = "Audio Bridge: looking for the phone";
                 RestoreMute();
                 stats.Text = "Is USB tethering on, and did you press Start in the phone app?";
+                beepBtn.Enabled = false;
             }
         }
 

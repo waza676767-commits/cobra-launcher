@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -55,6 +56,11 @@ namespace AudioBridge
         public string PhoneName { get; private set; }
         public IPEndPoint Phone => phone;
         public long SentPackets, MicPackets, MicDropped;
+        float peak;
+        long peakTicks;
+        /// <summary>Loudest sample captured in the last half second (0..1).</summary>
+        public float Level => Environment.TickCount64 - Interlocked.Read(ref peakTicks) > 500 ? 0 : peak;
+        volatile bool toneRunning;
         public event Action<string> Log;
 
         public Bridge(string captureDeviceId, string micDeviceId, IPAddress manualIp)
@@ -130,7 +136,8 @@ namespace AudioBridge
         void OnCaptured(object sender, WaveInEventArgs e)
         {
             var to = phone;
-            if (to == null) { accFrames = 0; return; }
+            if (to == null || toneRunning) { accFrames = 0; return; }
+            float max = 0;
             int frameBytes = srcChannels * srcBytes;
             int frames = e.BytesRecorded / frameBytes;
             for (int i = 0; i < frames; i++)
@@ -149,12 +156,17 @@ namespace AudioBridge
                     l = (fl + 0.7f * c + 0.7f * bl) * 0.6f;
                     r = (fr + 0.7f * c + 0.7f * br) * 0.6f;
                 }
+                float al = Math.Abs(l), ar = Math.Abs(r);
+                if (al > max) max = al;
+                if (ar > max) max = ar;
                 int p = Hdr + accFrames * 4;
                 PutS16(pkt, p, l);
                 PutS16(pkt, p + 2, r);
                 if (++accFrames == FramesPerPacket) Flush(to);
             }
             if (accFrames > 0) Flush(to);   // don't hold sound back waiting for a full packet
+            long now = Environment.TickCount64;
+            if (max >= peak || now - Interlocked.Read(ref peakTicks) > 500) { peak = max; Interlocked.Exchange(ref peakTicks, now); }
         }
 
         void Flush(IPEndPoint to)
@@ -163,6 +175,44 @@ namespace AudioBridge
             Send(pkt, Hdr + accFrames * 4, to);
             accFrames = 0;
             SentPackets++;
+        }
+
+        /// <summary>Plays a 1.5 s beep on the phone, to check the phone → headphones part on its own.</summary>
+        public void SendTestTone()
+        {
+            var to = phone;
+            if (to == null || toneRunning) return;
+            toneRunning = true;
+            new Thread(() =>
+            {
+                try
+                {
+                    const int rate = 48000, total = rate * 3 / 2;
+                    var b = new byte[Hdr + FramesPerPacket * 4];
+                    var sw = Stopwatch.StartNew();
+                    int sent = 0; uint tseq = 0;
+                    while (sent < total && !stopping)
+                    {
+                        int due = (int)(sw.Elapsed.TotalSeconds * rate) + rate / 50;   // stay ~20 ms ahead
+                        while (sent < due && sent < total)
+                        {
+                            int n = Math.Min(FramesPerPacket, total - sent);
+                            for (int i = 0; i < n; i++)
+                            {
+                                double t = (double)(sent + i) / rate;
+                                float v = (float)(0.3 * Math.Sin(2 * Math.PI * 660 * t));
+                                PutS16(b, Hdr + i * 4, v);
+                                PutS16(b, Hdr + i * 4 + 2, v);
+                            }
+                            WriteHeader(b, TAudio, 2, rate, tseq++);
+                            Send(b, Hdr + n * 4, to);
+                            sent += n;
+                        }
+                        Thread.Sleep(2);
+                    }
+                }
+                finally { toneRunning = false; }
+            }) { IsBackground = true, Priority = ThreadPriority.Highest }.Start();
         }
 
         // ---------- network ----------
