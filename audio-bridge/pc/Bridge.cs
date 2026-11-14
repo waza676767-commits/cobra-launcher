@@ -12,10 +12,10 @@ using NAudio.Wave.SampleProviders;
 
 namespace AudioBridge
 {
-    /// <summary>Records what an output device is playing (WASAPI loopback) with a small 20 ms buffer.</summary>
+    /// <summary>Records what an output device is playing (WASAPI loopback) with a small 10 ms buffer.</summary>
     sealed class LoopbackCapture : WasapiCapture
     {
-        public LoopbackCapture(MMDevice device) : base(device, false, 20) { }
+        public LoopbackCapture(MMDevice device) : base(device, false, 10) { }
         protected override AudioClientStreamFlags GetAudioClientStreamFlags() => AudioClientStreamFlags.Loopback;
     }
 

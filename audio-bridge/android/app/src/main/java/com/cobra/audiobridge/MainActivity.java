@@ -94,11 +94,11 @@ public class MainActivity extends Activity {
         root.addView(bufferLabel);
         bufferBar = new SeekBar(this);
         bufferBar.setMax(140);   // 10 .. 150 ms
-        bufferBar.setProgress(prefs.getInt("buffer", 40) - 10);
+        bufferBar.setProgress(prefs.getInt("buffer2", 30) - 10);
         bufferBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar s, int p, boolean fromUser) { applyBuffer(); }
             @Override public void onStartTrackingTouch(SeekBar s) { }
-            @Override public void onStopTrackingTouch(SeekBar s) { prefs.edit().putInt("buffer", BridgeService.bufferMs).apply(); }
+            @Override public void onStopTrackingTouch(SeekBar s) { prefs.edit().putInt("buffer2", BridgeService.bufferMs).apply(); }
         });
         root.addView(bufferBar);
         TextView bufHint = text("Lower = less delay. If the sound crackles or cuts out, move it to the right.", 13, false);

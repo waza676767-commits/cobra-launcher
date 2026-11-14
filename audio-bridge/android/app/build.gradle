@@ -10,8 +10,8 @@ android {
         applicationId 'com.cobra.audiobridge'
         minSdk 26
         targetSdk 35
-        versionCode 5
-        versionName '1.4'
+        versionCode 6
+        versionName '1.5'
     }
 
     // A fixed key so a newer APK installs over the old one without uninstalling.

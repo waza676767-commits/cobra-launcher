@@ -9,7 +9,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>AudioBridge</AssemblyName>
     <RootNamespace>AudioBridge</RootNamespace>
-    <Version>1.3.0</Version>
+    <Version>1.5.0</Version>
     <Product>Audio Bridge</Product>
     <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>

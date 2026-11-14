@@ -265,6 +265,10 @@ public class BridgeService extends Service {
     // ---------------- playback ----------------
 
     private int trackBufferMs;
+    // Delay trimming: if sound has been waiting the whole last second, skip a little so delay stays minimal.
+    private long winStart;
+    private int winMin = Integer.MAX_VALUE;
+    private boolean skipNext;
 
     private void makeTrack(int rate, int ch) {
         releaseTrack();
@@ -291,7 +295,7 @@ public class BridgeService extends Service {
                     .build();
             if (Build.VERSION.SDK_INT >= 31) {
                 // Start as soon as a little sound has arrived instead of waiting for a full buffer.
-                try { t.setStartThresholdInFrames(Math.max(1, rate * Math.min(ms, 20) / 1000)); } catch (Exception ignored) { }
+                try { t.setStartThresholdInFrames(Math.max(1, rate * Math.min(ms, 8) / 1000)); } catch (Exception ignored) { }
             }
             t.play();
             track = t;
@@ -339,6 +343,19 @@ public class BridgeService extends Service {
         int queued = (int) framesWritten - t.getPlaybackHeadPosition();   // int maths handles the 32-bit wrap
         if (queued < 0) queued = 0;
         queueMs = queued * 1000 / rate;
+
+        if (queued < winMin) winMin = queued;
+        if (now - winStart > 700) {
+            // Sound never ran low in this window -> it's just extra delay. Drop ~5 ms of it.
+            if (winMin > rate * 6 / 1000) skipNext = true;
+            winMin = Integer.MAX_VALUE;
+            winStart = now;
+        }
+        if (skipNext) {
+            skipNext = false;
+            dropped++;
+            return;
+        }
 
         // Non-blocking: if the buffer is full (the PC's clock runs a hair fast), the extra is skipped
         // instead of letting the delay grow.
