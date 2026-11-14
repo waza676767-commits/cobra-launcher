@@ -60,7 +60,7 @@ namespace AudioBridge
             tray.DoubleClick += (s, e) => ShowFromTray();
             new Thread(() => { while (showSignal.WaitOne()) { try { BeginInvoke(new Action(ShowFromTray)); } catch { return; } } }) { IsBackground = true }.Start();
 
-            Text = "Audio Bridge";
+            Text = "Audio Bridge " + Application.ProductVersion.Split('+')[0];
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             AutoSize = true;

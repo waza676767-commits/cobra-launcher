@@ -7,6 +7,11 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.media.AudioAttributes;
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioTrack;
+import android.os.SystemClock;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -52,7 +57,9 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(pad, pad, pad, pad);
 
-        TextView title = text("Audio Bridge", 26, true);
+        String ver = "";
+        try { ver = " v" + getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
+        TextView title = text("Audio Bridge" + ver, 26, true);
         root.addView(title);
         root.addView(text("PC sound → phone → Bluetooth headphones, and your mic back to the PC.", 14, false));
         space(root, 16);
@@ -106,6 +113,10 @@ public class MainActivity extends Activity {
             if (BridgeService.running) stopBridge(); else startBridge();
         });
         root.addView(startBtn, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)));
+        Button testBtn = new Button(this);
+        testBtn.setText("Play test sound on this phone");
+        testBtn.setOnClickListener(v -> playLocalTest());
+        root.addView(testBtn);
         autoStart = new CheckBox(this);
         autoStart.setText("Start automatically when I open the app");
         autoStart.setTextSize(15);
@@ -140,6 +151,40 @@ public class MainActivity extends Activity {
     private void maybeAutoStart(Intent intent) {
         boolean fromTile = intent != null && intent.getBooleanExtra(EXTRA_START, false);
         if (!BridgeService.running && (fromTile || prefs.getBoolean("auto", true))) startBridge();
+    }
+
+    /** Plays a beep straight from this phone, so we know whether phone → headphones works at all. */
+    private void playLocalTest() {
+        AudioManager am = getSystemService(AudioManager.class);
+        if (am.getStreamVolume(AudioManager.STREAM_MUSIC) == 0) {
+            details.setText("Your media volume is at 0. Turn it up with the volume buttons.");
+        }
+        new Thread(() -> {
+            int rate = 48000, n = rate;
+            short[] pcm = new short[n * 2];
+            for (int i = 0; i < n; i++) {
+                short v = (short) (Math.sin(2 * Math.PI * 660 * i / (double) rate) * 9000);
+                pcm[2 * i] = v; pcm[2 * i + 1] = v;
+            }
+            try {
+                AudioTrack t = new AudioTrack.Builder()
+                        .setAudioAttributes(new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_MEDIA)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                        .setAudioFormat(new AudioFormat.Builder().setSampleRate(rate)
+                                .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
+                        .setBufferSizeInBytes(pcm.length * 2)
+                        .setTransferMode(AudioTrack.MODE_STATIC)
+                        .build();
+                t.write(pcm, 0, pcm.length);
+                t.play();
+                SystemClock.sleep(1300);
+                t.release();
+            } catch (Exception e) {
+                runOnUiThread(() -> details.setText("Test sound failed: " + e.getMessage()));
+            }
+        }).start();
     }
 
     private int micMode() {
@@ -201,10 +246,17 @@ public class MainActivity extends Activity {
         if (BridgeService.pcAddress != null) {
             status.setText("Connected to PC");
             status.setTextColor(Color.rgb(102, 187, 106));
-            d.append("PC: ").append(BridgeService.pcAddress)
-             .append("\nSound waiting on phone: ").append(BridgeService.queueMs).append(" ms")
-             .append("\nPackets: ").append(BridgeService.packets);
-            if (BridgeService.dropped > 0) d.append(" (skipped ").append(BridgeService.dropped).append(" to stay in sync)");
+            d.append("PC: ").append(BridgeService.pcAddress);
+            if (BridgeService.packets == 0) {
+                d.append("\nNo sound packets from the PC yet. Play something on the PC or press \"Send test beep\" there.");
+            } else {
+                long ago = (SystemClock.elapsedRealtime() - BridgeService.lastAudioAt) / 1000;
+                d.append("\nSound packets: ").append(BridgeService.packets)
+                 .append(ago <= 1 ? " (arriving now)" : " (last one " + ago + " s ago)")
+                 .append("\nSound waiting on phone: ").append(BridgeService.queueMs).append(" ms");
+                if (BridgeService.dropped > 0) d.append(" · skipped ").append(BridgeService.dropped);
+                d.append("\n").append(BridgeService.outputInfo);
+            }
         } else {
             status.setText("Waiting for the PC…");
             status.setTextColor(Color.rgb(255, 167, 38));

@@ -48,7 +48,10 @@ public class BridgeService extends Service {
     public static volatile long packets, dropped;
     public static volatile String micStatus = "";
     public static volatile String error;
-    public static volatile int bufferMs = 40;   // max sound waiting in the phone; the slider changes it live
+    public static volatile int bufferMs = 40;
+    public static volatile long lastAudioAt;        // elapsedRealtime of the last sound packet
+    public static volatile String outputInfo = "";   // where Android is playing it
+    private long lastInfoAt;   // max sound waiting in the phone; the slider changes it live
 
     private volatile boolean stop;
     private volatile DatagramSocket socket;
@@ -94,6 +97,8 @@ public class BridgeService extends Service {
         error = null;
         pcAddress = null;
         packets = dropped = 0;
+        lastAudioAt = 0;
+        outputInfo = "";
         queueMs = 0;
         micStatus = micMode == 0 ? "Mic off" : "Starting mic…";
 
@@ -309,6 +314,18 @@ public class BridgeService extends Service {
         int frames = n / frameBytes;
         if (frames == 0) return;
         packets++;
+        long now = SystemClock.elapsedRealtime();
+        lastAudioAt = now;
+        if (now - lastInfoAt > 1000) {
+            lastInfoAt = now;
+            String dev = "?";
+            try {
+                AudioDeviceInfo d = t.getRoutedDevice();
+                if (d != null) dev = d.getProductName() + " (" + deviceType(d.getType()) + ")";
+            } catch (Exception ignored) { }
+            String state = t.getPlayState() == AudioTrack.PLAYSTATE_PLAYING ? "playing" : "NOT playing";
+            outputInfo = "Output: " + dev + ", " + state + ", " + rate + " Hz, buffer " + t.getBufferSizeInFrames() * 1000 / rate + " ms";
+        }
 
         int queued = (int) framesWritten - t.getPlaybackHeadPosition();   // int maths handles the 32-bit wrap
         if (queued < 0) queued = 0;
@@ -321,6 +338,18 @@ public class BridgeService extends Service {
         if (w < frames * frameBytes) dropped++;
         if (w < 0) makeTrack(rate, ch);   // track died (e.g. headphones reconnected): rebuild it
         if (t.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) { try { t.play(); } catch (Exception ignored) { } }
+    }
+
+    static String deviceType(int t) {
+        switch (t) {
+            case AudioDeviceInfo.TYPE_BLUETOOTH_A2DP: return "Bluetooth";
+            case AudioDeviceInfo.TYPE_BLUETOOTH_SCO: return "Bluetooth call mode";
+            case AudioDeviceInfo.TYPE_BUILTIN_SPEAKER: return "phone speaker";
+            case AudioDeviceInfo.TYPE_BUILTIN_EARPIECE: return "earpiece";
+            case AudioDeviceInfo.TYPE_WIRED_HEADPHONES: case AudioDeviceInfo.TYPE_WIRED_HEADSET: return "wired";
+            case AudioDeviceInfo.TYPE_USB_DEVICE: case AudioDeviceInfo.TYPE_USB_HEADSET: case AudioDeviceInfo.TYPE_USB_ACCESSORY: return "USB";
+            default: return "type " + t;
+        }
     }
 
     private void releaseTrack() {
