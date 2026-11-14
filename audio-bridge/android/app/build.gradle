@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.cobra.audiobridge'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.cobra.audiobridge'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+
+    // A fixed key so a newer APK installs over the old one without uninstalling.
+    signingConfigs {
+        bridge {
+            storeFile file('bridge.keystore')
+            storePassword 'audiobridge'
+            keyAlias 'bridge'
+            keyPassword 'audiobridge'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.bridge
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}

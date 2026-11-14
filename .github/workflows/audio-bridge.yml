@@ -1,0 +1,48 @@
+# Builds Audio Bridge: AudioBridge.exe (Windows) and AudioBridge.apk (Android).
+# Get them from the repo's Actions tab -> "Audio Bridge" -> latest run -> Artifacts.
+name: Audio Bridge
+
+on:
+  push:
+    paths:
+      - 'audio-bridge/**'
+      - '.github/workflows/audio-bridge.yml'
+  workflow_dispatch:
+
+jobs:
+  pc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build AudioBridge.exe (single file, no install needed)
+        run: >
+          dotnet publish audio-bridge/pc/AudioBridge.csproj -c Release -r win-x64
+          --self-contained true -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
+          -o out
+      - uses: actions/upload-artifact@v5
+        with:
+          name: AudioBridge-PC
+          path: out/AudioBridge.exe
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build AudioBridge.apk
+        run: gradle -p audio-bridge/android assembleRelease --no-daemon
+      - run: cp audio-bridge/android/app/build/outputs/apk/release/app-release.apk AudioBridge.apk
+      - uses: actions/upload-artifact@v5
+        with:
+          name: AudioBridge-Android
+          path: AudioBridge.apk

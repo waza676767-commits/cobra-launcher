@@ -1,0 +1,220 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Windows.Forms;
+using NAudio.CoreAudioApi;
+
+namespace AudioBridge
+{
+    sealed class MainForm : Form
+    {
+        sealed class Dev
+        {
+            public string Id, Name;
+            public override string ToString() => Name;
+        }
+
+        readonly Label status = new Label { AutoSize = true, Font = new Font("Segoe UI", 12f, FontStyle.Bold), Text = "Stopped" };
+        readonly Label stats = new Label { AutoSize = true, ForeColor = Color.DimGray, Text = " " };
+        readonly CheckBox sendSound = new CheckBox { AutoSize = true, Text = "Send PC sound to my phone", Checked = true };
+        readonly ComboBox captureBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 420 };
+        readonly CheckBox useMic = new CheckBox { AutoSize = true, Text = "Use my phone / headphone mic as a PC microphone", Checked = true };
+        readonly ComboBox micBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 420 };
+        readonly LinkLabel cableLink = new LinkLabel { AutoSize = true, Text = "Needs the free VB-CABLE driver (one-time install) — click to download" };
+        readonly TextBox ipBox = new TextBox { Width = 160, PlaceholderText = "automatic" };
+        readonly Button startBtn = new Button { Text = "Start", Width = 140, Height = 36, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
+        readonly TextBox log = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Width = 440, Height = 110 };
+        readonly Timer timer = new Timer { Interval = 500 };
+
+        Bridge bridge;
+        static readonly string SettingsFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AudioBridge", "settings.txt");
+
+        public MainForm()
+        {
+            Text = "Audio Bridge";
+            FormBorderStyle = FormBorderStyle.FixedSingle;
+            MaximizeBox = false;
+            AutoSize = true;
+            AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            Font = new Font("Segoe UI", 9f);
+            StartPosition = FormStartPosition.CenterScreen;
+
+            var root = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true,
+                Padding = new Padding(14), Dock = DockStyle.Fill,
+            };
+            Controls.Add(root);
+
+            root.Controls.Add(status);
+            root.Controls.Add(stats);
+            root.Controls.Add(Gap());
+
+            root.Controls.Add(sendSound);
+            root.Controls.Add(Hint("Sound from this output device goes to the phone:"));
+            root.Controls.Add(captureBox);
+            root.Controls.Add(Gap());
+
+            root.Controls.Add(useMic);
+            root.Controls.Add(Hint("Play the phone's mic into (pick \"CABLE Input\"):"));
+            root.Controls.Add(micBox);
+            root.Controls.Add(Hint("Then in Discord / games / Windows pick \"CABLE Output\" as your microphone."));
+            root.Controls.Add(cableLink);
+            root.Controls.Add(Gap());
+
+            var ipRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+            ipRow.Controls.Add(new Label { Text = "Phone IP:", AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
+            ipRow.Controls.Add(ipBox);
+            ipRow.Controls.Add(new Label { Text = "(leave empty unless it can't find the phone)", AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(6, 6, 0, 0) });
+            root.Controls.Add(ipRow);
+            root.Controls.Add(Gap());
+
+            root.Controls.Add(startBtn);
+            root.Controls.Add(log);
+
+            cableLink.LinkClicked += (s, e) => Process.Start(new ProcessStartInfo("https://vb-audio.com/Cable/") { UseShellExecute = true });
+            startBtn.Click += (s, e) => { if (bridge == null) StartBridge(); else StopBridge(); };
+            sendSound.CheckedChanged += (s, e) => captureBox.Enabled = sendSound.Checked && bridge == null;
+            useMic.CheckedChanged += (s, e) => micBox.Enabled = useMic.Checked && bridge == null;
+            timer.Tick += (s, e) => UpdateStatus();
+            FormClosing += (s, e) => { SaveSettings(); StopBridge(); };
+
+            LoadDevices();
+            LoadSettings();
+            AddLog("1) Plug the phone in with USB and turn on USB tethering.  2) Open Audio Bridge on the phone and press Start.  3) Press Start here.");
+        }
+
+        static Label Hint(string text) => new Label { Text = text, AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(3, 4, 3, 2) };
+        static Control Gap() => new Panel { Height = 6, Width = 1 };
+
+        void LoadDevices()
+        {
+            var en = new MMDeviceEnumerator();
+            var outs = en.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
+                         .Select(d => new Dev { Id = d.ID, Name = d.FriendlyName }).ToList();
+            string defId = null;
+            try { defId = en.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia).ID; } catch { }
+
+            captureBox.Items.Clear(); micBox.Items.Clear();
+            foreach (var d in outs) { captureBox.Items.Add(d); micBox.Items.Add(d); }
+            captureBox.SelectedItem = outs.FirstOrDefault(d => d.Id == defId) ?? outs.FirstOrDefault();
+            micBox.SelectedItem = outs.FirstOrDefault(d => d.Name.IndexOf("CABLE Input", StringComparison.OrdinalIgnoreCase) >= 0);
+            cableLink.Visible = micBox.SelectedItem == null;
+            if (outs.Count == 0) AddLog("No sound output devices found. Windows needs at least one (VB-CABLE counts).");
+        }
+
+        void StartBridge()
+        {
+            var cap = sendSound.Checked ? captureBox.SelectedItem as Dev : null;
+            var mic = useMic.Checked ? micBox.SelectedItem as Dev : null;
+            if (sendSound.Checked && cap == null) { AddLog("Pick an output device to send."); return; }
+            if (useMic.Checked && mic == null) { AddLog("Pick where the mic should play (install VB-CABLE, then restart this app)."); return; }
+            if (cap != null && mic != null && cap.Id == mic.Id)
+            {
+                MessageBox.Show(this, "The mic and the PC sound use the same device, so you'd hear yourself echo. Pick \"CABLE Input\" for the mic and your normal speakers/headphones for PC sound.", "Audio Bridge");
+                return;
+            }
+            IPAddress ip = null;
+            if (ipBox.Text.Trim().Length > 0 && !IPAddress.TryParse(ipBox.Text.Trim(), out ip)) { AddLog("That phone IP doesn't look right."); return; }
+
+            try
+            {
+                bridge = new Bridge(cap?.Id, mic?.Id, ip);
+                bridge.Log += m => BeginInvoke(new Action(() => AddLog(m)));
+                bridge.Start();
+            }
+            catch (Exception ex)
+            {
+                AddLog("Could not start: " + ex.Message);
+                try { bridge?.Dispose(); } catch { }
+                bridge = null;
+                return;
+            }
+            startBtn.Text = "Stop";
+            captureBox.Enabled = micBox.Enabled = sendSound.Enabled = useMic.Enabled = ipBox.Enabled = false;
+            timer.Start();
+            SaveSettings();
+            UpdateStatus();
+        }
+
+        void StopBridge()
+        {
+            timer.Stop();
+            var b = bridge; bridge = null;
+            b?.Dispose();
+            if (IsDisposed) return;
+            startBtn.Text = "Start";
+            sendSound.Enabled = useMic.Enabled = ipBox.Enabled = true;
+            captureBox.Enabled = sendSound.Checked;
+            micBox.Enabled = useMic.Checked;
+            status.Text = "Stopped"; status.ForeColor = SystemColors.ControlText;
+            stats.Text = " ";
+        }
+
+        void UpdateStatus()
+        {
+            var b = bridge;
+            if (b == null) return;
+            if (b.Phone != null)
+            {
+                status.Text = "Connected to " + (string.IsNullOrWhiteSpace(b.PhoneName) ? "phone" : b.PhoneName);
+                status.ForeColor = Color.ForestGreen;
+                stats.Text = $"Phone {b.Phone.Address}   ·   sound packets sent {b.SentPackets}   ·   mic packets {b.MicPackets}" + (b.MicDropped > 0 ? $" (skipped {b.MicDropped} to stay in sync)" : "");
+            }
+            else
+            {
+                status.Text = "Looking for the phone…";
+                status.ForeColor = Color.DarkOrange;
+                stats.Text = "Is USB tethering on, and did you press Start in the phone app?";
+            }
+        }
+
+        void AddLog(string m)
+        {
+            if (IsDisposed) return;
+            log.AppendText($"[{DateTime.Now:HH:mm:ss}] {m}\r\n");
+        }
+
+        void LoadSettings()
+        {
+            try
+            {
+                if (!File.Exists(SettingsFile)) return;
+                var kv = File.ReadAllLines(SettingsFile).Select(l => l.Split(new[] { '=' }, 2)).Where(p => p.Length == 2).ToDictionary(p => p[0], p => p[1]);
+                if (kv.TryGetValue("send", out var s)) sendSound.Checked = s == "1";
+                if (kv.TryGetValue("mic", out var m)) useMic.Checked = m == "1";
+                if (kv.TryGetValue("ip", out var ip)) ipBox.Text = ip;
+                if (kv.TryGetValue("capture", out var c)) Select(captureBox, c);
+                if (kv.TryGetValue("micdev", out var md)) Select(micBox, md);
+            }
+            catch { }
+        }
+
+        static void Select(ComboBox box, string id)
+        {
+            foreach (Dev d in box.Items) if (d.Id == id) { box.SelectedItem = d; return; }
+        }
+
+        void SaveSettings()
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(SettingsFile));
+                var lines = new List<string>
+                {
+                    "send=" + (sendSound.Checked ? "1" : "0"),
+                    "mic=" + (useMic.Checked ? "1" : "0"),
+                    "ip=" + ipBox.Text.Trim(),
+                    "capture=" + ((captureBox.SelectedItem as Dev)?.Id ?? ""),
+                    "micdev=" + ((micBox.SelectedItem as Dev)?.Id ?? ""),
+                };
+                File.WriteAllLines(SettingsFile, lines);
+            }
+            catch { }
+        }
+    }
+}
