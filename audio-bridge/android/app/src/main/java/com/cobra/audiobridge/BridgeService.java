@@ -64,7 +64,6 @@ public class BridgeService extends Service {
     private int trackRate, trackCh;
     private long framesWritten;
     private int sendSeq;
-    private byte[] silence = new byte[0];
 
     @Override public IBinder onBind(Intent intent) { return null; }
 
@@ -260,17 +259,23 @@ public class BridgeService extends Service {
 
     // ---------------- playback ----------------
 
+    private int trackBufferMs;
+
     private void makeTrack(int rate, int ch) {
         releaseTrack();
         int mask = ch == 1 ? AudioFormat.CHANNEL_OUT_MONO : AudioFormat.CHANNEL_OUT_STEREO;
+        int frameBytes = 2 * ch;
         int min = AudioTrack.getMinBufferSize(rate, mask, AudioFormat.ENCODING_PCM_16BIT);
-        int size = Math.max(min, rate * ch * 2 / 4);   // room for 250 ms; we never let it fill up that much
+        int ms = bufferMs;
+        // The buffer IS the max delay. Android only starts playing once the buffer has filled up,
+        // so it must be no bigger than what we let wait in it.
+        int size = Math.max(min, rate * ms / 1000 * frameBytes);
         AudioAttributes attrs = new AudioAttributes.Builder()
                 .setUsage(micMode == 2 ? AudioAttributes.USAGE_VOICE_COMMUNICATION : AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                 .build();
         try {
-            track = new AudioTrack.Builder()
+            AudioTrack t = new AudioTrack.Builder()
                     .setAudioAttributes(attrs)
                     .setAudioFormat(new AudioFormat.Builder()
                             .setSampleRate(rate).setChannelMask(mask)
@@ -279,10 +284,17 @@ public class BridgeService extends Service {
                     .setTransferMode(AudioTrack.MODE_STREAM)
                     .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
                     .build();
-            track.play();
+            if (Build.VERSION.SDK_INT >= 31) {
+                // Start as soon as a little sound has arrived instead of waiting for a full buffer.
+                try { t.setStartThresholdInFrames(Math.max(1, rate * Math.min(ms, 20) / 1000)); } catch (Exception ignored) { }
+            }
+            t.play();
+            track = t;
             trackRate = rate;
             trackCh = ch;
+            trackBufferMs = ms;
             framesWritten = 0;
+            error = null;
         } catch (Exception e) {
             error = "Could not start playback: " + e.getMessage();
             track = null;
@@ -290,7 +302,7 @@ public class BridgeService extends Service {
     }
 
     private void play(byte[] b, int off, int n, int rate, int ch) {
-        if (track == null || rate != trackRate || ch != trackCh) makeTrack(rate, ch);
+        if (track == null || rate != trackRate || ch != trackCh || bufferMs != trackBufferMs) makeTrack(rate, ch);
         AudioTrack t = track;
         if (t == null) return;
         int frameBytes = 2 * ch;
@@ -298,27 +310,17 @@ public class BridgeService extends Service {
         if (frames == 0) return;
         packets++;
 
-        // How much sound is already waiting to be played (int maths handles the 32-bit wrap).
-        int queued = (int) framesWritten - t.getPlaybackHeadPosition();
+        int queued = (int) framesWritten - t.getPlaybackHeadPosition();   // int maths handles the 32-bit wrap
         if (queued < 0) queued = 0;
-        int maxFrames = rate * bufferMs / 1000;
-
-        if (queued == 0) {
-            // Ran dry (start, or the PC went silent): add a small cushion so network hiccups don't crackle.
-            int cushion = Math.min(rate * Math.max(5, bufferMs / 3) / 1000, maxFrames / 2) * frameBytes;
-            if (silence.length < cushion) silence = new byte[cushion];
-            int w = t.write(silence, 0, cushion, AudioTrack.WRITE_NON_BLOCKING);
-            if (w > 0) { framesWritten += w / frameBytes; queued += w / frameBytes; }
-        }
         queueMs = queued * 1000 / rate;
 
-        // The PC's and phone's clocks drift a little: drop a packet instead of letting delay build up.
-        if (queued + frames > maxFrames) {
-            dropped++;
-            return;
-        }
+        // Non-blocking: if the buffer is full (the PC's clock runs a hair fast), the extra is skipped
+        // instead of letting the delay grow.
         int w = t.write(b, off, frames * frameBytes, AudioTrack.WRITE_NON_BLOCKING);
         if (w > 0) framesWritten += w / frameBytes;
+        if (w < frames * frameBytes) dropped++;
+        if (w < 0) makeTrack(rate, ch);   // track died (e.g. headphones reconnected): rebuild it
+        if (t.getPlayState() != AudioTrack.PLAYSTATE_PLAYING) { try { t.play(); } catch (Exception ignored) { } }
     }
 
     private void releaseTrack() {
