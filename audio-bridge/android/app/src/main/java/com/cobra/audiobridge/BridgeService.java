@@ -324,7 +324,16 @@ public class BridgeService extends Service {
                 if (d != null) dev = d.getProductName() + " (" + deviceType(d.getType()) + ")";
             } catch (Exception ignored) { }
             String state = t.getPlayState() == AudioTrack.PLAYSTATE_PLAYING ? "playing" : "NOT playing";
-            outputInfo = "Output: " + dev + ", " + state + ", " + rate + " Hz, buffer " + t.getBufferSizeInFrames() * 1000 / rate + " ms";
+            String lat = "";
+            try {
+                android.media.AudioTimestamp ts = new android.media.AudioTimestamp();
+                if (t.getTimestamp(ts)) {
+                    // A sample written now reaches the headphones after: frames not yet heard minus time since the stamp.
+                    long ms = (framesWritten - ts.framePosition) * 1000 / rate - (System.nanoTime() - ts.nanoTime) / 1_000_000;
+                    if (ms > 0 && ms < 5000) lat = "\nPhone + Bluetooth delay: about " + ms + " ms";
+                }
+            } catch (Exception ignored) { }
+            outputInfo = "Output: " + dev + ", " + state + ", " + rate + " Hz, buffer " + t.getBufferSizeInFrames() * 1000 / rate + " ms" + lat;
         }
 
         int queued = (int) framesWritten - t.getPlaybackHeadPosition();   // int maths handles the 32-bit wrap
