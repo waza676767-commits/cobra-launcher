@@ -1,7 +1,7 @@
 ; Builds AudioBridge-Setup.exe: installs Audio Bridge with Start menu + desktop icons.
 [Setup]
 AppName=Audio Bridge
-AppVersion=1.1
+AppVersion=1.2
 AppId={{6A1F0B8E-3D4C-4E8A-9B7F-AB1D6E2C9F10}
 DefaultDirName={localappdata}\Programs\Audio Bridge
 DefaultGroupName=Audio Bridge

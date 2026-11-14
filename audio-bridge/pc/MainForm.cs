@@ -23,6 +23,9 @@ namespace AudioBridge
         readonly Label status = new Label { AutoSize = true, Font = new Font("Segoe UI", 12f, FontStyle.Bold), Text = "Stopped" };
         readonly Label stats = new Label { AutoSize = true, ForeColor = Color.DimGray, Text = " " };
         readonly CheckBox sendSound = new CheckBox { AutoSize = true, Text = "Send PC sound to my phone", Checked = true };
+        readonly CheckBox muteSpeakers = new CheckBox { AutoSize = true, Text = "Mute the PC speakers while the phone is connected (sound only on your headphones)", Checked = true };
+        MMDevice mutedDevice;
+        bool mutedBefore;
         readonly ComboBox captureBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 420 };
         readonly CheckBox useMic = new CheckBox { AutoSize = true, Text = "Use my phone / headphone mic as a PC microphone", Checked = true };
         readonly ComboBox micBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 420 };
@@ -78,6 +81,7 @@ namespace AudioBridge
             root.Controls.Add(sendSound);
             root.Controls.Add(Hint("Sound from this output device goes to the phone:"));
             root.Controls.Add(captureBox);
+            root.Controls.Add(muteSpeakers);
             root.Controls.Add(Gap());
 
             root.Controls.Add(useMic);
@@ -101,6 +105,7 @@ namespace AudioBridge
 
             cableLink.LinkClicked += (s, e) => Process.Start(new ProcessStartInfo("https://vb-audio.com/Cable/") { UseShellExecute = true });
             startBtn.Click += (s, e) => { if (bridge == null) StartBridge(); else StopBridge(); };
+            muteSpeakers.CheckedChanged += (s, e) => { if (bridge?.Phone != null) ApplyMute(); else RestoreMute(); SaveSettings(); };
             sendSound.CheckedChanged += (s, e) => captureBox.Enabled = sendSound.Checked && bridge == null;
             useMic.CheckedChanged += (s, e) => micBox.Enabled = useMic.Checked && bridge == null;
             timer.Tick += (s, e) => UpdateStatus();
@@ -183,6 +188,7 @@ namespace AudioBridge
             timer.Stop();
             var b = bridge; bridge = null;
             b?.Dispose();
+            RestoreMute();
             if (IsDisposed) return;
             startBtn.Text = "Start"; trayToggle.Text = "Start";
             tray.Text = "Audio Bridge (stopped)";
@@ -202,6 +208,7 @@ namespace AudioBridge
                 status.Text = "Connected to " + (string.IsNullOrWhiteSpace(b.PhoneName) ? "phone" : b.PhoneName);
                 status.ForeColor = Color.ForestGreen;
                 tray.Text = "Audio Bridge: connected";
+                ApplyMute();
                 stats.Text = $"Phone {b.Phone.Address}   ·   sound packets sent {b.SentPackets}   ·   mic packets {b.MicPackets}" + (b.MicDropped > 0 ? $" (skipped {b.MicDropped} to stay in sync)" : "");
             }
             else
@@ -209,6 +216,7 @@ namespace AudioBridge
                 status.Text = "Looking for the phone…";
                 status.ForeColor = Color.DarkOrange;
                 tray.Text = "Audio Bridge: looking for the phone";
+                RestoreMute();
                 stats.Text = "Is USB tethering on, and did you press Start in the phone app?";
             }
         }
@@ -225,6 +233,7 @@ namespace AudioBridge
             {
                 if (!File.Exists(SettingsFile)) return;
                 var kv = File.ReadAllLines(SettingsFile).Select(l => l.Split(new[] { '=' }, 2)).Where(p => p.Length == 2).ToDictionary(p => p[0], p => p[1]);
+                if (kv.TryGetValue("mute", out var mu)) muteSpeakers.Checked = mu == "1";
                 if (kv.TryGetValue("send", out var s)) sendSound.Checked = s == "1";
                 if (kv.TryGetValue("mic", out var m)) useMic.Checked = m == "1";
                 if (kv.TryGetValue("auto", out var au)) autoStart.Checked = au == "1";
@@ -233,6 +242,29 @@ namespace AudioBridge
                 if (kv.TryGetValue("micdev", out var md)) Select(micBox, md);
             }
             catch { }
+        }
+
+        /// <summary>Mutes the captured output device. Windows still hands the sound to Audio Bridge, so only the phone plays it.</summary>
+        void ApplyMute()
+        {
+            var cap = sendSound.Checked ? captureBox.SelectedItem as Dev : null;
+            if (!muteSpeakers.Checked || cap == null) { RestoreMute(); return; }
+            if (mutedDevice != null) return;
+            try
+            {
+                mutedDevice = new MMDeviceEnumerator().GetDevice(cap.Id);
+                mutedBefore = mutedDevice.AudioEndpointVolume.Mute;
+                mutedDevice.AudioEndpointVolume.Mute = true;
+                AddLog("PC speakers muted (they come back when the phone disconnects or you press Stop). If your headphones go silent too, untick \"Mute the PC speakers\".");
+            }
+            catch (Exception ex) { AddLog("Could not mute the speakers: " + ex.Message); mutedDevice = null; }
+        }
+
+        void RestoreMute()
+        {
+            var d = mutedDevice; mutedDevice = null;
+            if (d == null) return;
+            try { d.AudioEndpointVolume.Mute = mutedBefore; } catch { }
         }
 
         void ShowFromTray()
@@ -271,6 +303,7 @@ namespace AudioBridge
                 var lines = new List<string>
                 {
                     "send=" + (sendSound.Checked ? "1" : "0"),
+                    "mute=" + (muteSpeakers.Checked ? "1" : "0"),
                     "mic=" + (useMic.Checked ? "1" : "0"),
                     "ip=" + ipBox.Text.Trim(),
                     "auto=" + (autoStart.Checked ? "1" : "0"),
