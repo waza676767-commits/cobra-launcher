@@ -1,0 +1,27 @@
+# Builds the Velo Android app. Download the APK from the Actions tab → latest "Velo APK" run → Artifacts.
+name: Velo APK
+
+on:
+  push:
+    paths: ["velo/**", ".github/workflows/velo.yml"]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: velo
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Build APK
+        run: chmod +x gradlew && ./gradlew assembleRelease --console=plain
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Velo-apk
+          path: velo/app/build/outputs/apk/release/app-release.apk
