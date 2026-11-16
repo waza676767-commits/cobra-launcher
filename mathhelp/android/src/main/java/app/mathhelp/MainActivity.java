@@ -43,6 +43,30 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         Relay.init(this);
         if (Store.hasUser()) showContacts(); else showSetup();
+        showLastCrash();
+    }
+
+    private void showLastCrash() {
+        java.io.File f = App.crashFile;
+        if (f == null || !f.exists()) return;
+        String report;
+        try { report = new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"); } catch (Exception e) { return; }
+        f.delete();
+        TextView tv = new TextView(this);
+        tv.setText(report);
+        tv.setTextSize(11);
+        tv.setTextIsSelectable(true);
+        int p = dp(this, 16);
+        tv.setPadding(p, p, p, p);
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
+        new AlertDialog.Builder(this).setTitle("mathhelp crashed last time").setView(sv)
+                .setPositiveButton("Copy", (d, w) -> {
+                    ((android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE))
+                            .setPrimaryClip(android.content.ClipData.newPlainText("crash", report));
+                    toast(this, "Copied — paste it to the developer");
+                })
+                .setNegativeButton("Close", null).show();
     }
 
     // ---------- first run ----------

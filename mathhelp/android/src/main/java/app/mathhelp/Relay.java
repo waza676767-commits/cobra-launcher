@@ -14,7 +14,6 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -38,6 +37,9 @@ import java.util.concurrent.Executors;
  */
 final class Relay {
     static final String BASE = "https://ntfy.sh/";
+    /** Encrypted copies kept by the GitHub backup bot (.github/workflows/mathhelp-backup.yml on main). */
+    static final String ARCHIVE = "https://raw.githubusercontent.com/waza676767-commits/cobra-launcher/main/mathhelp-archive/";
+    static final String REGISTRY = "mh_registry_v1";
     static final int MAX_FILE = 2_000_000; // ntfy.sh anonymous attachment limit is 2 MB
 
     static final Handler ui = new Handler(Looper.getMainLooper());
@@ -108,7 +110,7 @@ final class Relay {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(15000);
         c.setReadTimeout(60000);
-        if (c.getResponseCode() >= 400) throw new FileNotFoundException("expired");
+        if (c.getResponseCode() >= 400) throw new IOException("gone");
         return readAll(c.getInputStream());
     }
 
@@ -154,13 +156,16 @@ final class Relay {
             byte[] key = Crypto.shared(Store.priv(), c.pub);
             for (Store.Msg m : Store.pending(peer)) {
                 JSONObject p = new JSONObject().put("id", m.cid).put("x", m.text);
+                String fileId = null;
                 if (m.media != null) {
                     byte[] fk = Crypto.random(32);
-                    p.put("u", upload(Crypto.seal(fk, Files.readAllBytes(new File(m.media).toPath()))));
-                    p.put("mk", Crypto.b64(fk)).put("mt", m.mime);
+                    String url = upload(Crypto.seal(fk, Files.readAllBytes(new File(m.media).toPath())));
+                    p.put("u", url).put("mk", Crypto.b64(fk)).put("mt", m.mime);
+                    fileId = fileId(url);
                 }
                 JSONObject e = new JSONObject().put("t", "m").put("f", Store.user).put("k", Store.pub)
                         .put("c", Crypto.b64(Crypto.seal(key, p.toString().getBytes("UTF-8"))));
+                if (fileId != null) e.put("a", fileId);
                 publish(peer, e);
                 Store.markSent(m.id);
                 changed();
@@ -201,28 +206,97 @@ final class Relay {
             if (!"m".equals(e.optString("t"))) return null;
             byte[] key = Crypto.shared(Store.priv(), c.pub);
             JSONObject p = new JSONObject(new String(Crypto.open(key, Crypto.unb64(e.getString("c"))), "UTF-8"));
-            String text = p.optString("x"), media = null, mime = null;
+            String text = p.optString("x");
+            String fetch = null;
             if (p.has("u")) {
-                try {
-                    byte[] data = Crypto.open(Crypto.unb64(p.getString("mk")), download(p.getString("u")));
-                    File f = new File(Store.mediaDir, "r" + Crypto.hex(Crypto.random(10)));
-                    try (FileOutputStream o = new FileOutputStream(f)) { o.write(data); }
-                    media = f.getAbsolutePath();
-                    mime = p.optString("mt", "image/*");
-                } catch (IOException net) {
-                    if (!(net instanceof FileNotFoundException)) { Store.unmarkSeen(id); return null; } // retry later
-                    text = (text.isEmpty() ? "" : text + "\n") + "(image expired — the free relay only keeps images for 3 hours)";
-                } catch (Exception ex) {
-                    text = (text.isEmpty() ? "" : text + "\n") + "(image expired — the free relay only keeps images for 3 hours)";
-                }
+                fetch = new JSONObject().put("u", p.getString("u")).put("mk", p.getString("mk"))
+                        .put("mt", p.optString("mt", "image/*"))
+                        .put("day", day(ev.optLong("time", System.currentTimeMillis() / 1000))).toString();
             }
-            if (Store.insertMsg(from, false, text, media, mime, Store.SENT, "in:" + from.toLowerCase(java.util.Locale.ROOT) + ":" + p.optString("id", id)) == -1)
-                return null;
+            long row = Store.insertMsg(from, false, text, null, null, Store.SENT,
+                    "in:" + from.toLowerCase(java.util.Locale.ROOT) + ":" + p.optString("id", id));
+            if (row == -1) return null;
+            if (fetch != null) { Store.setFetch(row, fetch); fetchImage(row, fetch); }
             changed();
             return from + ": " + (text.isEmpty() ? "📷 image" : text);
         } catch (Exception ex) {
             return null;
         }
+    }
+
+    static String fileId(String url) {
+        String n = url.substring(url.lastIndexOf('/') + 1);
+        int dot = n.indexOf('.');
+        return dot > 0 ? n.substring(0, dot) : n;
+    }
+
+    private static String day(long unixSeconds) {
+        java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT);
+        f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        return f.format(new java.util.Date(unixSeconds * 1000));
+    }
+
+    /** Try the relay, then the GitHub backup. Gives up after 3 days. */
+    private static void fetchImage(long row, String fetchJson) {
+        try {
+            JSONObject f = new JSONObject(fetchJson);
+            String url = f.getString("u");
+            byte[] blob;
+            try { blob = download(url); }
+            catch (IOException e) { blob = download(ARCHIVE + "files/" + f.getString("day") + "/" + fileId(url) + ".bin"); }
+            byte[] data = Crypto.open(Crypto.unb64(f.getString("mk")), blob);
+            File out = new File(Store.mediaDir, "r" + Crypto.hex(Crypto.random(10)));
+            try (FileOutputStream o = new FileOutputStream(out)) { o.write(data); }
+            Store.setMedia(row, out.getAbsolutePath(), f.optString("mt", "image/*"));
+            changed();
+        } catch (Exception e) {
+            if (System.currentTimeMillis() - Store.msgTime(row) > 3 * 86400_000L) {
+                Store.expireMedia(row, "(image expired)");
+                changed();
+            }
+        }
+    }
+
+    private static void retryImages() {
+        for (long[] r : Store.fetchRows()) fetchImage(r[0], Store.fetchOf(r[0]));
+    }
+
+    /** Announce our inbox (a hash, not the username) so the backup bot knows to save it. */
+    private static void register() {
+        long last = Store.prefs.getLong("reg", 0);
+        if (System.currentTimeMillis() - last < 6 * 3600_000L) return;
+        try {
+            put("POST", REGISTRY, inbox(Store.user).getBytes("UTF-8"), null);
+            Store.prefs.edit().putLong("reg", System.currentTimeMillis()).apply();
+        } catch (Exception ignored) {}
+    }
+
+    /** Read new lines of our inbox's backup file on GitHub (Range request from the last offset). */
+    private static void catchUpFromArchive() {
+        try {
+            long off = Store.prefs.getLong("arch", 0);
+            HttpURLConnection c = (HttpURLConnection) new URL(ARCHIVE + inbox(Store.user) + ".jsonl").openConnection();
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(60000);
+            if (off > 0) c.setRequestProperty("Range", "bytes=" + off + "-");
+            int code = c.getResponseCode();
+            if (code != 200 && code != 206) return; // 404: nothing backed up yet, 416: nothing new
+            byte[] b = readAll(c.getInputStream());
+            int start = (code == 200 && off > 0) ? (int) Math.min(off, b.length) : 0;
+            int end = start;
+            for (int i = start; i < b.length; i++) {
+                if (b[i] != '\n') continue;
+                String line = new String(b, end, i - end, "UTF-8");
+                end = i + 1;
+                try {
+                    JSONObject a = new JSONObject(line);
+                    a.put("event", "message");
+                    notify(handle(a));
+                } catch (Exception ignored) {}
+            }
+            long base = code == 206 ? off : 0;
+            Store.prefs.edit().putLong("arch", base + end).apply();
+        } catch (Exception ignored) {}
     }
 
     private static void notify(String line) {
@@ -255,6 +329,9 @@ final class Relay {
             // Overlap by 2 min: the relay can take a moment before new messages show up in fetches.
             Store.setSince(start - 120);
         } catch (Exception ignored) {}
+        catchUpFromArchive();
+        retryImages();
+        register();
         flushAll();
     }
 
@@ -269,6 +346,9 @@ final class Relay {
         foreground = true;
         q.execute(() -> {
             Store.pruneSeen();
+            register();
+            catchUpFromArchive();
+            retryImages();
             for (Store.Contact c : Store.contacts()) if (c.pub == null) hello(c.name, false);
             flushAll();
         });

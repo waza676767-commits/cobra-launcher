@@ -297,7 +297,7 @@ public class ChatActivity extends Activity {
             r.text.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
             String time = DateUtils.formatSameDayTime(m.ts, System.currentTimeMillis(),
                     java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).toString();
-            r.time.setText(m.state == Store.PENDING ? time + "  · waiting to send" : time);
+            r.time.setText(m.state == Store.PENDING ? time + "  · waiting to send" : m.loading ? time + "  · 🖼 image loading…" : time);
 
             String key = m.media != null ? m.media : (Img.isImageUrl(text) ? text : null);
             if (key != null) {

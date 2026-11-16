@@ -33,6 +33,7 @@ final class Store {
     static final class Msg {
         long id, ts;
         String peer, text, media, mime, cid;
+        boolean loading;
         boolean mine;
         int state;
     }
@@ -43,18 +44,20 @@ final class Store {
         prefs = app.getSharedPreferences("s", Context.MODE_PRIVATE);
         mediaDir = new File(app.getFilesDir(), "media");
         mediaDir.mkdirs();
-        db = new SQLiteOpenHelper(app, "mathhelp.db", null, 1) {
+        db = new SQLiteOpenHelper(app, "mathhelp.db", null, 2) {
             @Override public void onConfigure(SQLiteDatabase d) { d.enableWriteAheadLogging(); }
             @Override public void onCreate(SQLiteDatabase d) {
                 d.execSQL("CREATE TABLE contacts(name TEXT PRIMARY KEY COLLATE NOCASE, pub TEXT, last INTEGER NOT NULL DEFAULT 0," +
                         " unread INTEGER NOT NULL DEFAULT 0, bad INTEGER NOT NULL DEFAULT 0)");
                 d.execSQL("CREATE TABLE msgs(_id INTEGER PRIMARY KEY AUTOINCREMENT, peer TEXT NOT NULL COLLATE NOCASE," +
                         " mine INTEGER NOT NULL, ts INTEGER NOT NULL, text TEXT NOT NULL, media TEXT, mime TEXT," +
-                        " state INTEGER NOT NULL, cid TEXT UNIQUE)");
+                        " state INTEGER NOT NULL, cid TEXT UNIQUE, fetch TEXT)");
                 d.execSQL("CREATE INDEX msgs_peer ON msgs(peer, _id)");
                 d.execSQL("CREATE TABLE seen(id TEXT PRIMARY KEY, t INTEGER NOT NULL) WITHOUT ROWID");
             }
-            @Override public void onUpgrade(SQLiteDatabase d, int a, int b) {}
+            @Override public void onUpgrade(SQLiteDatabase d, int a, int b) {
+                if (a < 2) d.execSQL("ALTER TABLE msgs ADD COLUMN fetch TEXT");
+            }
         }.getWritableDatabase();
         user = prefs.getString("user", null);
         pub = prefs.getString("pub", null);
@@ -89,9 +92,9 @@ final class Store {
 
     static void unmarkSeen(String id) { db.delete("seen", "id=?", new String[]{id}); }
 
-    /** The relay forgets messages after 12 h, so older seen-ids are useless. */
+    /** Kept 40 days: the GitHub backup can replay messages up to ~30 days old. */
     static void pruneSeen() {
-        db.delete("seen", "t<?", new String[]{String.valueOf(System.currentTimeMillis() - 13 * 3600_000L)});
+        db.delete("seen", "t<?", new String[]{String.valueOf(System.currentTimeMillis() - 40 * 86400_000L)});
     }
 
     // ---------- contacts ----------
@@ -161,16 +164,47 @@ final class Store {
         return id;
     }
 
+    static void setFetch(long id, String f) { db.execSQL("UPDATE msgs SET fetch=? WHERE _id=?", new Object[]{f, id}); }
+
+    static void setMedia(long id, String path, String mime) {
+        db.execSQL("UPDATE msgs SET media=?, mime=?, fetch=NULL WHERE _id=?", new Object[]{path, mime, id});
+    }
+
+    static void expireMedia(long id, String note) {
+        db.execSQL("UPDATE msgs SET fetch=NULL, text=CASE WHEN text='' THEN ? ELSE text||char(10)||? END WHERE _id=?",
+                new Object[]{note, note, id});
+    }
+
+    static long msgTime(long id) {
+        try (Cursor c = db.rawQuery("SELECT ts FROM msgs WHERE _id=?", new String[]{String.valueOf(id)})) {
+            return c.moveToFirst() ? c.getLong(0) : 0;
+        }
+    }
+
+    static String fetchOf(long id) {
+        try (Cursor c = db.rawQuery("SELECT fetch FROM msgs WHERE _id=?", new String[]{String.valueOf(id)})) {
+            return c.moveToFirst() ? c.getString(0) : null;
+        }
+    }
+
+    static List<long[]> fetchRows() {
+        List<long[]> r = new ArrayList<>();
+        try (Cursor c = db.rawQuery("SELECT _id FROM msgs WHERE fetch IS NOT NULL ORDER BY _id DESC LIMIT 50", null)) {
+            while (c.moveToNext()) r.add(new long[]{c.getLong(0)});
+        }
+        return r;
+    }
+
     static void markSent(long id) { db.execSQL("UPDATE msgs SET state=0 WHERE _id=?", new Object[]{id}); }
 
     private static Msg readMsg(Cursor c) {
         Msg m = new Msg();
         m.id = c.getLong(0); m.peer = c.getString(1); m.mine = c.getInt(2) != 0; m.ts = c.getLong(3);
-        m.text = c.getString(4); m.media = c.getString(5); m.mime = c.getString(6); m.state = c.getInt(7); m.cid = c.getString(8);
+        m.text = c.getString(4); m.media = c.getString(5); m.mime = c.getString(6); m.state = c.getInt(7); m.cid = c.getString(8); m.loading = !c.isNull(9);
         return m;
     }
 
-    private static final String COLS = "_id,peer,mine,ts,text,media,mime,state,cid";
+    private static final String COLS = "_id,peer,mine,ts,text,media,mime,state,cid,fetch";
 
     /** Up to `limit` messages with id < before, returned oldest first. */
     static List<Msg> messages(String peer, long before, int limit) {

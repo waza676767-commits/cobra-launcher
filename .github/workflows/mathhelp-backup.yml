@@ -1,0 +1,26 @@
+# mathhelp backup bot: every ~15 min, copies new (end-to-end encrypted) messages and images from the
+# free ntfy.sh relay into mathhelp-archive/, so phones that were off for more than 12 h still get them.
+name: mathhelp backup
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: mathhelp-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 mathhelp-backup/backup.py
+      - name: Commit
+        run: |
+          git add mathhelp-archive
+          git diff --cached --quiet && exit 0
+          git -c user.name="mathhelp-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "mathhelp backup"
+          for i in 1 2 3; do git pull -q --rebase && git push -q && exit 0; sleep 5; done
+          exit 1

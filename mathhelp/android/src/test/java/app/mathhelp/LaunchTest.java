@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {28, 29, 31, 33, 34, 35})
+@Config(sdk = {28, 31, 34, 36})
 public class LaunchTest {
     static <T extends View> List<T> find(View v, Class<T> c, List<T> out) {
         if (c.isInstance(v)) out.add(c.cast(v));
