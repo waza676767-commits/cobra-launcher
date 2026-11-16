@@ -22,11 +22,13 @@ final class Store {
     private static PrivateKey priv;
 
     static final int SENT = 0, PENDING = 1;
+    /** Contact states: friends, I sent a request, they sent me a request. */
+    static final int FRIEND = 0, OUT = 1, IN = 2;
 
     static final class Contact {
         String name, pub;
         long last;
-        int unread;
+        int unread, state;
         boolean bad, pending;
     }
 
@@ -44,11 +46,11 @@ final class Store {
         prefs = app.getSharedPreferences("s", Context.MODE_PRIVATE);
         mediaDir = new File(app.getFilesDir(), "media");
         mediaDir.mkdirs();
-        db = new SQLiteOpenHelper(app, "mathhelp.db", null, 2) {
+        db = new SQLiteOpenHelper(app, "mathhelp.db", null, 3) {
             @Override public void onConfigure(SQLiteDatabase d) { d.enableWriteAheadLogging(); }
             @Override public void onCreate(SQLiteDatabase d) {
                 d.execSQL("CREATE TABLE contacts(name TEXT PRIMARY KEY COLLATE NOCASE, pub TEXT, last INTEGER NOT NULL DEFAULT 0," +
-                        " unread INTEGER NOT NULL DEFAULT 0, bad INTEGER NOT NULL DEFAULT 0)");
+                        " unread INTEGER NOT NULL DEFAULT 0, bad INTEGER NOT NULL DEFAULT 0, state INTEGER NOT NULL DEFAULT 0)");
                 d.execSQL("CREATE TABLE msgs(_id INTEGER PRIMARY KEY AUTOINCREMENT, peer TEXT NOT NULL COLLATE NOCASE," +
                         " mine INTEGER NOT NULL, ts INTEGER NOT NULL, text TEXT NOT NULL, media TEXT, mime TEXT," +
                         " state INTEGER NOT NULL, cid TEXT UNIQUE, fetch TEXT)");
@@ -57,6 +59,10 @@ final class Store {
             }
             @Override public void onUpgrade(SQLiteDatabase d, int a, int b) {
                 if (a < 2) d.execSQL("ALTER TABLE msgs ADD COLUMN fetch TEXT");
+                if (a < 3) {
+                    d.execSQL("ALTER TABLE contacts ADD COLUMN state INTEGER NOT NULL DEFAULT 0");
+                    d.execSQL("UPDATE contacts SET state=1 WHERE pub IS NULL"); // never answered: still a request
+                }
             }
         }.getWritableDatabase();
         user = prefs.getString("user", null);
@@ -100,7 +106,7 @@ final class Store {
     // ---------- contacts ----------
 
     static Contact contact(String name) {
-        try (Cursor c = db.rawQuery("SELECT name,pub,last,unread,bad FROM contacts WHERE name=?", new String[]{name})) {
+        try (Cursor c = db.rawQuery("SELECT name,pub,last,unread,bad,state FROM contacts WHERE name=?", new String[]{name})) {
             if (!c.moveToFirst()) return null;
             return readContact(c);
         }
@@ -109,24 +115,25 @@ final class Store {
     private static Contact readContact(Cursor c) {
         Contact k = new Contact();
         k.name = c.getString(0); k.pub = c.getString(1); k.last = c.getLong(2);
-        k.unread = c.getInt(3); k.bad = c.getInt(4) != 0;
+        k.unread = c.getInt(3); k.bad = c.getInt(4) != 0; k.state = c.getInt(5);
         return k;
     }
 
     static List<Contact> contacts() {
         List<Contact> r = new ArrayList<>();
-        try (Cursor c = db.rawQuery("SELECT name,pub,last,unread,bad," +
+        try (Cursor c = db.rawQuery("SELECT name,pub,last,unread,bad,state," +
                 " EXISTS(SELECT 1 FROM msgs m WHERE m.peer=contacts.name AND m.state=1)" +
-                " FROM contacts ORDER BY last DESC, name", null)) {
-            while (c.moveToNext()) { Contact k = readContact(c); k.pending = c.getInt(5) != 0; r.add(k); }
+                " FROM contacts ORDER BY state=2 DESC, last DESC, name", null)) {
+            while (c.moveToNext()) { Contact k = readContact(c); k.pending = c.getInt(6) != 0; r.add(k); }
         }
         return r;
     }
 
-    static void addContact(String name, String pubKey) {
+    static void addContact(String name, String pubKey, int state) {
         ContentValues v = new ContentValues();
         v.put("name", name);
         v.put("pub", pubKey);
+        v.put("state", state);
         v.put("last", System.currentTimeMillis());
         db.insertWithOnConflict("contacts", null, v, SQLiteDatabase.CONFLICT_IGNORE);
     }
@@ -136,6 +143,10 @@ final class Store {
         v.put("pub", pubKey);
         v.put("bad", 0);
         db.update("contacts", v, "name=?", new String[]{name});
+    }
+
+    static void setState(String name, int state) {
+        db.execSQL("UPDATE contacts SET state=?, last=? WHERE name=?", new Object[]{state, System.currentTimeMillis(), name});
     }
 
     static void markBad(String name) { db.execSQL("UPDATE contacts SET bad=1 WHERE name=?", new Object[]{name}); }

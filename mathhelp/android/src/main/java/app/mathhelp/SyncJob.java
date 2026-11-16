@@ -7,7 +7,7 @@ import android.app.job.JobService;
 import android.content.ComponentName;
 import android.content.Context;
 
-/** Checks the inbox about every 15 minutes while the app is closed, so messages and images aren't missed. */
+/** Fallback: checks the inbox about every 15 minutes in case the live connection was killed. */
 public class SyncJob extends JobService {
     static void schedule(Context c) {
         try {
@@ -26,8 +26,8 @@ public class SyncJob extends JobService {
     @Override
     public boolean onStartJob(JobParameters p) {
         Relay.init(this);
-        Relay.q.execute(() -> {
-            try { if (!Relay.foreground) Relay.pollOnce(); }
+        Relay.bg.execute(() -> {
+            try { if (!Relay.running()) Relay.pollOnce(); }
             finally { jobFinished(p, false); }
         });
         return true;

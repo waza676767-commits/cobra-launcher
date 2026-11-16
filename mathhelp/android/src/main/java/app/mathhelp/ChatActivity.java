@@ -118,7 +118,7 @@ public class ChatActivity extends Activity {
     /** Re-read everything from the oldest loaded message onwards (new messages, state changes). */
     private void reload() {
         final long from = msgs.isEmpty() ? -1 : msgs.get(0).id;
-        Relay.q.execute(() -> {
+        Relay.db.execute(() -> {
             List<Store.Msg> l = from < 0 ? Store.messages(peer, Long.MAX_VALUE, PAGE) : Store.messagesFrom(peer, from);
             Store.clearUnread(peer);
             Relay.ui.post(() -> {
@@ -138,7 +138,7 @@ public class ChatActivity extends Activity {
         if (msgs.isEmpty()) return;
         loadingOlder = true;
         final long before = msgs.get(0).id;
-        Relay.q.execute(() -> {
+        Relay.db.execute(() -> {
             List<Store.Msg> l = Store.messages(peer, before, PAGE);
             Relay.ui.post(() -> {
                 if (l.size() < PAGE) hasMore = false;
@@ -171,7 +171,7 @@ public class ChatActivity extends Activity {
     /** Copy the picked image into app storage (shrinking big photos to fit the 2 MB relay limit), then send. */
     private void attach(Uri uri, String mime, String fallbackLink, Runnable done) {
         ContentResolver cr = getContentResolver();
-        Relay.q.execute(() -> {
+        Relay.bg.execute(() -> {
             try {
                 byte[] b = Relay.readAll(cr.openInputStream(uri));
                 String type = mime == null || !mime.startsWith("image/") ? "image/jpeg" : mime;
@@ -335,6 +335,7 @@ public class ChatActivity extends Activity {
     protected void onResume() {
         super.onResume();
         openPeer = peer;
+        Relay.resumed();
         Relay.onChange = this::reload;
         Relay.start();
         reload();
@@ -344,6 +345,6 @@ public class ChatActivity extends Activity {
     protected void onPause() {
         super.onPause();
         openPeer = null;
-        Relay.stop();
+        Relay.paused();
     }
 }

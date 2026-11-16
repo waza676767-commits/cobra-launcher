@@ -86,7 +86,7 @@ public class MainActivity extends Activity {
         go.setText("Start");
         l.addView(go, new LinearLayout.LayoutParams(-1, -2));
         TextView note = new TextView(this);
-        note.setText("Friends add you by this username. Pick something unique — 2-24 letters, digits, _ . -\n\n" +
+        note.setText("Friends send you a friend request using this username. Pick something unique — 2-24 letters, digits, _ . -\n\n" +
                 "No account or password needed. Messages are end-to-end encrypted and your history stays on this phone.");
         note.setPadding(0, dp(this, 12), 0, 0);
         l.addView(note);
@@ -95,7 +95,7 @@ public class MainActivity extends Activity {
             String u = usr.getText().toString().trim();
             if (!validName(u)) { toast(this, "2-24 characters: letters, digits, _ . -"); return; }
             go.setEnabled(false);
-            Relay.q.execute(() -> {
+            Relay.db.execute(() -> {
                 try {
                     Store.createUser(u);
                     Relay.ui.post(() -> { showContacts(); goLive(); });
@@ -117,12 +117,12 @@ public class MainActivity extends Activity {
         int p = dp(this, 8);
         row.setPadding(p, p, p, 0);
         EditText add = new EditText(this);
-        add.setHint("Add by username");
+        add.setHint("Friend's username");
         add.setSingleLine(true);
         add.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         add.setImeOptions(EditorInfo.IME_ACTION_DONE);
         Button btn = new Button(this);
-        btn.setText("Add");
+        btn.setText("Add friend");
         row.addView(add, new LinearLayout.LayoutParams(0, -2, 1));
         row.addView(btn);
         l.addView(row);
@@ -141,20 +141,22 @@ public class MainActivity extends Activity {
                     t.setPadding(dp(MainActivity.this, 16), dp(MainActivity.this, 14), dp(MainActivity.this, 16), dp(MainActivity.this, 14));
                 }
                 Store.Contact c = peers.get(pos);
-                String s = c.name;
-                if (c.unread > 0) s += "   (" + c.unread + " new)";
-                if (c.bad) s += "   ⚠ key changed — long-press";
-                else if (c.pub == null) s += "   (waiting for them to open the app)";
+                String s;
+                boolean bold = false;
+                if (c.state == Store.IN) { s = "📨 " + c.name + " wants to be your friend — tap"; bold = true; }
+                else if (c.state == Store.OUT) s = c.name + "   · request sent, waiting…";
+                else { s = c.name; if (c.unread > 0) { s += "   (" + c.unread + " new)"; bold = true; } }
                 t.setText(s);
-                t.setTypeface(null, c.unread > 0 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+                t.setTypeface(null, bold ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
                 return t;
             }
         };
         lv.setAdapter(adapter);
-        lv.setOnItemClickListener((a, v, pos, id) -> open(peers.get(pos).name));
+        lv.setOnItemClickListener((a, v, pos, id) -> tap(peers.get(pos)));
         lv.setOnItemLongClickListener((a, v, pos, id) -> { menu(peers.get(pos)); return true; });
         TextView empty = new TextView(this);
-        empty.setText("No chats yet. Add someone by their username above.\n\nYour username: " + Store.user);
+        empty.setText("No friends yet. Type a friend's username above and tap Add friend — they'll get a request.\n\n" +
+                "Your username: " + Store.user + "  (tell friends to add you)");
         empty.setPadding(dp(this, 16), dp(this, 24), dp(this, 16), 0);
         l.addView(empty);
         lv.setEmptyView(empty);
@@ -166,20 +168,41 @@ public class MainActivity extends Activity {
             if (!validName(u)) { toast(this, "Not a valid username"); return; }
             if (u.equalsIgnoreCase(Store.user)) { toast(this, "That's you"); return; }
             add.setText("");
-            Relay.addContact(u);
-            open(u);
+            Relay.requestFriend(u, () -> toast(this, "Friend request sent to " + u),
+                    err -> toast(this, "Couldn't send: " + err));
         };
         btn.setOnClickListener(v -> doAdd.run());
         add.setOnEditorActionListener((v, a, e) -> { doAdd.run(); return true; });
     }
 
+    private void tap(Store.Contact c) {
+        if (c.state == Store.FRIEND) { open(c.name); return; }
+        if (c.state == Store.IN) {
+            new AlertDialog.Builder(this).setTitle(c.name + " wants to be your friend")
+                    .setPositiveButton("Accept", (d, w) -> { Relay.acceptFriend(c.name); open(c.name); })
+                    .setNegativeButton("Decline", (d, w) -> remove(c.name))
+                    .setNeutralButton("Later", null).show();
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle("Waiting for " + c.name)
+                .setMessage("You sent " + c.name + " a friend request. You can chat once they accept.")
+                .setPositiveButton("Send again", (d, w) -> Relay.requestFriend(c.name,
+                        () -> toast(this, "Sent again"), err -> toast(this, "Couldn't send: " + err)))
+                .setNegativeButton("Cancel request", (d, w) -> remove(c.name))
+                .setNeutralButton("OK", null).show();
+    }
+
     private void menu(Store.Contact c) {
         new AlertDialog.Builder(this).setTitle(c.name)
-                .setItems(new String[]{"Re-trust key (if they reinstalled)", "Delete chat"}, (d, which) -> Relay.q.execute(() -> {
-                    if (which == 0) { Store.setPub(c.name, null); Relay.addContact(c.name); }
-                    else Store.deleteContact(c.name);
-                    Relay.ui.post(this::refresh);
-                })).show();
+                .setItems(new String[]{"Remove friend and delete chat"}, (d, which) ->
+                        new AlertDialog.Builder(this).setMessage("Remove " + c.name + " and delete the whole chat?")
+                                .setPositiveButton("Remove", (d2, w) -> remove(c.name))
+                                .setNegativeButton("Cancel", null).show())
+                .show();
+    }
+
+    private void remove(String name) {
+        Relay.db.execute(() -> { Store.deleteContact(name); Relay.ui.post(this::refresh); });
     }
 
     private void open(String peer) {
@@ -188,7 +211,7 @@ public class MainActivity extends Activity {
 
     private void refresh() {
         if (adapter == null) return;
-        Relay.q.execute(() -> {
+        Relay.db.execute(() -> {
             List<Store.Contact> r = Store.contacts();
             Relay.ui.post(() -> { peers.clear(); peers.addAll(r); adapter.notifyDataSetChanged(); });
         });
@@ -197,6 +220,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        Relay.resumed();
         if (Store.hasUser()) goLive();
     }
 
@@ -204,6 +228,7 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
         SyncJob.schedule(this);
+        MsgService.start(this);
         Relay.onChange = this::refresh;
         Relay.start();
         refresh();
@@ -212,7 +237,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-        Relay.stop();
+        Relay.paused();
     }
 
     @Override
@@ -224,6 +249,8 @@ public class MainActivity extends Activity {
     @Override
     public boolean onOptionsItemSelected(MenuItem i) {
         toast(this, "Tell friends to add: " + Store.user);
+        ((android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE))
+                .setPrimaryClip(android.content.ClipData.newPlainText("username", Store.user));
         return true;
     }
 }
