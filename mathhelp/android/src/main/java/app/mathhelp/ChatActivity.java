@@ -1,4 +1,4 @@
-package app.tinymsg;
+package app.mathhelp;
 
 import android.app.Activity;
 import android.app.Dialog;
@@ -42,8 +42,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static app.tinymsg.MainActivity.dp;
-import static app.tinymsg.MainActivity.toast;
+import static app.mathhelp.MainActivity.dp;
+import static app.mathhelp.MainActivity.toast;
 
 public class ChatActivity extends Activity {
     /** Peer whose chat is currently on screen (so it isn't counted as unread). */

@@ -1,4 +1,4 @@
-package app.tinymsg;
+package app.mathhelp;
 
 import android.content.Context;
 import android.content.SharedPreferences;

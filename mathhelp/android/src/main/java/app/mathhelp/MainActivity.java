@@ -1,4 +1,4 @@
-package app.tinymsg;
+package app.mathhelp;
 
 import android.app.Activity;
 import android.content.Context;
@@ -54,7 +54,7 @@ public class MainActivity extends Activity {
     }
 
     private void showLogin() {
-        setTitle("Msg — sign in");
+        setTitle("mathhelp — sign in");
         LinearLayout l = new LinearLayout(this);
         l.setOrientation(LinearLayout.VERTICAL);
         int p = dp(this, 20);

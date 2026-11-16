@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <application
-        android:label="Msg"
+        android:label="mathhelp"
         android:icon="@drawable/ic"
         android:theme="@style/T"
         android:usesCleartextTraffic="true"

@@ -4,4 +4,4 @@ pluginManagement {
 dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
-rootProject.name = "tinymsg"
+rootProject.name = "mathhelp"

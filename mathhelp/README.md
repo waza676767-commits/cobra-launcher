@@ -1,7 +1,7 @@
-# Msg — tiny, fast messenger
+# mathhelp — tiny, fast messenger
 
 - **Server** (`server/`): Rust (axum + SQLite). One ~3 MB binary, no setup.
-- **Android app** (`android/`, prebuilt: `tinymsg.apk`, ~37 KB): plain native Android views, zero libraries.
+- **Android app** (`android/`, prebuilt: `mathhelp.apk`, ~37 KB): plain native Android views, zero libraries.
 
 ## Features
 - Make an account with any username + password
@@ -18,12 +18,12 @@ You need the server running somewhere both phones can reach: a cheap VPS, or a P
 ```sh
 cd server
 cargo build --release
-PORT=8080 DATA=./data ./target/release/msgd
+PORT=8080 DATA=./data ./target/release/mathhelp
 ```
 Open port 8080 in the firewall. Everything is stored in `DATA/` (`msg.db` + `media/`).
 
 ## Install the app
-Copy `tinymsg.apk` to the phone and open it (allow "install unknown apps").
+Copy `mathhelp.apk` to the phone and open it (allow "install unknown apps").
 On first launch enter the server address (e.g. `203.0.113.5:8080`), pick a username + password, and tap **Create account**.
 
 Build it yourself: `cd android && ./gradlew assembleRelease` (needs the Android SDK).

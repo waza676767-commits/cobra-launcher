@@ -1,4 +1,4 @@
-//! msgd — tiny, fast messaging server.
+//! mathhelp — tiny, fast messaging server.
 //!
 //! Storage: one SQLite file + a directory of uploaded media.
 //! Delivery: HTTP long-polling (works through every proxy / mobile network).
@@ -414,13 +414,13 @@ async fn main() {
         .route("/poll", get(poll))
         .route("/upload", post(upload).layer(DefaultBodyLimit::max(MAX_UPLOAD)))
         .route("/m/{id}", get(media))
-        .route("/", get(|| async { "msgd ok" }))
+        .route("/", get(|| async { "mathhelp ok" }))
         .with_state(app);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".into());
     let addr = format!("0.0.0.0:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
-    eprintln!("msgd listening on {addr}, data in {}", data.display());
+    eprintln!("mathhelp listening on {addr}, data in {}", data.display());
     axum::serve(listener, router)
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
