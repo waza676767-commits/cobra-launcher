@@ -26,5 +26,5 @@ public class App extends Application {
         });
     }
 
-    static final class BuildConfigLite { static final String VERSION = "1.1"; }
+    static final class BuildConfigLite { static final String VERSION = "1.2"; }
 }
