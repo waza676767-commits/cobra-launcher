@@ -98,12 +98,16 @@ fun Page(content: @Composable androidx.compose.foundation.layout.ColumnScope.() 
 fun BatteryRing(level: Int?, on: Boolean, modifier: Modifier) {
     val accent = LocalAccent.current
     val col = when { level == null || !on -> C.faint; level <= 15 -> C.danger; else -> accent }
+    val anim = remember { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(level) {
+        anim.animateTo((level ?: 0) / 100f, androidx.compose.animation.core.tween(900, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+    }
     Box(modifier, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.minDimension * 0.09f
             val inset = w / 2
             drawArc(Color(0x22FFFFFF), 135f, 270f, false, Offset(inset, inset), Size(size.width - w, size.height - w), style = Stroke(w, cap = StrokeCap.Round))
-            if (level != null) drawArc(col, 135f, 270f * level / 100f, false, Offset(inset, inset),
+            if (level != null) drawArc(col, 135f, 270f * anim.value, false, Offset(inset, inset),
                 Size(size.width - w, size.height - w), style = Stroke(w, cap = StrokeCap.Round))
         }
         Text(level?.let { "$it" } ?: "–", style = Type.h.copy(fontSize = 20.sp))

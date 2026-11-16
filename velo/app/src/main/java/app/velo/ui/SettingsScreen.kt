@@ -81,6 +81,8 @@ fun SettingsScreen() {
                 }
             }
             ToggleRow(null, T("hd_voice"), T("hd_voice_sub"), s.hdVoice) { v -> Store.update { it.copy(hdVoice = v) } }
+            NavRow(Icons.Rounded.GraphicEq, T("better_voices")) { Speaker.openVoiceDownloads(ctx) }
+            Text(T("better_voices_sub"), style = Type.sub, modifier = Modifier.padding(start = 54.dp))
         }
 
         SectionLabel(T("accent"))
@@ -121,6 +123,7 @@ fun SettingsScreen() {
         Glass(Modifier.fillMaxWidth()) {
             var key by remember { mutableStateOf(s.apiKey) }
             var saved by remember { mutableStateOf(false) }
+            var test by remember { mutableStateOf<Pair<Boolean?, String>?>(null) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconBubble(Icons.Rounded.Key)
                 Spacer(Modifier.width(14.dp))
@@ -137,8 +140,17 @@ fun SettingsScreen() {
                 }
                 Spacer(Modifier.width(10.dp))
                 PillButton(if (saved) T("saved_ok") else T("save")) {
-                    Store.update { it.copy(apiKey = key.trim()) }; saved = true
+                    // Keys often get pasted with spaces/newlines or quotes around them.
+                    val clean = key.trim().trim('"', '\'', ' ').replace(Regex("\\s"), "")
+                    key = clean
+                    Store.update { it.copy(apiKey = clean) }; saved = true
+                    test = null to T("testing")
+                    app.velo.voice.Assistant.testKey(clean) { ok, txt -> test = ok to txt }
                 }
+            }
+            test?.let { (ok, txt) ->
+                Spacer(Modifier.height(10.dp))
+                Text(txt, style = Type.sub.copy(color = when (ok) { true -> accent; false -> C.danger; null -> C.sub }))
             }
         }
 

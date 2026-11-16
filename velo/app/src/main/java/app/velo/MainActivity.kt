@@ -12,6 +12,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -64,6 +72,7 @@ import app.velo.ui.LocalAccent
 import app.velo.ui.NoiseScreen
 import app.velo.ui.SettingsScreen
 import app.velo.ui.VeloTheme
+import app.velo.ui.pressable
 import app.velo.voice.Speaker
 import app.velo.voice.VeloService
 
@@ -123,7 +132,23 @@ internal fun Root(start: Screen = Screen.HOME) {
             BackHandler(enabled = screen != Screen.HOME) {
                 screen = if (screen.ordinal > Screen.SETTINGS.ordinal) tab else Screen.HOME.also { tab = it }
             }
-            key(s.lang) { AnimatedContent(screen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "nav") { sc ->
+            key(s.lang) { AnimatedContent(screen, transitionSpec = {
+                val ease = androidx.compose.animation.core.FastOutSlowInEasing
+                val sub = Screen.SETTINGS.ordinal
+                when {
+                    // opening a detail page: slides in from the right
+                    targetState.ordinal > sub && initialState.ordinal <= sub ->
+                        (slideInHorizontally(tween(320, easing = ease)) { it / 5 } + fadeIn(tween(260))) togetherWith
+                            (slideOutHorizontally(tween(320, easing = ease)) { -it / 12 } + fadeOut(tween(180)))
+                    // going back
+                    initialState.ordinal > sub && targetState.ordinal <= sub ->
+                        (slideInHorizontally(tween(320, easing = ease)) { -it / 12 } + fadeIn(tween(260))) togetherWith
+                            (slideOutHorizontally(tween(320, easing = ease)) { it / 5 } + fadeOut(tween(180)))
+                    // switching tabs: soft cross-fade with a hint of zoom
+                    else -> (fadeIn(tween(240, delayMillis = 60)) + scaleIn(tween(300, easing = ease), initialScale = 0.985f)) togetherWith
+                        fadeOut(tween(140))
+                }
+            }, label = "nav") { sc ->
                 when (sc) {
                     Screen.HOME -> HomeScreen(go)
                     Screen.DEVICES -> DevicesScreen(go)
@@ -166,17 +191,18 @@ private fun PillNav(selected: Screen, modifier: Modifier, onSelect: (Screen) -> 
 
 @Composable
 private fun NavItem(icon: ImageVector, label: String, on: Boolean, accent: Color, onClick: () -> Unit) {
+    val bg by animateColorAsState(if (on) accent else Color.Transparent, tween(260), label = "navBg")
+    val tint by animateColorAsState(if (on) Color.Black else C.sub, tween(260), label = "navTint")
     Row(
-        Modifier.clip(RoundedCornerShape(50))
-            .background(if (on) accent else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = if (on) 16.dp else 14.dp, vertical = 12.dp),
+        Modifier.pressable(0.92f, onClick).clip(RoundedCornerShape(50)).background(bg)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, label, tint = if (on) Color.Black else C.sub, modifier = Modifier.size(22.dp))
-        if (on) {
-            Spacer(Modifier.width(8.dp))
-            Text(label, color = Color.Black, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Icon(icon, label, tint = tint, modifier = Modifier.size(21.dp))
+        AnimatedVisibility(on, enter = expandHorizontally(tween(260)) + fadeIn(tween(200, 60)),
+            exit = shrinkHorizontally(tween(220)) + fadeOut(tween(120))) {
+            Text(label, color = Color.Black, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                modifier = Modifier.padding(start = 8.dp, end = 2.dp))
         }
     }
 }

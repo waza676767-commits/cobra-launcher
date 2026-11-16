@@ -15,12 +15,16 @@ enum class Lang(val code: String, val tag: String, val label: String) {
 }
 
 /** The voices Velo offers. Each maps onto the best installed TTS voice of that gender, plus pitch/rate tuning. */
+/**
+ * The voices Velo offers. Each maps onto a different real recorded/neural voice of that gender;
+ * pitch and rate stay close to 1.0 because bending them is what makes TTS sound robotic.
+ */
 enum class VoiceStyle(val female: Boolean, val rank: Int, val pitch: Float, val rate: Float) {
-    ARIA(true, 0, 1.0f, 1.0f),     // clear, neutral female
-    NOVA(true, 1, 1.08f, 1.05f),   // brighter, upbeat female
+    ARIA(true, 0, 1.0f, 1.0f),     // clear, warm female
+    NOVA(true, 1, 1.02f, 1.04f),   // brighter female
     LEO(false, 0, 1.0f, 1.0f),     // natural male
-    ATLAS(false, 1, 0.82f, 0.95f), // deep, calm male
-    ECHO(true, 0, 0.92f, 1.12f)    // quick, neutral "assistant" tone
+    ATLAS(false, 1, 0.97f, 0.96f), // calm, lower male
+    ECHO(true, 2, 1.0f, 1.07f)     // quick, light
 }
 
 enum class Accent(val argb: Long) {

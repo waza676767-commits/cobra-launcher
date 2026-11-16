@@ -39,7 +39,7 @@ android {
         resources {
             excludes += listOf(
                 "META-INF/{AL2.0,LGPL2.1}", "META-INF/DEPENDENCIES", "META-INF/LICENSE*",
-                "META-INF/NOTICE*", "META-INF/native-image/**", "META-INF/*.kotlin_module", "META-INF/versions/**"
+                "META-INF/NOTICE*", "META-INF/native-image/**", "META-INF/versions/**"
             )
         }
     }
@@ -66,9 +66,11 @@ dependencies {
 
     // Screenshot tests of the UI on the JVM (no phone needed)
     testImplementation("junit:junit:4.13.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("io.github.takahirom.roborazzi:roborazzi:1.39.0")
     testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.39.0")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+

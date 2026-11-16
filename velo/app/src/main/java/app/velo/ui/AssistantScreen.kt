@@ -80,7 +80,7 @@ fun AssistantScreen() {
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, contentPadding = PaddingValues(vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (chat.isEmpty()) item { Bubble(false, T("greet")) }
-            items(chat) { Bubble(it.fromUser, it.text) }
+            items(chat) { Box(Modifier.animateItem()) { Bubble(it.fromUser, it.text) } }
             if (partial.isNotBlank()) item { Bubble(true, partial, ghost = true) }
         }
 

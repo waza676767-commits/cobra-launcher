@@ -30,9 +30,24 @@ object Speaker {
         "iob", "iog", "tpc", "tpf", "sfg", "gba", "gbc", "gbg", "eea", "eec", "eee", "esc", "esf", "vfv", "aua", "auc"
     )
 
+    const val GOOGLE_TTS = "com.google.android.tts"
+
+    fun hasGoogleEngine(ctx: Context) = runCatching { ctx.packageManager.getPackageInfo(GOOGLE_TTS, 0); true }.getOrDefault(false)
+
+    /** Opens the screen where Google's high-quality voices can be downloaded. */
+    fun openVoiceDownloads(ctx: Context) {
+        val i = android.content.Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA).setPackage(GOOGLE_TTS)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { ctx.startActivity(i) }.onFailure {
+            runCatching { ctx.startActivity(android.content.Intent("com.android.settings.TTS_SETTINGS").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
+    }
+
     fun init(ctx: Context) {
         if (tts != null) return
-        tts = TextToSpeech(ctx.applicationContext) { status ->
+        // Phones like Xiaomi default to their own, flatter TTS engine. Google's neural voices sound far more human.
+        val engine = if (hasGoogleEngine(ctx)) GOOGLE_TTS else null
+        tts = TextToSpeech(ctx.applicationContext, { status ->
             ready = status == TextToSpeech.SUCCESS
             if (ready) {
                 tts?.setAudioAttributes(AudioAttributes.Builder()
@@ -47,7 +62,7 @@ object Speaker {
                 pending.forEach { speak(it.first, it.second) }
                 pending.clear()
             }
-        }
+        }, engine)
     }
 
     private fun gender(v: Voice): Boolean? {
@@ -66,20 +81,22 @@ object Speaker {
             .filter { it.locale.language == loc.language && !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
         if (all.isEmpty()) return null to 1f
         fun score(v: Voice): Int {
-            var s = v.quality
+            var s = v.quality                     // 400 = very high (neural)
             if (v.locale.country == loc.country) s += 200
-            if (v.isNetworkConnectionRequired) s += if (hd) 150 else -150
-            if (gender(v) == style.female) s += 1000
+            // Network voices are Google's WaveNet-style neural voices: the most human-sounding.
+            if (v.isNetworkConnectionRequired) s += if (hd) 300 else -300
+            if (v.latency <= Voice.LATENCY_NORMAL) s += 20
             return s
         }
         val ranked = all.sortedByDescending(::score)
         val sameGender = ranked.filter { gender(it) == style.female }
         val v = if (sameGender.isNotEmpty()) sameGender[style.rank.coerceAtMost(sameGender.size - 1)] else ranked.first()
         // If this language has no voice of the wanted gender (e.g. Romanian male), shape the pitch instead.
+        // Only a gentle nudge when the language has no voice of that gender (e.g. Romanian male).
         val pitchFix = when {
             gender(v) == style.female || gender(v) == null -> 1f
-            style.female -> 1.25f
-            else -> 0.78f
+            style.female -> 1.08f
+            else -> 0.9f
         }
         return v to pitchFix
     }
@@ -102,7 +119,15 @@ object Speaker {
         val id = "v${counter++}"
         done?.let { callbacks[id] = it }
         val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1f) }
-        t.speak(clean(text), TextToSpeech.QUEUE_FLUSH, params, id)
+        // Speak sentence by sentence with short breaths between them: much closer to how people talk.
+        val parts = clean(text).split(Regex("(?<=[.!?…])\\s+")).filter { it.isNotBlank() }
+        if (parts.size <= 1) { t.speak(clean(text), TextToSpeech.QUEUE_FLUSH, params, id); return }
+        t.stop()
+        parts.forEachIndexed { i, p ->
+            val last = i == parts.size - 1
+            t.speak(p, TextToSpeech.QUEUE_ADD, params, if (last) id else "${id}_$i")
+            if (!last) t.playSilentUtterance(if (p.endsWith("?")) 260L else 180L, TextToSpeech.QUEUE_ADD, "${id}_s$i")
+        }
     }
 
     fun stop() { tts?.stop(); callbacks.clear() }

@@ -53,7 +53,7 @@ object T {
         "s_volume_up" to "Turning it up.", "s_volume_down" to "Turning it down.", "s_paused" to "Okay.",
         "s_next" to "Next song.", "s_prev" to "Previous song.", "s_find" to "Playing the find sound.",
         "s_ready" to "Yes?",
-        "disc_link" to "Earbuds are disconnected", "s_bad_key" to "Your Velo AI key doesn't work. Check it in settings.", "photo" to "Photo", "my_buds" to "My earbuds", "battery_pct" to "%d%% battery"
+        "disc_link" to "Earbuds are disconnected", "s_bad_key" to "Your Velo AI key doesn't work. Check it in settings.", "s_no_credit" to "Your API account has no credit left. Add credit on console.anthropic.com.", "s_busy" to "I'm a bit busy, try again in a moment.", "s_offline" to "I can't reach the internet right now.", "test_key" to "Test", "better_voices" to "Get more natural voices", "better_voices_sub" to "Download Google's high-quality voices for your language", "key_ok" to "Key works ✓", "testing" to "Testing…", "photo" to "Photo", "my_buds" to "My earbuds", "battery_pct" to "%d%% battery"
     )
 
     private val ro = mapOf(
@@ -106,7 +106,7 @@ object T {
         "s_volume_up" to "Dau mai tare.", "s_volume_down" to "Dau mai încet.", "s_paused" to "Gata.",
         "s_next" to "Melodia următoare.", "s_prev" to "Melodia anterioară.", "s_find" to "Redau sunetul de găsire.",
         "s_ready" to "Da?",
-        "disc_link" to "Căștile sunt deconectate", "s_bad_key" to "Cheia Velo AI nu funcționează. Verifică-o în setări.", "photo" to "Fotografie", "my_buds" to "Căștile mele", "battery_pct" to "%d%% baterie"
+        "disc_link" to "Căștile sunt deconectate", "s_bad_key" to "Cheia Velo AI nu funcționează. Verifică-o în setări.", "s_no_credit" to "Contul API nu mai are credit. Adaugă credit pe console.anthropic.com.", "s_busy" to "Sunt puțin ocupat, mai încearcă o dată imediat.", "s_offline" to "Nu am conexiune la internet acum.", "test_key" to "Testează", "better_voices" to "Obține voci mai naturale", "better_voices_sub" to "Descarcă vocile de calitate înaltă Google pentru limba ta", "key_ok" to "Cheia funcționează ✓", "testing" to "Se testează…", "photo" to "Fotografie", "my_buds" to "Căștile mele", "battery_pct" to "%d%% baterie"
     )
 
     private val es = mapOf(
@@ -159,7 +159,7 @@ object T {
         "s_volume_up" to "Subiendo el volumen.", "s_volume_down" to "Bajando el volumen.", "s_paused" to "Vale.",
         "s_next" to "Siguiente canción.", "s_prev" to "Canción anterior.", "s_find" to "Reproduciendo el sonido de búsqueda.",
         "s_ready" to "¿Sí?",
-        "disc_link" to "Los auriculares están desconectados", "s_bad_key" to "Tu clave de Velo AI no funciona. Revísala en ajustes.", "photo" to "Foto", "my_buds" to "Mis auriculares", "battery_pct" to "%d%% de batería"
+        "disc_link" to "Los auriculares están desconectados", "s_bad_key" to "Tu clave de Velo AI no funciona. Revísala en ajustes.", "s_no_credit" to "Tu cuenta de API no tiene saldo. Añade crédito en console.anthropic.com.", "s_busy" to "Estoy algo ocupado, inténtalo de nuevo en un momento.", "s_offline" to "Ahora no tengo conexión a internet.", "test_key" to "Probar", "better_voices" to "Consigue voces más naturales", "better_voices_sub" to "Descarga las voces de alta calidad de Google para tu idioma", "key_ok" to "La clave funciona ✓", "testing" to "Probando…", "photo" to "Foto", "my_buds" to "Mis auriculares", "battery_pct" to "%d%% de batería"
     )
 
     fun get(lang: Lang, key: String): String = when (lang) {

@@ -15,4 +15,12 @@
 -dontwarn reactor.blockhound.**
 # Please add these rules to your existing keep rules in order to suppress warnings.
 # This is generated automatically by the Android Gradle plugin.
--dontwarn com.google.auto.value.AutoValue
+-dontwarn com.google.auto.value.AutoValue# Be conservative with the Claude SDK: keep its classes and Jackson unrenamed so JSON mapping can't break.
+-keep,allowshrinking class com.anthropic.** { *; }
+-keep,allowshrinking class com.fasterxml.jackson.** { *; }
+-keep class kotlin.Metadata { *; }
+-keep class kotlin.reflect.jvm.internal.** { *; }
+# kotlin-reflect (used by the SDK's JSON layer) looks up Kotlin stdlib classes by name at runtime.
+# Without this the shrunk app crashes with NoClassDefFoundError: kotlin/Unit when calling the AI.
+-keep class kotlin.** { *; }
+-dontwarn org.jetbrains.annotations.**

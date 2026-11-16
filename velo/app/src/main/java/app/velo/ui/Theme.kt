@@ -28,6 +28,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -64,13 +65,19 @@ fun VeloTheme(accent: Color, content: @Composable () -> Unit) {
             onSurface = C.text, onBackground = C.text, surfaceVariant = Color(0xFF1A1D21)
         )
     ) {
-        CompositionLocalProvider(LocalAccent provides accent, content = content)
+        // Everything ~10% more compact than Android's default size.
+        val d = androidx.compose.ui.platform.LocalDensity.current
+        CompositionLocalProvider(
+            LocalAccent provides accent,
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density * 0.9f, d.fontScale),
+            content = content
+        )
     }
 }
 
 object Type {
-    val hero = TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Normal, color = C.text, letterSpacing = (-0.5).sp)
-    val title = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Normal, color = C.text)
+    val hero = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Normal, color = C.text, letterSpacing = (-0.5).sp)
+    val title = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Normal, color = C.text)
     val h = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = C.text)
     val body = TextStyle(fontSize = 15.sp, color = C.text)
     val sub = TextStyle(fontSize = 13.sp, color = C.sub)
@@ -93,7 +100,7 @@ fun Glass(
     else Brush.verticalGradient(listOf(C.glassTop, C.glassBottom))
     val border = Brush.verticalGradient(listOf(Color(0x40FFFFFF), Color(0x0FFFFFFF)))
     var m = modifier.clip(shape).background(fill).border(1.dp, border, shape)
-    if (onClick != null) m = m.clickable(onClick = onClick)
+    if (onClick != null) m = Modifier.pressable(0.98f, onClick).then(m)
     Column(m.padding(padding), content = content)
 }
 
@@ -133,7 +140,7 @@ fun ToggleRow(icon: ImageVector?, title: String, sub: String?, checked: Boolean,
 @Composable
 fun NavRow(icon: ImageVector?, title: String, value: String? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(vertical = 12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).pressable(0.98f, onClick).padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) { IconBubble(icon); Spacer(Modifier.width(14.dp)) }
@@ -147,7 +154,7 @@ fun NavRow(icon: ImageVector?, title: String, value: String? = null, onClick: ()
 fun SubHeader(title: String, sub: String? = null, onBack: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 18.dp)) {
         Box(
-            Modifier.size(44.dp).clip(CircleShape).background(C.glassTop).clickable(onClick = onBack),
+            Modifier.size(44.dp).pressable(0.9f, onBack).clip(CircleShape).background(C.glassTop),
             contentAlignment = Alignment.Center
         ) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = C.text) }
         Spacer(Modifier.height(22.dp))
@@ -166,10 +173,11 @@ fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     ) {
         options.forEachIndexed { i, o ->
             val on = i == selected
+            val bg by androidx.compose.animation.animateColorAsState(if (on) accent else Color.Transparent,
+                androidx.compose.animation.core.tween(220), label = "seg")
             Box(
-                Modifier.weight(1f).clip(RoundedCornerShape(50))
-                    .background(if (on) accent else Color.Transparent)
-                    .clickable { onSelect(i) }.padding(vertical = 10.dp),
+                Modifier.weight(1f).pressable(0.96f) { onSelect(i) }.clip(RoundedCornerShape(50))
+                    .background(bg).padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(o, style = Type.body.copy(
@@ -183,10 +191,10 @@ fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
 fun PillButton(text: String, modifier: Modifier = Modifier, filled: Boolean = true, icon: ImageVector? = null, onClick: () -> Unit) {
     val accent = LocalAccent.current
     Row(
-        modifier.clip(RoundedCornerShape(50))
+        modifier.pressable(0.95f, onClick).clip(RoundedCornerShape(50))
             .background(if (filled) accent else C.glassTop)
             .border(1.dp, if (filled) Color.Transparent else C.stroke, RoundedCornerShape(50))
-            .clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center
     ) {
         if (icon != null) {

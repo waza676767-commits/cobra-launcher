@@ -84,7 +84,7 @@ fun HomeScreen(go: (Screen) -> Unit) {
         // Header: name + "Manage your earbuds >" with round buttons, like the maker app
         Row(Modifier.fillMaxWidth().padding(top = 18.dp), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text(b?.name ?: T("no_buds"), style = Type.hero.copy(fontSize = 34.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(b?.name ?: T("no_buds"), style = Type.hero.copy(fontSize = 30.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Row(Modifier.clickable { go(Screen.DEVICES) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(T("manage"), style = Type.body.copy(color = C.sub, fontSize = 17.sp))
                     Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = C.sub)
@@ -96,9 +96,10 @@ fun HomeScreen(go: (Screen) -> Unit) {
         }
 
         // Product photo
-        Box(Modifier.fillMaxWidth().aspectRatio(1.25f).padding(vertical = 8.dp)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1.55f).padding(vertical = 6.dp)) {
             BudsArt(b?.model?.style ?: BudsStyle.BEANS, accent, Modifier.fillMaxWidth().aspectRatio(1.3f).align(Alignment.Center)
-                .padding(horizontal = 40.dp), address = b?.address, name = b?.name)
+                
+                .padding(horizontal = 56.dp), address = b?.address, name = b?.name)
             if (b != null) Row(
                 Modifier.align(Alignment.BottomEnd).clip(RoundedCornerShape(50)).background(C.glassTop)
                     .border(1.dp, C.stroke, RoundedCornerShape(50))
@@ -175,13 +176,13 @@ private fun openNoise(ctx: android.content.Context, b: app.velo.bt.BudsState?, g
 
 @Composable
 private fun RoundIcon(icon: ImageVector, onClick: () -> Unit) {
-    Box(Modifier.size(44.dp).clip(CircleShape).border(1.5.dp, C.text.copy(alpha = 0.8f), CircleShape).clickable(onClick = onClick),
+    Box(Modifier.size(42.dp).pressable(0.9f, onClick).clip(CircleShape).border(1.5.dp, C.text.copy(alpha = 0.8f), CircleShape),
         contentAlignment = Alignment.Center) { Icon(icon, null, tint = C.text, modifier = Modifier.size(24.dp)) }
 }
 
 @Composable
 private fun NoiseButton(icon: ImageVector, label: String, onClick: () -> Unit) {
-    Column(Modifier.width(104.dp).clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick).padding(vertical = 4.dp),
+    Column(Modifier.width(104.dp).pressable(0.93f, onClick).padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(62.dp).clip(CircleShape).background(Color(0xFF3A3D42)), contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = Color(0xFF1A1C1F), modifier = Modifier.size(30.dp))
@@ -201,13 +202,13 @@ fun RowGroup(content: @Composable () -> Unit) {
 @Composable
 fun ListRow(icon: ImageVector, title: String, trailing: (@Composable () -> Unit)? = null, onClick: () -> Unit) {
     val accent = LocalAccent.current
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 14.dp),
+    Row(Modifier.fillMaxWidth().pressable(0.98f, onClick).padding(horizontal = 18.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(42.dp).clip(CircleShape).background(accent), contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = Color.Black, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(18.dp))
-        Text(title, style = Type.body.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold), modifier = Modifier.weight(1f),
+        Text(title, style = Type.body.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold), modifier = Modifier.weight(1f),
             maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (trailing != null) trailing() else Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = C.faint)
     }

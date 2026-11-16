@@ -13,7 +13,9 @@ import app.velo.data.T
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.anthropic.core.JsonValue
-import com.anthropic.errors.AnthropicServiceException
+import com.anthropic.errors.AnthropicIoException
+import com.anthropic.errors.BadRequestException
+import com.anthropic.errors.PermissionDeniedException
 import com.anthropic.errors.RateLimitException
 import com.anthropic.errors.UnauthorizedException
 import com.anthropic.models.messages.MessageCreateParams
@@ -30,7 +32,7 @@ import java.util.concurrent.Executors
 
 enum class Phase { IDLE, LISTENING, THINKING, SPEAKING }
 
-data class ChatMsg(val fromUser: Boolean, val text: String)
+data class ChatMsg(val fromUser: Boolean, val text: String, val context: Boolean = true)
 
 /**
  * Velo's brain. Device commands (music, volume, apps, battery, time, find) run instantly on the
@@ -43,6 +45,8 @@ object Assistant {
     private val main = Handler(Looper.getMainLooper())
     private var client: AnthropicClient? = null
     private var clientKey = ""
+    /** Tests point this at a local server. */
+    internal var baseUrl: String? = null
 
     private val _phase = MutableStateFlow(Phase.IDLE)
     val phase: StateFlow<Phase> = _phase.asStateFlow()
@@ -51,6 +55,8 @@ object Assistant {
     val partial = MutableStateFlow("")
 
     fun setPhase(p: Phase) { _phase.value = p }
+
+    internal fun addUserForTest(t: String) = add(ChatMsg(true, t))
 
     private fun add(m: ChatMsg) { _chat.value = (_chat.value + m).takeLast(60) }
 
@@ -65,24 +71,52 @@ object Assistant {
         if (local != null) { reply(local, speak, done); return }
 
         val key = Store.now.apiKey.trim()
-        if (key.isEmpty()) { reply(T("s_no_key"), speak, done); return }
+        if (key.isEmpty()) { reply(T("s_no_key"), speak, done, failed = true); return }
         _phase.value = Phase.THINKING
         io.execute {
-            val answer = try { askClaude(key) } catch (e: UnauthorizedException) {
-                T("s_bad_key")
-            } catch (e: RateLimitException) {
-                T("s_error")
-            } catch (e: AnthropicServiceException) {
-                T("s_error")
-            } catch (e: Exception) {
-                T("s_error")
-            }
-            main.post { reply(answer, speak, done) }
+            val (spoken, detail) = askSafely(key)
+            main.post { reply(spoken, speak, done, detail) }
         }
     }
 
-    private fun reply(text: String, speak: Boolean, done: () -> Unit) {
-        add(ChatMsg(false, text))
+    /** Runs a request and turns any failure into a clear spoken reason (+ technical detail for the chat). */
+    internal fun askSafely(key: String): Pair<String, String?> = try {
+        askClaude(key, extras = true) to null
+    } catch (e: BadRequestException) {
+        // Web search or the fallback beta may not be enabled on this API account: retry plain.
+        try { askClaude(key, extras = false) to null } catch (e2: Exception) { explain(e2) }
+    } catch (e: Exception) { explain(e) }
+
+    private fun explain(e: Exception): Pair<String, String?> {
+        val msg = (e.message ?: e.javaClass.simpleName).take(300)
+        val spoken = when {
+            e is UnauthorizedException || e is PermissionDeniedException -> T("s_bad_key")
+            msg.contains("credit balance", true) || msg.contains("billing", true) -> T("s_no_credit")
+            e is RateLimitException -> T("s_busy")
+            e is AnthropicIoException || e.cause is java.io.IOException || e is java.io.IOException -> T("s_offline")
+            else -> T("s_error")
+        }
+        return spoken to msg
+    }
+
+    /** Settings → "Test key": a tiny request, result shown to the user. */
+    fun testKey(key: String, done: (ok: Boolean, text: String) -> Unit) {
+        io.execute {
+            val r = try {
+                val c = AnthropicOkHttpClient.builder().apiKey(key.trim()).build()
+                c.messages().create(MessageCreateParams.builder().model(MODEL).maxTokens(1024L)
+                    .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
+                    .addUserMessage("Reply with just: OK").build())
+                true to T("key_ok")
+            } catch (e: Exception) {
+                val (sp, d) = explain(e); false to (sp + (d?.let { "\n$it" } ?: ""))
+            }
+            main.post { done(r.first, r.second) }
+        }
+    }
+
+    private fun reply(text: String, speak: Boolean, done: () -> Unit, detail: String? = null, failed: Boolean = false) {
+        add(ChatMsg(false, if (detail != null) "$text\n\n($detail)" else text, context = detail == null && !failed))
         if (!speak) { _phase.value = Phase.IDLE; done(); return }
         _phase.value = Phase.SPEAKING
         Speaker.speak(text) { main.post { _phase.value = Phase.IDLE; done() } }
@@ -90,13 +124,13 @@ object Assistant {
 
     private fun clientFor(key: String): AnthropicClient {
         if (client == null || clientKey != key) {
-            client = AnthropicOkHttpClient.builder().apiKey(key).build()
+            client = AnthropicOkHttpClient.builder().apiKey(key).apply { baseUrl?.let { baseUrl(it) } }.build()
             clientKey = key
         }
         return client!!
     }
 
-    private fun askClaude(key: String): String {
+    private fun askClaude(key: String, extras: Boolean): String {
         val s = Store.now
         val langName = when (s.lang) { Lang.EN -> "English"; Lang.RO -> "Romanian"; Lang.ES -> "Spanish" }
         val buds = Buds.current.value
@@ -112,6 +146,8 @@ object Assistant {
             - Answer in $langName, whatever language the question was in.
             - Keep it short and natural: one to three spoken sentences unless the user asks for more.
             - No markdown, lists, emojis, URLs or symbols. Write numbers the way they're said.
+            - Sound like a real person talking: contractions, short sentences, natural rhythm, the odd
+              "sure" or "hmm, let me think" when it fits. Never sound like you're reading a document.
             - Be warm and direct, like a helpful friend. If you are unsure, say so briefly.
             Use web search only for things that need current information (news, weather, scores, prices).
             Context: it is $now. Earbuds: ${buds?.name ?: "none connected"}${buds?.battery?.let { ", battery $it%" } ?: ""}.
@@ -122,19 +158,23 @@ object Assistant {
             .maxTokens(4096L)
             .system(system)
             .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
-            .addTool(WebSearchTool20260209.builder().maxUses(2L).build())
+        if (extras) {
+            b.addTool(WebSearchTool20260209.builder().maxUses(2L).build())
             // Server-side fallback: if a request is declined, the API retries on a fallback model.
-            .putAdditionalHeader("anthropic-beta", "server-side-fallback-2026-07-01")
-            .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
+            b.putAdditionalHeader("anthropic-beta", "server-side-fallback-2026-07-01")
+            b.putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
+        }
 
         // Last few turns as context (must start with a user turn and alternate).
-        val history = _chat.value.takeLast(12).dropWhile { !it.fromUser }
-        var lastUser: Boolean? = null
-        for (m in history) {
-            if (m.fromUser == lastUser) continue
-            if (m.fromUser) b.addUserMessage(m.text) else b.addAssistantMessage(m.text)
-            lastUser = m.fromUser
+        // Real turns only (no error replies); merge same-role neighbours so roles alternate.
+        val turns = ArrayList<Pair<Boolean, String>>()
+        for (m in _chat.value.takeLast(14).filter { it.context }) {
+            if (turns.isNotEmpty() && turns.last().first == m.fromUser)
+                turns[turns.size - 1] = m.fromUser to (turns.last().second + "\n" + m.text)
+            else turns += m.fromUser to m.text
         }
+        while (turns.isNotEmpty() && !turns.first().first) turns.removeAt(0)
+        for ((user, text) in turns) if (user) b.addUserMessage(text) else b.addAssistantMessage(text)
         val resp = clientFor(key).messages().create(b.build())
         if (resp.stopReason().map { it.toString() }.orElse("") == "refusal") return T("s_error")
         val text = resp.content().mapNotNull { it.text().orElse(null)?.text() }.joinToString(" ").trim()
