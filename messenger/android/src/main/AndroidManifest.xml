@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application
+        android:label="Msg"
+        android:icon="@drawable/ic"
+        android:theme="@style/T"
+        android:usesCleartextTraffic="true"
+        android:allowBackup="false">
+        <activity android:name=".MainActivity" android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".ChatActivity" android:exported="false"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+    </application>
+</manifest>

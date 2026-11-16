@@ -1,0 +1,27 @@
+plugins { id 'com.android.application' version '8.7.3' }
+
+android {
+    namespace 'app.tinymsg'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'app.tinymsg'
+        minSdk 28
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+            // Signed with the debug key so the APK installs directly. Use your own key for real distribution.
+            signingConfig signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    dependenciesInfo { includeInApk false; includeInBundle false }
+}
