@@ -4,14 +4,6 @@ on:
     paths: ['mathhelp/**', '.github/workflows/mathhelp.yml']
   workflow_dispatch:
 jobs:
-  server:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: cargo build --release
-        working-directory: mathhelp/server
-      - uses: actions/upload-artifact@v4
-        with: { name: mathhelp-server-linux-x86_64, path: mathhelp/server/target/release/mathhelp }
   apk:
     runs-on: ubuntu-latest
     steps:

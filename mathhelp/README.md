@@ -1,49 +1,27 @@
-# mathhelp — tiny, fast messenger
+# mathhelp — tiny phone-to-phone messenger
 
-- **Server** (`server/`): Rust (axum + SQLite). One ~3 MB binary, no setup.
-- **Android app** (`android/`, prebuilt: `mathhelp.apk`, ~37 KB): plain native Android views, zero libraries.
+**Download:** [mathhelp.apk](https://github.com/waza676767-commits/cobra-launcher/raw/ccr-a1b91fac-gtuygh/mathhelp/mathhelp.apk) (~50 KB, Android 9+)
 
-## Features
-- Make an account with any username + password
-- Add people by username, chat 1:1
-- Send text; links are clickable
-- Send images and GIFs (`+` button, or straight from the keyboard's GIF/sticker panel, e.g. Gboard)
-- Pasting a direct `.gif/.png/.jpg/.webp` link shows it inline
-- Instant delivery (long-polling), unread counts, scroll up for older messages
-- Tap an image for fullscreen, long-press a message to copy it
+Phone only — no PC, no server to run, no account or password.
 
-## Run the server
-You need the server running somewhere both phones can reach: a cheap VPS, or a PC on the same Wi-Fi.
+## How it works
+- Pick a username on first launch. Friends add you by it.
+- Messages go through the free public relay [ntfy.sh](https://ntfy.sh), **end-to-end encrypted**
+  (P-256 key exchange + AES-256-GCM). The relay only sees scrambled data.
+- Full chat history is stored on your phone.
+- Send text, links, images and GIFs (`+` button, or straight from the keyboard's GIF panel, e.g. Gboard).
+  Pasting a direct `.gif/.png/.jpg/.webp` link shows it inline.
+- Instant while the app is open. When it's closed, it checks about every 15 min and shows a notification.
 
-```sh
-cd server
-cargo build --release
-PORT=8080 DATA=./data ./target/release/mathhelp
-```
-Open port 8080 in the firewall. Everything is stored in `DATA/` (`msg.db` + `media/`).
+## Limits of the free relay
+- 250 messages per day per phone (internet connection).
+- Images/GIFs: max 2 MB (big photos are shrunk automatically).
+- The relay keeps messages for **12 hours** and images for **3 hours**. If your friend's phone doesn't
+  check in by then (phone off, battery saver blocking the background check), it misses them.
+- First message to a new contact waits until they've opened the app once (it needs their key).
+- Usernames aren't reserved, so pick something unique. If someone else's key shows up under a
+  contact's name, the app ignores it and shows "⚠ key changed". If your friend reinstalled, long-press
+  their name and pick "Re-trust key".
 
-## Install the app
-Copy `mathhelp.apk` to the phone and open it (allow "install unknown apps").
-On first launch enter the server address (e.g. `203.0.113.5:8080`), pick a username + password, and tap **Create account**.
-
-Build it yourself: `cd android && ./gradlew assembleRelease` (needs the Android SDK).
-The GitHub Action `messenger` also builds both the APK and the server binary.
-
-## Notes
-- Plain `http://` is unencrypted. For real use, put the server behind HTTPS
-  (e.g. Caddy: `caddy reverse-proxy --from chat.example.com --to :8080`) and use `https://chat.example.com` in the app.
-- Messages arrive while the app is open; there are no push notifications when it's closed (that would need Google Firebase or a battery-hungry background service).
-
-## API (for other clients)
-`Authorization: Bearer <token>` on everything except register/login.
-
-| Method | Path | Body / query | Returns |
-|---|---|---|---|
-| POST | `/register`, `/login` | `{user, pass}` | `{token, user}` |
-| GET | `/contacts` | | `[{user, last}]` |
-| POST | `/contacts` | `{user}` | `{user}` |
-| POST | `/send` | `{to, text, media?}` | message |
-| GET | `/history` | `?with=&before=&limit=` | `[message]` |
-| GET | `/poll` | `?since=<id>` (waits ≤25 s) | `{last, msgs}` |
-| POST | `/upload` | raw image bytes + `Content-Type` | `{id}` |
-| GET | `/m/<id>` | | image bytes |
+## Build
+`cd android && ./gradlew assembleRelease` (needs the Android SDK). The `mathhelp` GitHub Action builds it too.

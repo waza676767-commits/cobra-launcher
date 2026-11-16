@@ -1,8 +1,11 @@
 package app.mathhelp;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
@@ -11,7 +14,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
-import android.widget.ArrayAdapter;
+import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -19,92 +22,70 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
 import java.util.ArrayList;
 import java.util.List;
 
-/** Login screen, then the contact list. */
+/** First run: pick a username. After that: the contact list. */
 public class MainActivity extends Activity {
-    private final List<String> peers = new ArrayList<>();
-    private ArrayAdapter<String> adapter;
+    private final List<Store.Contact> peers = new ArrayList<>();
+    private BaseAdapter adapter;
 
     static int dp(Context c, int v) { return Math.round(v * c.getResources().getDisplayMetrics().density); }
 
     static void toast(Context c, String s) { Toast.makeText(c, s, Toast.LENGTH_SHORT).show(); }
 
+    static boolean validName(String s) {
+        return s.matches("[A-Za-z0-9_.-]{2,24}");
+    }
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        Api.init(this);
-        if (Api.loggedIn()) showContacts(); else showLogin();
+        Relay.init(this);
+        if (Store.hasUser()) showContacts(); else showSetup();
     }
 
-    // ---------- login ----------
+    // ---------- first run ----------
 
-    private EditText field(LinearLayout parent, String hint, String val, int type) {
-        EditText e = new EditText(this);
-        e.setHint(hint);
-        e.setText(val);
-        e.setSingleLine(true);
-        e.setInputType(type);
-        parent.addView(e, new LinearLayout.LayoutParams(-1, -2));
-        return e;
-    }
-
-    private void showLogin() {
-        setTitle("mathhelp — sign in");
+    private void showSetup() {
+        setTitle("mathhelp");
         LinearLayout l = new LinearLayout(this);
         l.setOrientation(LinearLayout.VERTICAL);
         int p = dp(this, 20);
         l.setPadding(p, p, p, p);
-        EditText srv = field(l, "Server (e.g. 1.2.3.4:8080)", Api.server, InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_CLASS_TEXT);
-        EditText usr = field(l, "Username", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        EditText pw = field(l, "Password", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        LinearLayout row = new LinearLayout(this);
-        Button login = new Button(this), reg = new Button(this);
-        login.setText("Log in");
-        reg.setText("Create account");
-        row.addView(login, new LinearLayout.LayoutParams(0, -2, 1));
-        row.addView(reg, new LinearLayout.LayoutParams(0, -2, 1));
-        l.addView(row);
+        EditText usr = new EditText(this);
+        usr.setHint("Choose a username");
+        usr.setSingleLine(true);
+        usr.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        l.addView(usr, new LinearLayout.LayoutParams(-1, -2));
+        Button go = new Button(this);
+        go.setText("Start");
+        l.addView(go, new LinearLayout.LayoutParams(-1, -2));
         TextView note = new TextView(this);
-        note.setText("Pick any username — others add you by it.");
+        note.setText("Friends add you by this username. Pick something unique — 2-24 letters, digits, _ . -\n\n" +
+                "No account or password needed. Messages are end-to-end encrypted and your history stays on this phone.");
         note.setPadding(0, dp(this, 12), 0, 0);
         l.addView(note);
         setContentView(l);
-
-        View.OnClickListener go = v -> {
-            String s = Api.normServer(srv.getText().toString());
-            String u = usr.getText().toString().trim(), pass = pw.getText().toString();
-            if (u.isEmpty() || pass.isEmpty()) { toast(this, "Enter username and password"); return; }
-            String path = v == reg ? "/register" : "/login";
-            login.setEnabled(false); reg.setEnabled(false);
-            Api.io.execute(() -> {
+        go.setOnClickListener(v -> {
+            String u = usr.getText().toString().trim();
+            if (!validName(u)) { toast(this, "2-24 characters: letters, digits, _ . -"); return; }
+            go.setEnabled(false);
+            Relay.q.execute(() -> {
                 try {
-                    JSONObject r = new JSONObject(Api.postJson(s, path, Api.obj("user", u, "pass", pass)));
-                    Api.ui.post(() -> {
-                        Api.saveLogin(s, r.optString("user"), r.optString("token"));
-                        showContacts();
-                        Api.startPoll();
-                    });
+                    Store.createUser(u);
+                    Relay.ui.post(() -> { showContacts(); goLive(); });
                 } catch (Exception e) {
-                    Api.ui.post(() -> {
-                        login.setEnabled(true); reg.setEnabled(true);
-                        toast(this, e.getMessage() == null ? "Can't reach server" : e.getMessage());
-                    });
+                    Relay.ui.post(() -> { go.setEnabled(true); toast(this, "Error: " + e); });
                 }
             });
-        };
-        login.setOnClickListener(go);
-        reg.setOnClickListener(go);
+        });
     }
 
     // ---------- contacts ----------
 
     private void showContacts() {
-        setTitle(Api.user);
+        setTitle(Store.user);
         LinearLayout l = new LinearLayout(this);
         l.setOrientation(LinearLayout.VERTICAL);
         LinearLayout row = new LinearLayout(this);
@@ -123,44 +104,58 @@ public class MainActivity extends Activity {
         l.addView(row);
 
         ListView lv = new ListView(this);
-        adapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, peers) {
-            @Override
+        adapter = new BaseAdapter() {
+            public int getCount() { return peers.size(); }
+            public Object getItem(int i) { return peers.get(i); }
+            public long getItemId(int i) { return i; }
             public View getView(int pos, View cv, ViewGroup parent) {
-                TextView t = (TextView) super.getView(pos, cv, parent);
-                String u = peers.get(pos);
-                Integer n = Api.unread.get(u);
-                t.setText(n == null ? u : u + "   (" + n + " new)");
-                t.setTypeface(null, n == null ? android.graphics.Typeface.NORMAL : android.graphics.Typeface.BOLD);
+                TextView t;
+                if (cv != null) t = (TextView) cv;
+                else {
+                    t = new TextView(MainActivity.this);
+                    t.setTextSize(17);
+                    t.setPadding(dp(MainActivity.this, 16), dp(MainActivity.this, 14), dp(MainActivity.this, 16), dp(MainActivity.this, 14));
+                }
+                Store.Contact c = peers.get(pos);
+                String s = c.name;
+                if (c.unread > 0) s += "   (" + c.unread + " new)";
+                if (c.bad) s += "   ⚠ key changed — long-press";
+                else if (c.pub == null) s += "   (waiting for them to open the app)";
+                t.setText(s);
+                t.setTypeface(null, c.unread > 0 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
                 return t;
             }
         };
         lv.setAdapter(adapter);
-        lv.setOnItemClickListener((a, v, pos, id) -> open(peers.get(pos)));
+        lv.setOnItemClickListener((a, v, pos, id) -> open(peers.get(pos).name));
+        lv.setOnItemLongClickListener((a, v, pos, id) -> { menu(peers.get(pos)); return true; });
         TextView empty = new TextView(this);
-        empty.setText("No chats yet. Add someone by their username above.");
+        empty.setText("No chats yet. Add someone by their username above.\n\nYour username: " + Store.user);
         empty.setPadding(dp(this, 16), dp(this, 24), dp(this, 16), 0);
         l.addView(empty);
         lv.setEmptyView(empty);
         l.addView(lv, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(l);
-        invalidateOptionsMenu();
-        Api.listener = msgs -> refresh();
-        refresh();
 
         Runnable doAdd = () -> {
             String u = add.getText().toString().trim();
-            if (u.isEmpty()) return;
-            Api.io.execute(() -> {
-                try {
-                    String name = new JSONObject(Api.postJson("/contacts", Api.obj("user", u))).optString("user");
-                    Api.ui.post(() -> { add.setText(""); open(name); });
-                } catch (Exception e) {
-                    Api.ui.post(() -> toast(this, String.valueOf(e.getMessage())));
-                }
-            });
+            if (!validName(u)) { toast(this, "Not a valid username"); return; }
+            if (u.equalsIgnoreCase(Store.user)) { toast(this, "That's you"); return; }
+            add.setText("");
+            Relay.addContact(u);
+            open(u);
         };
         btn.setOnClickListener(v -> doAdd.run());
         add.setOnEditorActionListener((v, a, e) -> { doAdd.run(); return true; });
+    }
+
+    private void menu(Store.Contact c) {
+        new AlertDialog.Builder(this).setTitle(c.name)
+                .setItems(new String[]{"Re-trust key (if they reinstalled)", "Delete chat"}, (d, which) -> Relay.q.execute(() -> {
+                    if (which == 0) { Store.setPub(c.name, null); Relay.addContact(c.name); }
+                    else Store.deleteContact(c.name);
+                    Relay.ui.post(this::refresh);
+                })).show();
     }
 
     private void open(String peer) {
@@ -168,45 +163,43 @@ public class MainActivity extends Activity {
     }
 
     private void refresh() {
-        if (adapter == null || !Api.loggedIn()) return;
-        Api.io.execute(() -> {
-            try {
-                JSONArray a = new JSONArray(Api.get("/contacts"));
-                List<String> r = new ArrayList<>();
-                for (int i = 0; i < a.length(); i++) r.add(a.getJSONObject(i).getString("user"));
-                Api.ui.post(() -> { peers.clear(); peers.addAll(r); adapter.notifyDataSetChanged(); });
-            } catch (Exception ignored) {}
+        if (adapter == null) return;
+        Relay.q.execute(() -> {
+            List<Store.Contact> r = Store.contacts();
+            Relay.ui.post(() -> { peers.clear(); peers.addAll(r); adapter.notifyDataSetChanged(); });
         });
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (!Api.loggedIn()) return;
-        Api.listener = msgs -> refresh();
-        Api.startPoll();
+        if (Store.hasUser()) goLive();
+    }
+
+    private void goLive() {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
+        SyncJob.schedule(this);
+        Relay.onChange = this::refresh;
+        Relay.start();
         refresh();
-        adapter.notifyDataSetChanged();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        Api.stopPoll();
+        Relay.stop();
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu m) {
-        if (Api.loggedIn()) m.add("Log out");
+        if (Store.hasUser()) m.add("My username: " + Store.user);
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem i) {
-        Api.logout();
-        adapter = null;
-        showLogin();
-        invalidateOptionsMenu();
+        toast(this, "Tell friends to add: " + Store.user);
         return true;
     }
 }

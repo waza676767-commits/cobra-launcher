@@ -1,10 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
         android:label="mathhelp"
         android:icon="@drawable/ic"
         android:theme="@style/T"
-        android:usesCleartextTraffic="true"
         android:allowBackup="false">
         <activity android:name=".MainActivity" android:exported="true"
             android:windowSoftInputMode="adjustResize">
@@ -15,5 +16,7 @@
         </activity>
         <activity android:name=".ChatActivity" android:exported="false"
             android:windowSoftInputMode="adjustResize|stateHidden" />
+        <service android:name=".SyncJob" android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 </manifest>

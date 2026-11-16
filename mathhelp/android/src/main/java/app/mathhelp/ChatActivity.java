@@ -31,27 +31,24 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import static app.mathhelp.MainActivity.dp;
 import static app.mathhelp.MainActivity.toast;
 
 public class ChatActivity extends Activity {
-    /** Peer whose chat is currently on screen (so it isn't counted as unread). */
-    static String openPeer;
+    /** Peer whose chat is on screen (its messages aren't counted as unread). */
+    static volatile String openPeer;
+
+    private static final int PAGE = 80;
 
     private String peer;
-    private final List<JSONObject> msgs = new ArrayList<>();
-    private final Set<Long> ids = new HashSet<>();
+    private final List<Store.Msg> msgs = new ArrayList<>();
     private ListView lv;
     private BaseAdapter adapter;
     private EditText input;
@@ -61,7 +58,7 @@ public class ChatActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        Api.init(this);
+        Relay.init(this);
         peer = getIntent().getStringExtra("peer");
         setTitle(peer);
         bubbleMax = getResources().getDisplayMetrics().widthPixels * 4 / 5;
@@ -93,7 +90,7 @@ public class ChatActivity extends Activity {
         attach.setText("+");
         attach.setMinWidth(0);
         attach.setMinimumWidth(dp(this, 48));
-        input = new GifEditText(this, this::uploadKeyboardContent);
+        input = new GifEditText(this, this::fromKeyboard);
         input.setHint("Message");
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         input.setMaxLines(5);
@@ -108,78 +105,52 @@ public class ChatActivity extends Activity {
         send.setOnClickListener(v -> {
             String t = input.getText().toString().trim();
             if (t.isEmpty()) return;
+            if (t.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 2000) { toast(this, "Too long — split it into smaller messages"); return; }
             input.setText("");
-            send(t, null);
+            Relay.send(peer, t, null, null);
         });
         attach.setOnClickListener(v -> startActivityForResult(
                 new Intent(Intent.ACTION_GET_CONTENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE), 1));
-
-        loadHistory(null);
     }
 
-    // ---------- data ----------
+    // ---------- data (all local) ----------
 
-    private boolean ours(JSONObject m) {
-        String f = m.optString("from"), t = m.optString("to");
-        return (f.equalsIgnoreCase(peer) && t.equalsIgnoreCase(Api.user))
-                || (f.equalsIgnoreCase(Api.user) && t.equalsIgnoreCase(peer));
-    }
-
-    /** Merge messages, keeping order by id; returns how many were new. */
-    private int merge(List<JSONObject> in) {
-        int added = 0;
-        for (JSONObject m : in) if (m != null && ours(m) && ids.add(m.optLong("id"))) { msgs.add(m); added++; }
-        if (added > 0) {
-            Collections.sort(msgs, (a, c) -> Long.compare(a.optLong("id"), c.optLong("id")));
-            adapter.notifyDataSetChanged();
-        }
-        return added;
-    }
-
-    private void loadHistory(Long before) {
-        String q = "/history?with=" + Api.enc(peer) + "&limit=60" + (before == null ? "" : "&before=" + before);
-        Api.io.execute(() -> {
-            try {
-                List<JSONObject> l = Api.list(new JSONArray(Api.get(q)));
-                Api.ui.post(() -> {
-                    if (before == null) { merge(l); lv.setSelection(msgs.size() - 1); }
-                    else {
-                        View top = lv.getChildAt(0);
-                        int off = top == null ? 0 : top.getTop();
-                        int n = merge(l);
-                        lv.setSelectionFromTop(n, off);
-                    }
-                    if (l.size() < 60) hasMore = false;
-                    loadingOlder = false;
-                });
-            } catch (Exception e) {
-                Api.ui.post(() -> { loadingOlder = false; toast(this, String.valueOf(e.getMessage())); });
-            }
+    /** Re-read everything from the oldest loaded message onwards (new messages, state changes). */
+    private void reload() {
+        final long from = msgs.isEmpty() ? -1 : msgs.get(0).id;
+        Relay.q.execute(() -> {
+            List<Store.Msg> l = from < 0 ? Store.messages(peer, Long.MAX_VALUE, PAGE) : Store.messagesFrom(peer, from);
+            Store.clearUnread(peer);
+            Relay.ui.post(() -> {
+                boolean first = msgs.isEmpty();
+                boolean atBottom = lv.getLastVisiblePosition() >= msgs.size() - 1;
+                boolean grew = l.size() > msgs.size();
+                if (first && l.size() < PAGE) hasMore = false;
+                msgs.clear();
+                msgs.addAll(l);
+                adapter.notifyDataSetChanged();
+                if (first || (grew && atBottom) || (grew && l.get(l.size() - 1).mine)) lv.setSelection(msgs.size() - 1);
+            });
         });
     }
 
     private void loadOlder() {
         if (msgs.isEmpty()) return;
         loadingOlder = true;
-        loadHistory(msgs.get(0).optLong("id"));
-    }
-
-    private void send(String text, String media) {
-        Api.io.execute(() -> {
-            try {
-                JSONObject body = Api.obj("to", peer, "text", text == null ? "" : text);
-                if (media != null) body.put("media", media);
-                JSONObject m = new JSONObject(Api.postJson("/send", body));
-                Api.ui.post(() -> {
-                    merge(Collections.singletonList(m));
-                    lv.setSelection(msgs.size() - 1);
-                });
-            } catch (Exception e) {
-                Api.ui.post(() -> {
-                    toast(this, "Not sent: " + e.getMessage());
-                    if (text != null && input.getText().length() == 0) input.setText(text);
-                });
-            }
+        final long before = msgs.get(0).id;
+        Relay.q.execute(() -> {
+            List<Store.Msg> l = Store.messages(peer, before, PAGE);
+            Relay.ui.post(() -> {
+                if (l.size() < PAGE) hasMore = false;
+                if (!l.isEmpty() && !msgs.isEmpty() && msgs.get(0).id == before) {
+                    View top = lv.getChildAt(0);
+                    int off = top == null ? 0 : top.getTop();
+                    msgs.addAll(0, l);
+                    adapter.notifyDataSetChanged();
+                    lv.setSelectionFromTop(l.size(), off);
+                }
+                loadingOlder = false;
+            });
         });
     }
 
@@ -188,43 +159,55 @@ public class ChatActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         if (req == 1 && res == RESULT_OK && data != null && data.getData() != null)
-            upload(data.getData(), getContentResolver().getType(data.getData()), null);
+            attach(data.getData(), getContentResolver().getType(data.getData()), null, null);
     }
 
-    private void uploadKeyboardContent(InputContentInfo info) {
-        upload(info.getContentUri(), info.getDescription().getMimeTypeCount() > 0
-                ? info.getDescription().getMimeType(0) : null, info::releasePermission);
+    private void fromKeyboard(InputContentInfo info) {
+        String mime = info.getDescription().getMimeTypeCount() > 0 ? info.getDescription().getMimeType(0) : null;
+        Uri link = info.getLinkUri();
+        attach(info.getContentUri(), mime, link == null ? null : link.toString(), info::releasePermission);
     }
 
-    private void upload(Uri uri, String mime, Runnable done) {
+    /** Copy the picked image into app storage (shrinking big photos to fit the 2 MB relay limit), then send. */
+    private void attach(Uri uri, String mime, String fallbackLink, Runnable done) {
         ContentResolver cr = getContentResolver();
-        toast(this, "Sending image…");
-        Api.io.execute(() -> {
+        Relay.q.execute(() -> {
             try {
-                byte[] b = Api.readAll(cr.openInputStream(uri));
+                byte[] b = Relay.readAll(cr.openInputStream(uri));
                 String type = mime == null || !mime.startsWith("image/") ? "image/jpeg" : mime;
-                // Shrink big photos; keep GIF/WebP untouched so animation survives.
-                if (b.length > 700_000 && !type.equals("image/gif") && !type.equals("image/webp")) {
-                    Bitmap bm = ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(b)), (d, i, s) -> {
-                        int w = i.getSize().getWidth(), h = i.getSize().getHeight(), max = 1600;
-                        if (Math.max(w, h) > max) {
-                            float k = (float) max / Math.max(w, h);
-                            d.setTargetSize(Math.max(1, (int) (w * k)), Math.max(1, (int) (h * k)));
-                        }
-                    });
-                    ByteArrayOutputStream o = new ByteArrayOutputStream();
-                    bm.compress(Bitmap.CompressFormat.JPEG, 85, o);
-                    b = o.toByteArray();
+                boolean animated = type.equals("image/gif") || type.equals("image/webp");
+                if (b.length > 600_000 && !animated) {
+                    b = shrink(b, 1600, 82);
+                    if (b.length > Relay.MAX_FILE) b = shrink(b, 1024, 70);
                     type = "image/jpeg";
                 }
-                String id = new JSONObject(new String(Api.req(Api.server, "POST", "/upload", b, type, 60000), "UTF-8")).getString("id");
-                send(null, id);
+                if (b.length > Relay.MAX_FILE) {
+                    if (fallbackLink != null) { Relay.send(peer, fallbackLink, null, null); return; }
+                    Relay.ui.post(() -> toast(this, "Too big — the free relay allows 2 MB per image/GIF"));
+                    return;
+                }
+                File f = new File(Store.mediaDir, "s" + Crypto.hex(Crypto.random(10)));
+                try (FileOutputStream o = new FileOutputStream(f)) { o.write(b); }
+                Relay.send(peer, "", f.getAbsolutePath(), type);
             } catch (Exception e) {
-                Api.ui.post(() -> toast(this, "Upload failed: " + e.getMessage()));
+                Relay.ui.post(() -> toast(this, "Couldn't read image: " + e.getMessage()));
             } finally {
                 if (done != null) try { done.run(); } catch (Exception ignored) {}
             }
         });
+    }
+
+    private static byte[] shrink(byte[] b, int max, int quality) throws Exception {
+        Bitmap bm = ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(b)), (d, i, s) -> {
+            int w = i.getSize().getWidth(), h = i.getSize().getHeight();
+            if (Math.max(w, h) > max) {
+                float k = (float) max / Math.max(w, h);
+                d.setTargetSize(Math.max(1, (int) (w * k)), Math.max(1, (int) (h * k)));
+            }
+        });
+        ByteArrayOutputStream o = new ByteArrayOutputStream();
+        bm.compress(Bitmap.CompressFormat.JPEG, quality, o);
+        return o.toByteArray();
     }
 
     /** EditText that accepts GIFs/stickers/images straight from the keyboard (Gboard etc.). */
@@ -264,7 +247,7 @@ public class ChatActivity extends Activity {
     private final class Adapter extends BaseAdapter {
         public int getCount() { return msgs.size(); }
         public Object getItem(int i) { return msgs.get(i); }
-        public long getItemId(int i) { return msgs.get(i).optLong("id"); }
+        public long getItemId(int i) { return msgs.get(i).id; }
         @Override public boolean hasStableIds() { return true; }
 
         public View getView(int pos, View cv, ViewGroup parent) {
@@ -298,26 +281,25 @@ public class ChatActivity extends Activity {
                 cv = r.outer;
             } else r = (Row) cv.getTag();
 
-            JSONObject m = msgs.get(pos);
-            boolean mine = m.optString("from").equalsIgnoreCase(Api.user);
-            r.outer.setGravity(mine ? Gravity.END : Gravity.START);
+            Store.Msg m = msgs.get(pos);
+            r.outer.setGravity(m.mine ? Gravity.END : Gravity.START);
             GradientDrawable bg = new GradientDrawable();
             bg.setCornerRadius(dp(c, 14));
-            bg.setColor(mine ? 0xFF2F6FDB : 0x40808080);
+            bg.setColor(m.mine ? 0xFF2F6FDB : 0x40808080);
             r.bubble.setBackground(bg);
-            if (mine) { r.text.setTextColor(0xFFFFFFFF); r.time.setTextColor(0xFFFFFFFF); }
+            if (m.mine) { r.text.setTextColor(0xFFFFFFFF); r.time.setTextColor(0xFFFFFFFF); }
             else { r.text.setTextColor(r.fg); r.time.setTextColor(r.fg); }
-            r.text.setLinkTextColor(mine ? 0xFFDDEEFF : 0xFF3B82F6);
+            r.text.setLinkTextColor(m.mine ? 0xFFDDEEFF : 0xFF3B82F6);
 
-            String text = m.optString("text");
+            String text = m.text;
             r.text.setAutoLinkMask(Linkify.WEB_URLS);
             r.text.setText(text);
             r.text.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
-            r.time.setText(DateUtils.formatSameDayTime(m.optLong("ts"), System.currentTimeMillis(),
-                    java.text.DateFormat.SHORT, java.text.DateFormat.SHORT));
+            String time = DateUtils.formatSameDayTime(m.ts, System.currentTimeMillis(),
+                    java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).toString();
+            r.time.setText(m.state == Store.PENDING ? time + "  · waiting to send" : time);
 
-            String media = m.isNull("media") ? null : m.optString("media", null);
-            String key = media != null ? media : (Img.isImageUrl(text) ? text : null);
+            String key = m.media != null ? m.media : (Img.isImageUrl(text) ? text : null);
             if (key != null) {
                 Img.bind(r.img, key);
                 r.img.setOnClickListener(v -> fullscreen(key));
@@ -327,8 +309,7 @@ public class ChatActivity extends Activity {
                 r.img.setVisibility(View.GONE);
             }
             View.OnLongClickListener copy = v -> {
-                String t = text.isEmpty() ? (key == null ? "" : key) : text;
-                ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("msg", t));
+                ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("msg", text));
                 toast(c, "Copied");
                 return true;
             };
@@ -354,19 +335,15 @@ public class ChatActivity extends Activity {
     protected void onResume() {
         super.onResume();
         openPeer = peer;
-        Api.unread.remove(peer);
-        Api.listener = l -> {
-            boolean atBottom = lv.getLastVisiblePosition() >= msgs.size() - 1;
-            if (merge(l) > 0 && atBottom) lv.setSelection(msgs.size() - 1);
-        };
-        Api.startPoll();
-        if (!msgs.isEmpty()) loadHistory(null); // catch up anything missed while paused
+        Relay.onChange = this::reload;
+        Relay.start();
+        reload();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         openPeer = null;
-        Api.stopPoll();
+        Relay.stop();
     }
 }

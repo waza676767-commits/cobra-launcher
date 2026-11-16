@@ -31,7 +31,7 @@ final class Img {
         maxPx = Math.min(c.getResources().getDisplayMetrics().widthPixels, 1080);
     }
 
-    /** key: either a server media id or an absolute http(s) URL. */
+    /** key: local file path or http(s) URL. */
     static void bind(ImageView iv, String key) {
         iv.setTag(key);
         Drawable d = mem.get(key);
@@ -43,7 +43,7 @@ final class Img {
             try { r = decode(load(key)); } catch (Exception ignored) {}
             final Drawable fd = r;
             if (fd != null) mem.put(key, fd);
-            Api.ui.post(() -> {
+            Relay.ui.post(() -> {
                 if (!key.equals(iv.getTag())) return;
                 if (fd == null) iv.setVisibility(View.GONE); else show(iv, fd);
             });
@@ -56,23 +56,20 @@ final class Img {
         if (d instanceof Animatable) ((Animatable) d).start();
     }
 
+    /** key: a local file path (attachments) or an http(s) URL (pasted image links). */
     private static byte[] load(String key) throws IOException {
-        File f = new File(dir, key.startsWith("http") ? sha1(key) : key);
+        if (key.startsWith("/")) return Files.readAllBytes(new File(key).toPath());
+        File f = new File(dir, sha1(key));
         if (f.exists()) return Files.readAllBytes(f.toPath());
-        byte[] b;
-        if (key.startsWith("http")) {
-            HttpURLConnection c = (HttpURLConnection) new URL(key).openConnection();
-            c.setConnectTimeout(10000);
-            c.setReadTimeout(20000);
-            c.setInstanceFollowRedirects(true);
-            if (c.getResponseCode() >= 400) throw new IOException("http");
-            String t = c.getContentType();
-            if (t != null && !t.startsWith("image/")) throw new IOException("not image");
-            if (c.getContentLengthLong() > 15_000_000) throw new IOException("too big");
-            b = Api.readAll(c.getInputStream());
-        } else {
-            b = Api.req(Api.server, "GET", "/m/" + key, null, null, 30000);
-        }
+        HttpURLConnection c = (HttpURLConnection) new URL(key).openConnection();
+        c.setConnectTimeout(10000);
+        c.setReadTimeout(20000);
+        c.setInstanceFollowRedirects(true);
+        if (c.getResponseCode() >= 400) throw new IOException("http");
+        String t = c.getContentType();
+        if (t != null && !t.startsWith("image/")) throw new IOException("not image");
+        if (c.getContentLengthLong() > 15_000_000) throw new IOException("too big");
+        byte[] b = Relay.readAll(c.getInputStream());
         try (FileOutputStream o = new FileOutputStream(f)) { o.write(b); }
         return b;
     }
@@ -97,7 +94,7 @@ final class Img {
     static boolean isImageUrl(String s) {
         if (s == null || s.length() > 2000 || s.indexOf(' ') >= 0 || s.indexOf('\n') >= 0) return false;
         if (!s.startsWith("http://") && !s.startsWith("https://")) return false;
-        String l = s.toLowerCase();
+        String l = s.toLowerCase(java.util.Locale.ROOT);
         int q = l.indexOf('?');
         if (q > 0) l = l.substring(0, q);
         return l.endsWith(".gif") || l.endsWith(".png") || l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".webp");
