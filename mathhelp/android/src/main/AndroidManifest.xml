@@ -4,7 +4,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
         android:label="mathhelp"
-        android:icon="@drawable/ic"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:theme="@style/T"
         android:allowBackup="false">
         <activity android:name=".MainActivity" android:exported="true"
