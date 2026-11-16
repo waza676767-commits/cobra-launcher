@@ -94,93 +94,6 @@ fun Page(content: @Composable androidx.compose.foundation.layout.ColumnScope.() 
     )
 }
 
-// ------------------------------------------------------------------ Home
-
-@Composable
-fun HomeScreen(go: (Screen) -> Unit) {
-    val ctx = LocalContext.current
-    val accent = LocalAccent.current
-    val buds by Buds.current.collectAsStateWithLifecycle()
-    val connecting by Buds.connecting.collectAsStateWithLifecycle()
-    val s by Store.settings.collectAsStateWithLifecycle()
-    val dl by WakeWord.downloading.collectAsStateWithLifecycle()
-    val dlP by WakeWord.downloadProgress.collectAsStateWithLifecycle()
-
-    Page {
-        Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Image(painterResource(R.drawable.velo_logo), "Velo", Modifier.size(34.dp))
-            Spacer(Modifier.width(10.dp))
-            Text("Velo", style = Type.h.copy(fontSize = 20.sp), modifier = Modifier.weight(1f))
-            Box(Modifier.size(42.dp).clip(CircleShape).background(C.glassTop).border(1.dp, C.stroke, CircleShape)
-                .clickable { go(Screen.DEVICES) }, contentAlignment = Alignment.Center) {
-                Text("+", style = Type.h.copy(fontSize = 22.sp))
-            }
-        }
-        Spacer(Modifier.height(26.dp))
-        val b = buds
-        Text(b?.name ?: T("no_buds"), style = Type.hero, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Row(Modifier.clickable { go(Screen.DEVICES) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (b == null) T("no_buds_sub") else T("manage"), style = Type.body.copy(color = C.sub, fontSize = 17.sp))
-            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = C.sub)
-        }
-
-        BudsArt(b?.model?.style ?: BudsStyle.BEANS, accent, Modifier.fillMaxWidth().aspectRatio(1.15f))
-
-        if (b != null) {
-            Glass(Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    BatteryRing(b.battery, b.connected, Modifier.size(72.dp))
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(8.dp).clip(CircleShape).background(if (b.connected) accent else C.faint))
-                            Spacer(Modifier.width(8.dp))
-                            Text(if (b.connected) T("connected") else T("disconnected"), style = Type.body.copy(fontWeight = FontWeight.SemiBold))
-                        }
-                        Text("${T("battery")} · ${b.battery?.let { "$it%" } ?: T("unknown")}", style = Type.sub)
-                    }
-                    if (!b.connected) PillButton(if (connecting == b.address) T("connecting") else T("connect")) { Buds.connect(b.address) }
-                }
-            }
-        } else {
-            PillButton(T("nearest"), Modifier.fillMaxWidth(), icon = Icons.Rounded.Radar) { go(Screen.DEVICES) }
-        }
-
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Tile(Icons.Rounded.NoiseAware, T("noise"), T("clarity"), Modifier.weight(1f)) { go(Screen.NOISE) }
-            Tile(Icons.Rounded.VolumeUp, T("find"), "${T("left")} · ${T("right")}", Modifier.weight(1f)) { go(Screen.FIND) }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Tile(Icons.Rounded.TouchApp, T("gestures"), T(s.bindings[GestureSlot.TAP_2]?.action?.name ?: "NONE"), Modifier.weight(1f)) { go(Screen.GESTURES) }
-            Tile(Icons.Rounded.Mic, T("hey_velo"), if (s.wakeEnabled) "ON" else "OFF", Modifier.weight(1f), highlight = s.wakeEnabled) {
-                Store.update { it.copy(wakeEnabled = !it.wakeEnabled) }
-                VeloService.sync(ctx)
-            }
-        }
-        if (dl) {
-            Spacer(Modifier.height(12.dp))
-            Glass(Modifier.fillMaxWidth()) {
-                Text(T("wake_model"), style = Type.sub)
-                Spacer(Modifier.height(10.dp))
-                ProgressBar(dlP)
-            }
-        }
-    }
-}
-
-@Composable
-fun Tile(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, sub: String, modifier: Modifier,
-         highlight: Boolean = false, onClick: () -> Unit) {
-    Glass(modifier.heightIn(min = 128.dp), highlight = highlight, onClick = onClick) {
-        IconBubble(icon)
-        Spacer(Modifier.weight(1f).height(18.dp))
-        Text(title, style = Type.body.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(sub, style = Type.sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
 @Composable
 fun BatteryRing(level: Int?, on: Boolean, modifier: Modifier) {
     val accent = LocalAccent.current
@@ -224,12 +137,12 @@ fun DevicesScreen(go: (Screen) -> Unit) {
         val other = paired.filter { it.address !in savedAddrs }
         if (savedList.isNotEmpty()) {
             SectionLabel(T("saved"))
-            savedList.forEach { d -> DeviceCard(d.name, d.model, d.connected, d.battery, connecting == d.address,
+            savedList.forEach { d -> DeviceCard(d.address, d.name, d.model, d.connected, d.battery, connecting == d.address,
                 onForget = { Store.forget(d.address) }) { Buds.connect(d.address) } }
         }
         if (other.isNotEmpty()) {
             SectionLabel(T("paired"))
-            other.forEach { d -> DeviceCard(d.name, d.model, d.connected, d.battery, connecting == d.address) { Buds.connect(d.address) } }
+            other.forEach { d -> DeviceCard(d.address, d.name, d.model, d.connected, d.battery, connecting == d.address) { Buds.connect(d.address) } }
         }
         if (paired.isEmpty()) {
             Spacer(Modifier.height(16.dp))
@@ -282,13 +195,13 @@ fun SignalBars(rssi: Int) {
 }
 
 @Composable
-fun DeviceCard(name: String, model: BudsModel, connected: Boolean, battery: Int?, connecting: Boolean,
+fun DeviceCard(address: String, name: String, model: BudsModel, connected: Boolean, battery: Int?, connecting: Boolean,
                onForget: (() -> Unit)? = null, onConnect: () -> Unit) {
     val accent = LocalAccent.current
     Glass(Modifier.fillMaxWidth().padding(bottom = 12.dp), padding = PaddingValues(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(78.dp).clip(RoundedCornerShape(18.dp)).background(Color(0x0FFFFFFF))) {
-                BudsArt(model.style, accent, Modifier.fillMaxSize(), glowing = false)
+                BudsArt(model.style, accent, Modifier.fillMaxSize().padding(6.dp), glowing = false, address = address, name = name)
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {

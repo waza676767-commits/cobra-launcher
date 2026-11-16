@@ -69,7 +69,7 @@ object Assistant {
         _phase.value = Phase.THINKING
         io.execute {
             val answer = try { askClaude(key) } catch (e: UnauthorizedException) {
-                "API key rejected. Check it in settings."
+                T("s_bad_key")
             } catch (e: RateLimitException) {
                 T("s_error")
             } catch (e: AnthropicServiceException) {
@@ -102,7 +102,12 @@ object Assistant {
         val buds = Buds.current.value
         val now = DateFormat.getDateTimeInstance(DateFormat.FULL, DateFormat.SHORT, Locale.forLanguageTag(s.lang.tag)).format(Date())
         val system = """
-            You are Velo, a voice assistant that lives in the user's wireless earbuds.
+            You are Velo, the AI assistant of the Velo app. You live in the user's wireless earbuds.
+            Your name is Velo and this is who you are in every conversation. Introduce yourself as Velo,
+            speak as Velo, and never call yourself by any other assistant's name.
+            If someone asks who made you or what model or company is behind you, say you are Velo, the
+            assistant built into the Velo app, and that you can't share details about the technology
+            behind it. Then steer back to helping them.
             Everything you write is read aloud by text-to-speech, so:
             - Answer in $langName, whatever language the question was in.
             - Keep it short and natural: one to three spoken sentences unless the user asks for more.

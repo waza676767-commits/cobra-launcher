@@ -38,7 +38,7 @@ object T {
         "ARIA_d" to "Female · clear", "NOVA_d" to "Female · bright", "LEO_d" to "Male · natural",
         "ATLAS_d" to "Male · deep", "ECHO_d" to "Neutral · quick",
         "test_voice" to "Hi, I'm Velo. How can I help?", "preview" to "Preview",
-        "api_key" to "Claude API key", "api_key_sub" to "Lets Velo answer any question. Get one at console.anthropic.com",
+        "api_key" to "Velo AI key", "api_key_sub" to "Lets Velo answer any question. Paste an API key from console.anthropic.com",
         "api_key_hint" to "sk-ant-…", "save" to "Save", "saved_ok" to "Saved",
         "ask" to "Ask Velo anything", "type_here" to "Type a message…", "tap_talk" to "Tap to talk",
         "listening" to "Listening…", "thinking" to "Thinking…", "speaking" to "Speaking…", "idle" to "Say \"Hey Velo\"",
@@ -46,13 +46,14 @@ object T {
         "perm_title" to "Velo needs a few permissions", "perm_sub" to "Bluetooth to see your earbuds, microphone for \"Hey Velo\", notifications for the background service.",
         "allow" to "Allow", "about" to "About",
         // spoken
-        "s_no_key" to "I can do device commands right now. To answer questions, add your Claude API key in settings.",
+        "s_no_key" to "I can do device commands right now. To answer questions, add your Velo AI key in settings.",
         "s_didnt_hear" to "Sorry, I didn't catch that.", "s_error" to "Something went wrong, please try again.",
         "s_battery" to "Your earbuds are at %d percent.", "s_battery_unknown" to "I can't read the battery right now.",
         "s_time" to "It's %s.", "s_opening" to "Opening %s.", "s_no_app" to "I couldn't find %s.",
         "s_volume_up" to "Turning it up.", "s_volume_down" to "Turning it down.", "s_paused" to "Okay.",
         "s_next" to "Next song.", "s_prev" to "Previous song.", "s_find" to "Playing the find sound.",
-        "s_ready" to "Yes?"
+        "s_ready" to "Yes?",
+        "disc_link" to "Earbuds are disconnected", "s_bad_key" to "Your Velo AI key doesn't work. Check it in settings.", "photo" to "Photo", "my_buds" to "My earbuds", "battery_pct" to "%d%% battery"
     )
 
     private val ro = mapOf(
@@ -91,20 +92,21 @@ object T {
         "ARIA_d" to "Feminină · clară", "NOVA_d" to "Feminină · vioaie", "LEO_d" to "Masculină · naturală",
         "ATLAS_d" to "Masculină · gravă", "ECHO_d" to "Neutră · rapidă",
         "test_voice" to "Salut, sunt Velo. Cu ce te pot ajuta?", "preview" to "Ascultă",
-        "api_key" to "Cheie API Claude", "api_key_sub" to "Îi permite lui Velo să răspundă la orice întrebare. O obții de pe console.anthropic.com",
+        "api_key" to "Cheie Velo AI", "api_key_sub" to "Îi permite lui Velo să răspundă la orice întrebare. Lipește o cheie API de pe console.anthropic.com",
         "api_key_hint" to "sk-ant-…", "save" to "Salvează", "saved_ok" to "Salvat",
         "ask" to "Întreabă-l pe Velo orice", "type_here" to "Scrie un mesaj…", "tap_talk" to "Atinge pentru a vorbi",
         "listening" to "Ascult…", "thinking" to "Mă gândesc…", "speaking" to "Vorbesc…", "idle" to "Spune „Hey Velo”",
         "greet" to "Salut! Spune „Hey Velo” sau atinge microfonul.",
         "perm_title" to "Velo are nevoie de câteva permisiuni", "perm_sub" to "Bluetooth pentru căști, microfon pentru „Hey Velo”, notificări pentru serviciul din fundal.",
         "allow" to "Permite", "about" to "Despre",
-        "s_no_key" to "Acum pot executa comenzi pentru dispozitiv. Ca să răspund la întrebări, adaugă cheia API Claude în setări.",
+        "s_no_key" to "Acum pot executa comenzi pentru dispozitiv. Ca să răspund la întrebări, adaugă cheia Velo AI în setări.",
         "s_didnt_hear" to "Scuze, nu am înțeles.", "s_error" to "Ceva n-a mers, te rog încearcă din nou.",
         "s_battery" to "Căștile au %d la sută baterie.", "s_battery_unknown" to "Nu pot citi bateria acum.",
         "s_time" to "Este ora %s.", "s_opening" to "Deschid %s.", "s_no_app" to "Nu am găsit %s.",
         "s_volume_up" to "Dau mai tare.", "s_volume_down" to "Dau mai încet.", "s_paused" to "Gata.",
         "s_next" to "Melodia următoare.", "s_prev" to "Melodia anterioară.", "s_find" to "Redau sunetul de găsire.",
-        "s_ready" to "Da?"
+        "s_ready" to "Da?",
+        "disc_link" to "Căștile sunt deconectate", "s_bad_key" to "Cheia Velo AI nu funcționează. Verifică-o în setări.", "photo" to "Fotografie", "my_buds" to "Căștile mele", "battery_pct" to "%d%% baterie"
     )
 
     private val es = mapOf(
@@ -143,20 +145,21 @@ object T {
         "ARIA_d" to "Femenina · clara", "NOVA_d" to "Femenina · alegre", "LEO_d" to "Masculina · natural",
         "ATLAS_d" to "Masculina · grave", "ECHO_d" to "Neutra · rápida",
         "test_voice" to "Hola, soy Velo. ¿En qué te ayudo?", "preview" to "Escuchar",
-        "api_key" to "Clave API de Claude", "api_key_sub" to "Permite a Velo responder cualquier pregunta. Consíguela en console.anthropic.com",
+        "api_key" to "Clave de Velo AI", "api_key_sub" to "Permite a Velo responder cualquier pregunta. Pega una clave API de console.anthropic.com",
         "api_key_hint" to "sk-ant-…", "save" to "Guardar", "saved_ok" to "Guardado",
         "ask" to "Pregúntale a Velo", "type_here" to "Escribe un mensaje…", "tap_talk" to "Toca para hablar",
         "listening" to "Escuchando…", "thinking" to "Pensando…", "speaking" to "Hablando…", "idle" to "Di «Hey Velo»",
         "greet" to "¡Hola! Di «Hey Velo» o toca el micrófono.",
         "perm_title" to "Velo necesita algunos permisos", "perm_sub" to "Bluetooth para tus auriculares, micrófono para «Hey Velo» y notificaciones para el servicio en segundo plano.",
         "allow" to "Permitir", "about" to "Acerca de",
-        "s_no_key" to "Ahora puedo hacer comandos del dispositivo. Para responder preguntas, añade tu clave API de Claude en ajustes.",
+        "s_no_key" to "Ahora puedo hacer comandos del dispositivo. Para responder preguntas, añade tu clave de Velo AI en ajustes.",
         "s_didnt_hear" to "Perdona, no te he entendido.", "s_error" to "Algo salió mal, inténtalo de nuevo.",
         "s_battery" to "Tus auriculares están al %d por ciento.", "s_battery_unknown" to "Ahora no puedo leer la batería.",
         "s_time" to "Son las %s.", "s_opening" to "Abriendo %s.", "s_no_app" to "No encontré %s.",
         "s_volume_up" to "Subiendo el volumen.", "s_volume_down" to "Bajando el volumen.", "s_paused" to "Vale.",
         "s_next" to "Siguiente canción.", "s_prev" to "Canción anterior.", "s_find" to "Reproduciendo el sonido de búsqueda.",
-        "s_ready" to "¿Sí?"
+        "s_ready" to "¿Sí?",
+        "disc_link" to "Los auriculares están desconectados", "s_bad_key" to "Tu clave de Velo AI no funciona. Revísala en ajustes.", "photo" to "Foto", "my_buds" to "Mis auriculares", "battery_pct" to "%d%% de batería"
     )
 
     fun get(lang: Lang, key: String): String = when (lang) {
