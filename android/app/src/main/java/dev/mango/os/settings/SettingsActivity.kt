@@ -372,6 +372,7 @@ class SettingsActivity : Activity() {
         Triple("Appearance", "dark light mode theme automatic night", "appearance"),
         Triple("Wallpaper", "background photo picture phone wallpaper flicker", "wallpaper"),
         Triple("App Icons", "icon style colourful colorful dark clear glass tinted size names labels", "icons"),
+        Triple("Custom Icons & Names", "rename custom icon name mathy change", "icons"),
         Triple("Home Screen", "grid rows columns dock layout gestures swipe search reset", "home"),
         Triple("GUI Scale", "size bigger smaller zoom scale text", "home"),
         Triple("Widgets", "weather clock calendar battery batteries add widget", "widgets"),
@@ -481,6 +482,15 @@ class SettingsActivity : Activity() {
         p.group {
             slider("Icon Size", 0.8f, 1.2f, Prefs.iconScale, 0.05f, { "${(it * 100).roundToInt()}%" }) { Prefs.iconScale = it }
             toggle("Show App Names", Prefs.labels) { Prefs.labels = it }
+        }
+        val mathy = dev.mango.os.data.Overrides.mathyInstalled(this)
+        val custom = dev.mango.os.data.Overrides.looks.size
+        p.group("Custom Icons & Names", footer = "Rename any app and give it your own icon (emoji, letters, a photo or another app's icon) in Mathy. Mango OS shows it on the Home Screen, in folders, the App Library and Search. Tip: long-press an app › Change Icon & Name.") {
+            if (mathy) nav("Open Mathy", Glyph.PENCIL, 0xFF3A5BF0.toInt(), if (custom > 0) "$custom changed" else null) {
+                packageManager.getLaunchIntentForPackage(dev.mango.os.data.Overrides.MATHY)?.let { startActivity(it) }
+            } else nav("Get Mathy", Glyph.PENCIL, 0xFF3A5BF0.toInt(), "Not installed") {
+                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(HomeActivity.MATHY_URL))) } catch (e: Exception) {}
+            }
         }
         return p
     }

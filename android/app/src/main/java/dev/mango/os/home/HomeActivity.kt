@@ -43,6 +43,7 @@ import dev.mango.os.data.FolderItem
 import dev.mango.os.data.HomeLayout
 import dev.mango.os.data.Item
 import dev.mango.os.data.NotificationHub
+import dev.mango.os.data.Overrides
 import dev.mango.os.data.WeatherRepo
 import dev.mango.os.data.WidgetItem
 import dev.mango.os.gfx.Backdrop
@@ -697,6 +698,7 @@ class HomeActivity : Activity() {
                 }
                 val library = c is FolderPanel && folder.readOnly
                 if (!library) list.add(MenuEntry("Edit Home Screen", Glyph.GRID) { enterEditMode() })
+                list.add(MenuEntry("Change Icon & Name", Glyph.PENCIL) { changeLook(key) })
                 list.add(MenuEntry("App Info", Glyph.INFO) { AppRepository.openAppInfo(this, key) })
                 if (c !is FolderPanel) list.add(MenuEntry("Hide from Home Screen", Glyph.EYE_SLASH) { hideApp(key) })
                 val e = AppRepository[key]
@@ -753,6 +755,17 @@ class HomeActivity : Activity() {
                 MangoDialog.Action("Remove", MangoDialog.Style.DESTRUCTIVE) { removeItem(item, c) }
             ))
         }
+    }
+
+    /** Opens Mathy on this app; if Mathy isn't installed, offers to get it. */
+    fun changeLook(key: String) {
+        if (Overrides.edit(this, key)) return
+        MangoDialog.show(this, "Get Mathy", "Custom icons and names are made in Mathy, Mango OS's companion app (the blue book icon). Install it once, then come back here.", listOf(
+            MangoDialog.Action("Cancel"),
+            MangoDialog.Action("Download", MangoDialog.Style.BOLD) {
+                try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(MATHY_URL))) } catch (e: Exception) {}
+            }
+        ))
     }
 
     private fun confirmUninstall(key: String) {
@@ -1118,6 +1131,7 @@ class HomeActivity : Activity() {
 
     companion object {
         const val EXTRA_ACTION = "mango.action"
+        const val MATHY_URL = "https://github.com/waza676767-commits/cobra-launcher/raw/claude/samsung-a56-custom-os-at7kcn/android/apk/Mathy.apk"
         private const val REQ_BIND = 51
         private const val REQ_CONFIG = 52
         private const val REQ_RECONFIG = 53

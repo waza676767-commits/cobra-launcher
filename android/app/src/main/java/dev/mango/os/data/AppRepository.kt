@@ -20,7 +20,9 @@ import android.view.View
 import android.widget.Toast
 import dev.mango.os.core.Prefs
 
-class AppEntry(val key: String, val info: LauncherActivityInfo, val user: UserHandle, val label: String) {
+class AppEntry(val key: String, val info: LauncherActivityInfo, val user: UserHandle, val originalLabel: String) {
+    /** The name you see: your custom one from Mathy, or the app's real name. */
+    val label: String get() = Overrides.label(key) ?: originalLabel
     val component: ComponentName get() = info.componentName
     val pkg: String get() = info.componentName.packageName
     val isSystem: Boolean get() = (info.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
@@ -90,10 +92,18 @@ object AppRepository {
 
     private fun changed() {
         reload()
+        Overrides.refresh()
         listeners.toList().forEach { it() }
     }
 
     /** [part]: the area of [from] the app should grow out of (defaults to the whole view). */
+    /** Mathy changed a name or icon: re-sort, redraw icons, tell the home screen. */
+    fun overridesChanged() {
+        reload()
+        dev.mango.os.gfx.IconFactory.flush()
+        listeners.toList().forEach { it() }
+    }
+
     fun launch(ctx: Context, key: String, from: View?, part: android.graphics.RectF? = null): Boolean {
         val e = apps[key] ?: return false
         Prefs.countLaunch(key)

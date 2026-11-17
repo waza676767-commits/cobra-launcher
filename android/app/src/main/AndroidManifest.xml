@@ -37,6 +37,9 @@
         <intent>
             <action android:name="android.intent.action.SHOW_ALARMS" />
         </intent>
+        <!-- Mathy, the companion app for custom icons and names -->
+        <package android:name="dev.mango.mathy" />
+        <provider android:authorities="dev.mango.mathy.overrides" />
     </queries>
 
     <application

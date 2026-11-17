@@ -20,6 +20,7 @@ class MangoApp : Application() {
         Ui.init(this)
         Theme.update(this)
         AppRepository.init(this)
+        dev.mango.os.data.Overrides.init(this) { AppRepository.overridesChanged() }
         IconFactory.init(this)
         WeatherRepo.init()
         LockController.init(this)

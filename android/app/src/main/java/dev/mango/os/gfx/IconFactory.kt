@@ -58,6 +58,13 @@ object IconFactory {
         return true
     }
 
+    /** Drop every cached icon (custom icons changed); views reload theirs on refresh. */
+    fun flush() {
+        generation++
+        cache.evictAll()
+        waiting.clear()
+    }
+
     val isClear get() = style == "clear"
 
     fun peek(key: String): Bitmap? = cache.get(key)
@@ -99,6 +106,10 @@ object IconFactory {
     // ------------------------------------------------------------------ rendering
 
     fun render(entry: AppEntry, s: Int, style: String, tint: Int): Bitmap {
+        // custom icon made in Mathy: a full square picture, styled like every other icon
+        dev.mango.os.data.Overrides.icon(entry.key)?.let { custom ->
+            return renderDrawable(android.graphics.drawable.BitmapDrawable(app.resources, custom), s, style, tint)
+        }
         val d: Drawable = try {
             entry.info.getIcon(640) ?: app.packageManager.defaultActivityIcon
         } catch (e: Exception) {

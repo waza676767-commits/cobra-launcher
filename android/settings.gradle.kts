@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "MangoOS"
 include(":app")
+include(":mathy")

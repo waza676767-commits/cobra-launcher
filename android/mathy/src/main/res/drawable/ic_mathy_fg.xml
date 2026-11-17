@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- cover peeking out under the pages -->
+    <path android:pathData="M27,41 L27,75 C37,73 47,74 54,79 C61,74 71,73 81,75 L81,41 Z"
+        android:fillColor="#FF1C2A9E" />
+    <!-- left page -->
+    <path android:pathData="M54,40 C47,35.5 38,34.5 30,36 L30,71.5 C38,70 47,71 54,75.5 Z"
+        android:fillColor="#FFFFFFFF" />
+    <!-- right page -->
+    <path android:pathData="M54,40 C61,35.5 70,34.5 78,36 L78,71.5 C70,70 61,71 54,75.5 Z"
+        android:fillColor="#FFE6ECFF" />
+    <!-- lines of text -->
+    <path android:pathData="M35,45.5 C40,44.8 45,45.2 49.5,46.8 M35,51.5 C40,50.8 45,51.2 49.5,52.8 M35,57.5 C40,56.8 45,57.2 49.5,58.8 M58.5,46.8 C63,45.2 68,44.8 73,45.5 M58.5,52.8 C63,51.2 68,50.8 73,51.5"
+        android:strokeColor="#FF8EA6FF" android:strokeWidth="1.8" android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <!-- a little "+" on the right page -->
+    <path android:pathData="M65.5,57 L65.5,64 M62,60.5 L69,60.5"
+        android:strokeColor="#FF3A5BF0" android:strokeWidth="2.2" android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>

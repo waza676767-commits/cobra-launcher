@@ -15,6 +15,9 @@ modify One UI, so you can switch between Mango OS and One UI Home whenever you w
 
 If you had the earlier test version (**Aura**), uninstall it: Mango OS is a separate app.
 
+**Mathy** (optional companion app, blue book icon):
+https://github.com/waza676767-commits/cobra-launcher/raw/claude/samsung-a56-custom-os-at7kcn/android/apk/Mathy.apk
+
 A newer APK only installs over the old one if both are signed with the same key. Keep
 `mango.jks` and its password private (they're never committed). To make GitHub builds use the key,
 add the secrets `MANGO_KEYSTORE_B64` (`base64 -w0 mango.jks`) and `MANGO_KEY_PASSWORD`. Without them,
@@ -42,6 +45,14 @@ the workflow signs with a temporary debug key, and you'd have to uninstall befor
 - Swipe down anywhere to search apps.
 - Four icon looks: **Colourful**, **Dark**, **Clear** (frosted glass) and **Tinted**.
 - Notification badges on icons (number or dot).
+
+**Custom icons & names (Mathy)**: open Mathy, pick any app, give it a new name and a new icon:
+a ready-made look (Math, Calculator, Notes, Geometry…), an emoji or letters on a colour, a photo,
+or another app's icon. Mango OS picks it up instantly everywhere: Home Screen, dock, folders,
+App Library, Search (it finds the new name, not the old one) and lock screen notifications.
+Shortcut: long-press an app in Mango OS › **Change Icon & Name**. **Reset to Original** in Mathy
+undoes it. Uninstalling Mathy puts every app back to normal. Android only lets the home screen app
+show custom icons, so the changes appear in Mango OS, not in One UI Home.
 
 **Widgets**: Weather, Clock (analog / digital), Calendar (day / month) and Batteries in small,
 medium and large sizes. You can also add normal Android widgets from any app.
