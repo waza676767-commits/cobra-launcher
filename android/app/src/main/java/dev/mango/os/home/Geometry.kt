@@ -72,7 +72,7 @@ class Geometry {
         val usableW = w - left - right
         hPad = if (cols <= 4) 18.dp else 12.dp
         cellW = (usableW - 2 * hPad) / cols
-        labelSize = min(12.dp, cellW * 0.15f)
+        labelSize = min(11.5f.dp, cellW * 0.14f)
         labelGap = 5.dp
         var icon = cellW * (if (cols >= 5) 0.76f else 0.7f) * iconScale
         icon = min(icon, cellW * 0.94f)

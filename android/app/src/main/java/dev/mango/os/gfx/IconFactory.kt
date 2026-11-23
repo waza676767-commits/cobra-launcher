@@ -110,12 +110,22 @@ object IconFactory {
         dev.mango.os.data.Overrides.icon(entry.key)?.let { custom ->
             return renderDrawable(android.graphics.drawable.BitmapDrawable(app.resources, custom), s, style, tint)
         }
-        val d: Drawable = try {
-            entry.info.getIcon(640) ?: app.packageManager.defaultActivityIcon
-        } catch (e: Exception) {
-            app.packageManager.defaultActivityIcon
-        }
+        // Prefer the app's own adaptive icon from its resources: after recent One UI updates the
+        // launcher API can hand back a flattened copy already cut to Samsung's shape.
+        val raw = rawIcon(entry)
+        val launcher = try { entry.info.getIcon(640) } catch (e: Exception) { null }
+        val d: Drawable = (raw as? AdaptiveIconDrawable) ?: (launcher as? AdaptiveIconDrawable) ?: raw ?: launcher
+            ?: app.packageManager.defaultActivityIcon
         return renderDrawable(d, s, style, tint)
+    }
+
+    private fun rawIcon(entry: AppEntry): Drawable? = try {
+        val ai = entry.info.activityInfo
+        val id = ai.iconResource
+        if (id == 0) null
+        else app.packageManager.getResourcesForApplication(ai.applicationInfo).getDrawableForDensity(id, 640, null)
+    } catch (e: Throwable) {
+        null
     }
 
     fun renderDrawable(d: Drawable, s: Int, style: String, tint: Int): Bitmap {
@@ -176,10 +186,27 @@ object IconFactory {
         c.drawRect(0f, 0f, s.toFloat(), s.toFloat(), p)
     }
 
-    /** Old-style (non adaptive) icon: full-bleed if it's already square, else on a plate. */
+    /**
+     * Old-style (non adaptive) icon:
+     *  - already square → full bleed;
+     *  - already cut into a tile (its own rounded shape filling the canvas) → zoomed so the tile
+     *    fills our shape, instead of a small tile sitting on another tile;
+     *  - a loose logo → on a plate.
+     */
     private fun legacy(c: Canvas, d: Drawable, s: Int, onDark: Boolean) {
         if (isFullBleed(d)) {
             d.setBounds(0, 0, s, s)
+            d.draw(c)
+            return
+        }
+        val tile = tileBounds(d)
+        if (tile != null) {
+            val (minX, minY, size, n) = tile
+            val m = s * 0.06f
+            val k = (s + 2 * m) / size
+            val l = -m - minX * k
+            val t = -m - minY * k
+            d.setBounds(l.toInt(), t.toInt(), (l + n * k).toInt(), (t + n * k).toInt())
             d.draw(c)
             return
         }
@@ -187,6 +214,31 @@ object IconFactory {
         val inset = (s * 0.16f).toInt()
         d.setBounds(inset, inset, s - inset, s - inset)
         d.draw(c)
+    }
+
+    /** If [d] is a solid tile (rounded square / circle) filling most of its canvas: its box. */
+    private fun tileBounds(d: Drawable): List<Float>? {
+        val n = 96
+        val b = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        d.setBounds(0, 0, n, n)
+        d.draw(Canvas(b))
+        val px = IntArray(n * n)
+        b.getPixels(px, 0, n, 0, 0, n, n)
+        b.recycle()
+        var minX = n; var minY = n; var maxX = -1; var maxY = -1
+        for (y in 0 until n) for (x in 0 until n) if (Color.alpha(px[y * n + x]) > 40) {
+            if (x < minX) minX = x; if (x > maxX) maxX = x
+            if (y < minY) minY = y; if (y > maxY) maxY = y
+        }
+        if (maxX < 0) return null
+        val w = maxX - minX + 1
+        val h = maxY - minY + 1
+        if (w < n * 0.6f || h < n * 0.6f || kotlin.math.abs(w - h) > n * 0.08f) return null
+        var solid = 0
+        for (y in minY..maxY) for (x in minX..maxX) if (Color.alpha(px[y * n + x]) > 200) solid++
+        // a rounded tile fills ≥ ~78% of its box (a circle 78.5%); loose logos much less
+        if (solid < w * h * 0.76f) return null
+        return listOf(minX.toFloat(), minY.toFloat(), maxOf(w, h).toFloat(), n.toFloat())
     }
 
     private fun isFullBleed(d: Drawable): Boolean {

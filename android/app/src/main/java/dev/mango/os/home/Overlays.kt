@@ -72,7 +72,7 @@ class FolderOverlay(private val home: HomeActivity) : FrameLayout(home) {
     private var sourceView: View? = null
     val panel = FolderPanel(home, this)
     private val title = EditText(home)
-    private val spring = Spring(420f, 0.84f, 0.001f)
+    private val spring = Spring(620f, 0.86f, 0.001f)
     private var progress = 0f
     var isOpen = false
         private set
@@ -421,7 +421,7 @@ class SearchOverlay(private val home: HomeActivity) : FrameLayout(home) {
     private val bar = GlassPanel(home)
     private val field = EditText(home)
     private val results = SearchResults(home)
-    private val spring = Spring(440f, 0.9f, 0.001f)
+    private val spring = Spring(620f, 0.9f, 0.001f)
     private var progress = 0f
     var isOpen = false
         private set
@@ -664,7 +664,7 @@ class PopupMenu(private val home: HomeActivity) : FrameLayout(home) {
     private val menu = MenuPanel()
     private val lifted = LiftedView()
     private var entries: List<MenuEntry> = emptyList()
-    private val spring = Spring(560f, 0.78f, 0.001f)
+    private val spring = Spring(760f, 0.8f, 0.001f)
     private var p = 0f
     var isShowing = false
         private set

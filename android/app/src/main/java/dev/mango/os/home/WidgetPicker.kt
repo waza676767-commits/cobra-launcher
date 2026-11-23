@@ -35,7 +35,7 @@ class WidgetPicker(private val home: HomeActivity) : FrameLayout(home) {
     private val sheet = GlassPanel(home)
     private val scroll = ScrollView(home)
     private val list = LinearLayout(home)
-    private val spring = Spring(420f, 0.9f, 0.001f)
+    private val spring = Spring(580f, 0.92f, 0.001f)
     private var p = 0f
     var isOpen = false
         private set

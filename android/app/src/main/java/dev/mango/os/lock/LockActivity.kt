@@ -362,7 +362,7 @@ class LockActivity : Activity() {
         private var dragging = false
         private var tracker: VelocityTracker? = null
         private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
-        private val spring = Spring(420f, 0.85f, 0.5f)
+        private val spring = Spring(560f, 0.88f, 0.5f)
         private var offset = 0f
         private var unlocking = false
         private var lockOpen = false

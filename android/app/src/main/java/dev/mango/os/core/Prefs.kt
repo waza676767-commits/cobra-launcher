@@ -52,6 +52,7 @@ object Prefs {
     var reduceTransparency by bool("reduceTransparency", false)
     var autoLowPower by bool("autoLowPower", true)
     var animSpeed by float("animSpeed", 1f)
+    var motionBlur by bool("motionBlur", true)
 
     // Lock screen
     var lockEnabled by bool("lockEnabled", false)

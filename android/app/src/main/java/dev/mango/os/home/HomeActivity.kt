@@ -242,8 +242,19 @@ class HomeActivity : Activity() {
             rebuildAll()
         }
         if (returning && !Theme.reduceMotion) {
-            content.scaleX = 1.08f; content.scaleY = 1.08f; content.alpha = 0.75f
-            content.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(Ui.ms(420)).setInterpolator(Ui.easeOut).withLayer().start()
+            content.scaleX = 1.06f; content.scaleY = 1.06f; content.alpha = 0.8f
+            content.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(Ui.ms(300)).setInterpolator(Ui.easeOut).withLayer().start()
+            if (dev.mango.os.core.MotionBlur.enabled) {
+                // zoom blur that clears as the icons settle
+                val a = android.animation.ValueAnimator.ofFloat(1f, 0f)
+                a.duration = Ui.ms(260)
+                a.interpolator = Ui.easeOut
+                a.addUpdateListener { v -> val r = 12.dp * (v.animatedValue as Float); dev.mango.os.core.MotionBlur.apply(content, r, r) }
+                a.addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) = content.setRenderEffect(null)
+                })
+                a.start()
+            }
         }
         returning = false
         wasStopped = false

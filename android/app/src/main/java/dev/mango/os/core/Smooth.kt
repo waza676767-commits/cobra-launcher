@@ -7,6 +7,8 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.view.PixelCopy
 import android.view.View
 import android.view.Window
@@ -108,5 +110,22 @@ class FrozenBlurView(a: Activity) : View(a) {
         val b = bmp ?: return
         dst.set(0, 0, width, height)
         c.drawBitmap(b, null, dst, paint)
+    }
+}
+
+/**
+ * Camera-like motion blur: horizontal smear while pages fly by, a zoom blur when you come back
+ * home. Only applied while moving, so it costs nothing at rest.
+ */
+object MotionBlur {
+    val enabled: Boolean get() = Prefs.motionBlur && !Theme.reduceMotion
+
+    /** [rx]/[ry] in pixels; below ~1.5 px the effect is removed. */
+    fun apply(v: View, rx: Float, ry: Float) {
+        if (rx < 1.5f && ry < 1.5f) {
+            v.setRenderEffect(null)
+        } else {
+            v.setRenderEffect(RenderEffect.createBlurEffect(rx.coerceAtLeast(0.01f), ry.coerceAtLeast(0.01f), Shader.TileMode.DECAL))
+        }
     }
 }

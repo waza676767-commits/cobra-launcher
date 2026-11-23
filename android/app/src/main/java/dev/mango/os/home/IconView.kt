@@ -62,7 +62,7 @@ class ItemTouch(private val v: View, private val home: HomeActivity, private val
                 longPressed = false
                 downX = ev.x; downY = ev.y
                 rawX = ev.rawX; rawY = ev.rawY
-                v.postDelayed(pressDelay, 40)
+                onPress(true)
                 v.postDelayed(long, if (home.editMode) 160L else 420L)
             }
             MotionEvent.ACTION_MOVE -> {
@@ -118,7 +118,7 @@ open class IconView(val home: HomeActivity) : View(home), HasGlass, Editable {
     private val shade = Paint(Paint.ANTI_ALIAS_FLAG)
     private val labelPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
-        typeface = Ui.font(500)
+        typeface = Ui.font(400)
     }
     private val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val badgeText = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {

@@ -69,6 +69,8 @@ weather location, lock screen options, hidden apps, and motion & battery options
 ## Smooth and light on battery
 
 - The screen runs at 120 Hz while something moves and drops back when everything is still.
+- **Motion Blur** (Settings › Motion & Battery): a light camera-like blur on fast page swipes and a
+  zoom blur when you come back home. Only active while moving.
 - Folders, menus and search blur the home screen with a single still picture, taken once, instead of
   blurring live on every frame.
 - The Mango wallpaper is also set as the phone's wallpaper (Settings › Wallpaper › Use as Phone

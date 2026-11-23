@@ -48,7 +48,7 @@ private fun animateFrom(v: View, old: Point?, animate: Boolean) {
     v.translationX = dx
     v.translationY = dy
     v.animate().translationX(0f).translationY(0f)
-        .setDuration(Ui.ms(if (Theme.reduceMotion) 160 else 360))
+        .setDuration(Ui.ms(if (Theme.reduceMotion) 140 else 280))
         .setInterpolator(Ui.easeOut)
         .withEndAction { if (v is HasGlass) v.invalidate() }
         .setUpdateListener { if (v is HasGlass) v.invalidate() }
@@ -308,7 +308,7 @@ class Workspace(val home: HomeActivity) : ViewGroup(home) {
     var current = 0
         private set
     // softer, iOS-like glide; flick velocity carries into the spring
-    private val spring = Spring(400f, 0.9f, 0.5f)
+    private val spring = Spring(580f, 0.92f, 0.5f)
     private var raw = 0f
     var touching = false
         private set
@@ -413,6 +413,29 @@ class Workspace(val home: HomeActivity) : ViewGroup(home) {
     override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
         super.onScrollChanged(l, t, oldl, oldt)
         home.onWorkspaceScrolled(position)
+        if (dev.mango.os.core.MotionBlur.enabled) {
+            val now = System.nanoTime()
+            if (lastScrollTime != 0L) {
+                val dt = ((now - lastScrollTime) / 1_000_000_000f).coerceAtLeast(0.004f)
+                velocity = velocity * 0.5f + ((l - oldl) / dt) * 0.5f
+            }
+            lastScrollTime = now
+            blurRadius = kotlin.math.min(abs(velocity) * 0.0038f, 11.dp)
+            dev.mango.os.core.MotionBlur.apply(this, blurRadius, 0f)
+            removeCallbacks(stopBlur)
+            postDelayed(stopBlur, 48)
+        }
+    }
+
+    // motion blur while pages move
+    private var lastScrollTime = 0L
+    private var velocity = 0f
+    private var blurRadius = 0f
+    private val stopBlur = Runnable {
+        lastScrollTime = 0L
+        velocity = 0f
+        blurRadius = 0f
+        setRenderEffect(null)
     }
 }
 
@@ -423,7 +446,7 @@ class PagePill(val home: HomeActivity) : View(home), HasGlass {
     var position = 0f
         set(v) { field = v; invalidate() }
     private var dots = 0f
-    private val spring = Spring(320f, 1f, 0.002f).apply { onUpdate = { dots = it; invalidate() } }
+    private val spring = Spring(480f, 1f, 0.002f).apply { onUpdate = { dots = it; invalidate() } }
     private val glass = GlassPainter()
     private val text = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Ui.font(500) }
     private val dot = Paint(Paint.ANTI_ALIAS_FLAG)

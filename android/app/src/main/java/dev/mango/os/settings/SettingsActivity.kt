@@ -137,7 +137,7 @@ class SettingsActivity : Activity() {
         private val p = Paint(Paint.FILTER_BITMAP_FLAG)
         private val grab = Paint(Paint.ANTI_ALIAS_FLAG)
         private val dst = Rect()
-        private val spring = dev.mango.os.core.Spring(380f, 0.92f, 0.5f)
+        private val spring = dev.mango.os.core.Spring(560f, 0.94f, 0.5f)
         private var downY = 0f
         private var dragging = false
         private var tracker: android.view.VelocityTracker? = null
@@ -227,8 +227,8 @@ class SettingsActivity : Activity() {
         dev.mango.os.core.FrameBoost.ping()
         if (animate && !Theme.reduceMotion) {
             s.translationX = sheet.width.toFloat()
-            s.animate().translationX(0f).setDuration(Ui.ms(360)).setInterpolator(Ui.easeOut).withLayer().start()
-            prev?.animate()?.translationX(-sheet.width * 0.3f)?.alpha(0.4f)?.setDuration(Ui.ms(360))?.setInterpolator(Ui.easeOut)?.withLayer()?.withEndAction { prev.visibility = View.INVISIBLE }?.start()
+            s.animate().translationX(0f).setDuration(Ui.ms(290)).setInterpolator(Ui.easeOut).withLayer().start()
+            prev?.animate()?.translationX(-sheet.width * 0.3f)?.alpha(0.4f)?.setDuration(Ui.ms(290))?.setInterpolator(Ui.easeOut)?.withLayer()?.withEndAction { prev.visibility = View.INVISIBLE }?.start()
         } else prev?.visibility = View.INVISIBLE
     }
 
@@ -243,8 +243,8 @@ class SettingsActivity : Activity() {
             sheet.removeView(top); prev.translationX = 0f; prev.alpha = 1f
             return
         }
-        prev.animate().translationX(0f).alpha(1f).setDuration(Ui.ms(330)).setInterpolator(Ui.easeOut).withLayer().start()
-        top.animate().translationX(sheet.width.toFloat()).setDuration(Ui.ms(330)).setInterpolator(Ui.easeOut).withLayer().withEndAction { sheet.removeView(top) }.start()
+        prev.animate().translationX(0f).alpha(1f).setDuration(Ui.ms(270)).setInterpolator(Ui.easeOut).withLayer().start()
+        top.animate().translationX(sheet.width.toFloat()).setDuration(Ui.ms(270)).setInterpolator(Ui.easeOut).withLayer().withEndAction { sheet.removeView(top) }.start()
     }
 
     private fun refresh() = stack.lastOrNull()?.rebuild()
@@ -379,7 +379,7 @@ class SettingsActivity : Activity() {
         Triple("Weather Location", "city location units celsius fahrenheit", "widgets"),
         Triple("Lock Screen", "lock clock notifications fingerprint unlock flashlight camera previews", "lock"),
         Triple("Notifications", "badges dots numbers access", "notifications"),
-        Triple("Motion & Battery", "animation speed reduce motion transparency power saving smooth 120", "motion"),
+        Triple("Motion & Battery", "animation speed reduce motion transparency power saving smooth 120 motion blur", "motion"),
         Triple("Hidden Apps", "hide hidden show", "hidden"),
         Triple("About Mango OS", "version restart", "about")
     )
@@ -683,6 +683,7 @@ class SettingsActivity : Activity() {
     private fun motion(): Page {
         val p = Page(this, "Motion & Battery")
         p.group(footer = "Mango draws nothing while you're not touching it: no live wallpaper, no timers. Widgets refresh once a minute while visible, weather every 30 minutes.") {
+            toggle("Motion Blur", Prefs.motionBlur, Glyph.SWAP, indigo, "A little blur on fast movement, like a camera: swiping pages and coming back home") { Prefs.motionBlur = it }
             toggle("Reduce Motion", Prefs.reduceMotion, Glyph.SPARKLES, blue, "Fades instead of zooms, no icon jiggle, no bounce") { Prefs.reduceMotion = it; Theme.update(this@SettingsActivity) }
             toggle("Reduce Transparency", Prefs.reduceTransparency, Glyph.APPEARANCE, gray, "Solid panels instead of glass") { Prefs.reduceTransparency = it; Theme.update(this@SettingsActivity); root.invalidate() }
             toggle("Follow Power Saving", Prefs.autoLowPower, Glyph.BATTERY, green, "When One UI's Power saving is on, Mango switches to reduced motion and transparency") { Prefs.autoLowPower = it }
