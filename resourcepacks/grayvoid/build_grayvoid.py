@@ -185,9 +185,13 @@ for n in (0, 1):
     # Must ship our own .mcmeta: vanilla's lists 32 frames this texture lacks.
     put_json(f"textures/block/fire_{n}.png.mcmeta", {"animation": {"frametime": 2}})
 
-# No dark smoke column over every fire block.
+# Invisible particles: no smoke over fire, and crystal/anchor explosions leave
+# nothing but the totem pops. explosion_emitter has no sprite of its own; it
+# only spawns "explosion" particles, so hiding those covers big blasts too.
+# entity_effect is the colored potion swirl the totem's buffs throw on screen.
 put_png("textures/particle/grayvoid_blank.png", Image.new("RGBA", (8, 8), CLEAR))
-put_json("particles/large_smoke.json", {"textures": ["minecraft:grayvoid_blank"]})
+for particle in ("large_smoke", "explosion", "poof", "smoke", "ash", "white_ash", "entity_effect"):
+    put_json(f"particles/{particle}.json", {"textures": ["minecraft:grayvoid_blank"]})
 
 # ---------------------------------------------------------------- enchantment glint
 # Neutral instead of purple: a light sheen on worn armor, a faint one on icons.
