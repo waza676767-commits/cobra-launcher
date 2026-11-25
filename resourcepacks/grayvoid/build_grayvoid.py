@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the Grayvoid resource pack (Minecraft Java Edition 1.21.11, pack format 75).
+"""Build the Gray resource pack (Minecraft Java Edition 1.21.11, pack format 75).
 
 Usage:
     python3 build_grayvoid.py <1.21.11 client.jar> <pack icon image> <output.zip>
@@ -202,9 +202,9 @@ for name, gain in (("enchanted_glint_armor", 1.1), ("enchanted_glint_item", 0.45
     put_png(f"textures/misc/{name}.png", Image.fromarray(px, "RGBA"))
 
 # ---------------------------------------------------------------- pack metadata
-GRADIENT = ["#FFFFFF", "#EDEDED", "#DADADA", "#C6C6C6", "#B2B2B2", "#9E9E9E", "#8A8A8A", "#767676"]
+GRADIENT = ["#FFFFFF", "#D8D8D8", "#B2B2B2", "#8C8C8C"]
 description = [""]
-description += [{"text": ch, "color": c, "bold": True} for ch, c in zip("GRAYVOID", GRADIENT)]
+description += [{"text": ch, "color": c, "bold": True} for ch, c in zip("GRAY", GRADIENT)]
 description += [
     {"text": " ✦ ", "color": "#4A4A4A"},
     {"text": "crystal pvp", "color": "#6E6E6E"},
