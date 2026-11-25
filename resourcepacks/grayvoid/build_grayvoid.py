@@ -76,12 +76,16 @@ put_png("textures/block/stone.png", flat(STONE))
 put_png("textures/block/obsidian.png", flat(OBSIDIAN))
 put_png("textures/block/glowstone.png", flat(GLOWSTONE))
 
-# ---------------------------------------------------------------- respawn anchor (copied from video)
-# Same face on every side. Charged sides come from the 4.55s close-up; the
-# unlit version is the same layout barely visible (4.4s / hotbar icon).
-put_png("textures/block/respawn_anchor_side0.png", copied("respawn_anchor_side_uncharged.png"))
+# ---------------------------------------------------------------- respawn anchor
+# Same face on every side: the reference anchor texture (256x256, kept at its
+# own geometry). Unlit anchors show the same layout barely visible, like the
+# near-black anchor icon in the video hotbar.
+anchor_side = copied("respawn_anchor_side_charged.png")
 for level in (1, 2, 3, 4):
-    put_png(f"textures/block/respawn_anchor_side{level}.png", copied("respawn_anchor_side_charged.png"))
+    put_png(f"textures/block/respawn_anchor_side{level}.png", anchor_side)
+a = np.array(anchor_side).astype(np.float32)
+a[..., :3] = np.clip(11 + (a[..., :3] - 11) * 0.08, 0, 255)
+put_png("textures/block/respawn_anchor_side0.png", Image.fromarray(a.astype(np.uint8), "RGBA"))
 # Charged top: white frame from 5.0s, black frame from 4.55s, interpolated pulse.
 put_png("textures/block/respawn_anchor_top.png", copied("respawn_anchor_top.png"))
 put_json("textures/block/respawn_anchor_top.png.mcmeta", {"animation": {"frametime": 10, "interpolate": True}})
@@ -109,6 +113,23 @@ put_png("textures/entity/end_crystal/end_crystal.png", crystal)
 # ---------------------------------------------------------------- copied item icons
 put_png("textures/item/end_crystal.png", copied("end_crystal_item.png"))
 put_png("textures/item/totem_of_undying.png", copied("totem_of_undying.png"))
+
+# ---------------------------------------------------------------- white ender pearl
+# Vanilla pearl shading remapped by brightness to white: dark core -> soft
+# gray, highlight -> pure white, outline -> mid gray like the totem's edge.
+# Thrown pearls use the item texture, so they are white in flight too.
+pearl = np.array(vanilla("textures/item/ender_pearl.png")).astype(np.float32)
+op = pearl[..., 3] > 0
+lum = pearl[..., 0] * 0.299 + pearl[..., 1] * 0.587 + pearl[..., 2] * 0.114
+lo, hi = lum[op].min(), lum[op].max()
+val = 150 + (lum - lo) / (hi - lo) * 105
+pad = np.pad(op, 1, constant_values=False)
+edge = op & ~(pad[:-2, 1:-1] & pad[2:, 1:-1] & pad[1:-1, :-2] & pad[1:-1, 2:])
+val[edge] = 110
+out = np.zeros_like(pearl, dtype=np.uint8)
+out[..., 0] = out[..., 1] = out[..., 2] = np.clip(np.round(val), 0, 255).astype(np.uint8)
+out[..., 3] = pearl[..., 3].astype(np.uint8)
+put_png("textures/item/ender_pearl.png", Image.fromarray(out, "RGBA"))
 
 # ---------------------------------------------------------------- totem pop particles
 for i in range(8):
